@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from app.models import ShopItemPatchRequest, ShopPatchRequest
 from app.permissions import company_member_rank, is_staff, require_actor, require_company_manager
@@ -11,8 +12,68 @@ from app.supabase_client import get_supabase
 router = APIRouter(prefix="/api/shops", tags=["shops"])
 
 
+class ShopItemCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    image_url: str | None = None
+    price: int
+    stock: int | None = None
+    item_type: str | None = None
+    item_class: str | None = None
+    recipe_link: str | None = None
+    unique_owner: str | None = None
+    cc: int | None = None
+    stat_limits: str | None = None
+    special_effects: str | None = None
+    usage_information: str | None = None
+    requires_approval: bool = True
+    purchasable: bool = True
+    max_per_order: int | None = None
+    max_per_day: int | None = None
+    max_per_week: int | None = None
+    max_per_user: int | None = None
+    weight: int | None = None
+    weight_unit: str | None = None
+
+
 def _shop_select() -> str:
     return "company_id,guild_id,name,owner_character_id,shop_description,shop_banner_url,shop_logo_url,shop_status,shop_category_id,shop_forum_channel_id,shop_storefront_thread_id"
+
+
+def _clean_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = str(value).strip()
+    return cleaned or None
+
+
+def _get_primary_currency_id(sb, guild_id: int) -> str:
+    res = (
+        sb.table("currencies")
+        .select("currency_id")
+        .eq("guild_id", guild_id)
+        .eq("is_primary", True)
+        .eq("is_enabled", True)
+        .limit(1)
+        .execute()
+    )
+    rows = sb_data(res) or []
+    if rows:
+        return str(rows[0]["currency_id"])
+
+    fallback = (
+        sb.table("currencies")
+        .select("currency_id")
+        .eq("guild_id", guild_id)
+        .eq("is_enabled", True)
+        .limit(1)
+        .execute()
+    )
+    fallback_rows = sb_data(fallback) or []
+    if fallback_rows:
+        return str(fallback_rows[0]["currency_id"])
+
+    raise HTTPException(status_code=400, detail="No enabled currency found for this server.")
 
 
 @router.get("/mine")
@@ -97,6 +158,72 @@ def shop_items(company_id: str, actor_discord_id: int | None = Depends(actor_fro
         .execute()
     )
     return {"items": sb_data(res) or []}
+
+
+@router.post("/{company_id}/items")
+def create_shop_item(
+    company_id: str,
+    payload: ShopItemCreateRequest,
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    actor = require_actor(actor_discord_id)
+    sb = get_supabase()
+    gid = get_guild_id()
+
+    require_company_manager(sb, company_id, actor, min_rank=2)
+
+    name = _clean_text(payload.name)
+    if not name:
+        raise HTTPException(status_code=400, detail="Item name is required.")
+
+    if int(payload.price) < 0:
+        raise HTTPException(status_code=400, detail="Price cannot be negative.")
+
+    if payload.stock is not None and int(payload.stock) < 0:
+        raise HTTPException(status_code=400, detail="Stock cannot be negative.")
+
+    currency_id = _get_primary_currency_id(sb, gid)
+
+    row = {
+        "guild_id": gid,
+        "shop_id": str(company_id),
+        "vendor_company_id": str(company_id),
+        "currency_id": currency_id,
+        "name": name,
+        "description": _clean_text(payload.description),
+        "image_url": _clean_text(payload.image_url),
+        "price": int(payload.price),
+        "stock": None if payload.stock is None else int(payload.stock),
+        "purchasable": bool(payload.purchasable),
+        "requires_approval": True,
+        "is_active": False,
+        "review_status": "pending_staff_review",
+        "item_type": _clean_text(payload.item_type) or "item",
+        "item_class": _clean_text(payload.item_class),
+        "recipe_link": _clean_text(payload.recipe_link),
+        "unique_owner": _clean_text(payload.unique_owner),
+        "cc": None if payload.cc is None else int(payload.cc),
+        "stat_limits": _clean_text(payload.stat_limits),
+        "special_effects": _clean_text(payload.special_effects),
+        "usage_information": _clean_text(payload.usage_information),
+        "submitted_by_discord_id": actor,
+        "max_per_order": payload.max_per_order,
+        "max_per_day": payload.max_per_day,
+        "max_per_week": payload.max_per_week,
+        "max_per_user": payload.max_per_user,
+        "weight": payload.weight,
+        "weight_unit": _clean_text(payload.weight_unit),
+    }
+
+    ins = sb.table("shop_items").insert(row).execute()
+    rows = sb_data(ins) or []
+    created = rows[0] if rows else row
+
+    return {
+        "ok": True,
+        "item": created,
+        "message": "Listing submitted for staff review.",
+    }
 
 
 @router.patch("/items/{item_id}")

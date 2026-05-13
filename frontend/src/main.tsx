@@ -924,6 +924,40 @@ function ShopDashboard({ discordId }: { discordId: string }) {
   const [shop, setShop] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
   const [message, setMessage] = useState("");
+  const [createOpen, setCreateOpen] = useState(true);
+  const [listingForm, setListingForm] = useState({
+    name: "",
+    description: "",
+    image_url: "",
+    price: "0",
+    stock: "",
+    item_type: "item",
+    item_class: "",
+    recipe_link: "",
+    special_effects: "",
+    usage_information: "",
+    stat_limits: "",
+  });
+
+  function updateListingForm(key: string, value: string) {
+    setListingForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function resetListingForm() {
+    setListingForm({
+      name: "",
+      description: "",
+      image_url: "",
+      price: "0",
+      stock: "",
+      item_type: "item",
+      item_class: "",
+      recipe_link: "",
+      special_effects: "",
+      usage_information: "",
+      stat_limits: "",
+    });
+  }
 
   async function loadShops() {
     setMessage("");
@@ -959,15 +993,66 @@ function ShopDashboard({ discordId }: { discordId: string }) {
     await loadShop(shop.company_id);
   }
 
+  async function createListing() {
+    if (!shopId) {
+      setMessage("Select a shop first.");
+      return;
+    }
+
+    if (!listingForm.name.trim()) {
+      setMessage("Listing name is required.");
+      return;
+    }
+
+    const price = Number(listingForm.price || 0);
+    if (Number.isNaN(price) || price < 0) {
+      setMessage("Price must be 0 or higher.");
+      return;
+    }
+
+    const stockText = listingForm.stock.trim();
+    const stock = stockText === "" ? null : Number(stockText);
+    if (stock !== null && (Number.isNaN(stock) || stock < 0)) {
+      setMessage("Stock must be blank, 0, or higher.");
+      return;
+    }
+
+    await apiFetch(`/api/shops/${shopId}/items`, {
+      method: "POST",
+      body: JSON.stringify({
+        name: listingForm.name.trim(),
+        description: listingForm.description.trim(),
+        image_url: listingForm.image_url.trim() || null,
+        price,
+        stock,
+        item_type: listingForm.item_type.trim() || "item",
+        item_class: listingForm.item_class.trim() || null,
+        recipe_link: listingForm.recipe_link.trim() || null,
+        special_effects: listingForm.special_effects.trim() || null,
+        usage_information: listingForm.usage_information.trim() || null,
+        stat_limits: listingForm.stat_limits.trim() || null,
+      }),
+    }, discordId);
+
+    setMessage("Listing submitted for staff review.");
+    resetListingForm();
+    await loadShop(shopId);
+  }
+
   async function patchItem(itemId: string, patch: Record<string, unknown>) {
     await apiFetch(`/api/shops/items/${itemId}`, { method: "PATCH", body: JSON.stringify(patch) }, discordId);
     setMessage("Listing updated.");
     await loadShop();
   }
 
+  function listingStatus(item: any) {
+    const raw = String(item.review_status || (item.is_active ? "active" : "draft"));
+    return raw.replaceAll("_", " ").toUpperCase();
+  }
+
   return (
     <RequireDiscord discordId={discordId}>
-      <section className="grid">
+      <section className="grid shop-grid">
         <div className="card">
           <div className="card-title-row">
             <h2>Shop Dashboard</h2>
@@ -993,15 +1078,92 @@ function ShopDashboard({ discordId }: { discordId: string }) {
           ) : <p>Select a shop to manage.</p>}
         </div>
 
-        <div className="card">
+        <div className="card shop-create-card">
+          <div className="card-title-row">
+            <div>
+              <h2>Create Listing</h2>
+              <p className="muted-text">Submit a shop item for staff review. Approved listings can be published to Discord later.</p>
+            </div>
+            <button className="ghost" onClick={() => setCreateOpen((value) => !value)}>
+              {createOpen ? "Collapse" : "Open"}
+            </button>
+          </div>
+
+          {createOpen ? (
+            <>
+              <div className="shop-create-grid">
+                <label>
+                  Item Name
+                  <input value={listingForm.name} onChange={(e) => updateListingForm("name", e.target.value)} placeholder="Clockwork Grapple" />
+                </label>
+                <label>
+                  Price
+                  <input type="number" min={0} value={listingForm.price} onChange={(e) => updateListingForm("price", e.target.value)} />
+                </label>
+                <label>
+                  Stock
+                  <input type="number" min={0} value={listingForm.stock} onChange={(e) => updateListingForm("stock", e.target.value)} placeholder="Blank = unlimited" />
+                </label>
+                <label>
+                  Item Type
+                  <input value={listingForm.item_type} onChange={(e) => updateListingForm("item_type", e.target.value)} placeholder="item, service, recipe..." />
+                </label>
+                <label>
+                  Item Class
+                  <input value={listingForm.item_class} onChange={(e) => updateListingForm("item_class", e.target.value)} placeholder="Weapon, Armor, Consumable..." />
+                </label>
+                <label>
+                  Image URL
+                  <input value={listingForm.image_url} onChange={(e) => updateListingForm("image_url", e.target.value)} placeholder="https://..." />
+                </label>
+                <label className="full-span">
+                  Description
+                  <textarea value={listingForm.description} onChange={(e) => updateListingForm("description", e.target.value)} placeholder="What is this listing?" />
+                </label>
+                <label className="full-span">
+                  Recipe / Sheet Link
+                  <input value={listingForm.recipe_link} onChange={(e) => updateListingForm("recipe_link", e.target.value)} placeholder="Optional doc/sheet link" />
+                </label>
+                <label className="full-span">
+                  Stat Limits
+                  <textarea value={listingForm.stat_limits} onChange={(e) => updateListingForm("stat_limits", e.target.value)} placeholder="Optional stat requirements or limits..." />
+                </label>
+                <label className="full-span">
+                  Special Effects
+                  <textarea value={listingForm.special_effects} onChange={(e) => updateListingForm("special_effects", e.target.value)} placeholder="Optional effects..." />
+                </label>
+                <label className="full-span">
+                  Usage Information
+                  <textarea value={listingForm.usage_information} onChange={(e) => updateListingForm("usage_information", e.target.value)} placeholder="How should players use this?" />
+                </label>
+              </div>
+
+              {listingForm.image_url.trim() ? (
+                <div className="shop-image-preview">
+                  <span>Image Preview</span>
+                  <img src={listingForm.image_url.trim()} alt="Listing preview" />
+                </div>
+              ) : null}
+
+              <div className="actions">
+                <button className="primary-action" onClick={createListing}><Send size={16} /> Submit Listing</button>
+                <button className="ghost secondary-action" onClick={resetListingForm}>Clear Form</button>
+              </div>
+            </>
+          ) : null}
+        </div>
+
+        <div className="card shop-listings-card">
           <h2>Listings</h2>
           <div className="item-list">
             {items.length === 0 ? <p>No listings found.</p> : null}
             {items.map((item) => (
-              <div className="request-card" key={item.item_id}>
+              <div className="request-card shop-listing-card" key={item.item_id}>
+                {item.image_url ? <img src={item.image_url} alt="" /> : null}
                 <div>
                   <h3>{item.name}</h3>
-                  <p>Price: {item.price} • Stock: {item.stock ?? "∞"} • Status: {item.review_status || (item.is_active ? "ACTIVE" : "DRAFT")}</p>
+                  <p>Price: {item.price} • Stock: {item.stock ?? "∞"} • Status: {listingStatus(item)}</p>
+                  {item.description ? <small>{item.description}</small> : null}
                 </div>
                 <div className="inline-form compact-inline">
                   <input type="number" defaultValue={item.stock ?? 0} onBlur={(e) => patchItem(item.item_id, { stock: Number(e.target.value) })} />
