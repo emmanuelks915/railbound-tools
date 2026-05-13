@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
 from pydantic import BaseModel
 
 from app.models import ShopItemPatchRequest, ShopPatchRequest
@@ -9,8 +9,33 @@ from app.security import actor_from_header
 from app.services import get_guild_id, sb_data
 from app.supabase_client import get_supabase
 from app.discord_webhook import notify_shop_listing_submitted
+from uuid import uuid4
+import httpx
+from app.config import get_settings
 
 router = APIRouter(prefix="/api/shops", tags=["shops"])
+
+_ALLOWED_SHOP_IMAGE_TYPES = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+    "image/gif": "gif",
+}
+
+_MAX_SHOP_IMAGE_BYTES = 8 * 1024 * 1024
+
+
+def _storage_public_url(bucket: str, object_path: str) -> str:
+    settings = get_settings()
+    base_url = settings.supabase_url.rstrip("/")
+    return f"{base_url}/storage/v1/object/public/{bucket}/{object_path}"
+
+
+def _storage_upload_url(bucket: str, object_path: str) -> str:
+    settings = get_settings()
+    base_url = settings.supabase_url.rstrip("/")
+    return f"{base_url}/storage/v1/object/{bucket}/{object_path}"
+
 
 
 class ShopItemCreateRequest(BaseModel):
@@ -275,6 +300,75 @@ def shop_items(
     )
 
     return {"items": sb_data(res) or []}
+
+
+
+@router.post("/{company_id}/images")
+def upload_shop_image(
+    company_id: str,
+    file: UploadFile = File(...),
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    actor = require_actor(actor_discord_id)
+    sb = get_supabase()
+    gid = get_guild_id()
+
+    require_company_manager(sb, company_id, actor, min_rank=2)
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+
+    if content_type not in _ALLOWED_SHOP_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported image type. Use PNG, JPG, WEBP, or GIF.",
+        )
+
+    data = file.file.read()
+
+    if not data:
+        raise HTTPException(status_code=400, detail="Image file is empty.")
+
+    if len(data) > _MAX_SHOP_IMAGE_BYTES:
+        raise HTTPException(status_code=400, detail="Image must be 8 MB or smaller.")
+
+    settings = get_settings()
+    bucket = settings.supabase_storage_bucket
+    ext = _ALLOWED_SHOP_IMAGE_TYPES[content_type]
+    object_path = f"shop-listings/{gid}/{company_id}/{uuid4()}.{ext}"
+
+    headers = {
+        "apikey": settings.supabase_admin_key,
+        "Content-Type": content_type,
+        "Cache-Control": "3600",
+        "x-upsert": "false",
+    }
+
+    upload_url = _storage_upload_url(bucket, object_path)
+
+    try:
+        response = httpx.post(
+            upload_url,
+            content=data,
+            headers=headers,
+            timeout=30.0,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Image upload failed: {exc}") from exc
+
+    if response.status_code >= 400:
+        detail = response.text or "Image upload failed."
+        raise HTTPException(status_code=400, detail=detail)
+
+    public_url = _storage_public_url(bucket, object_path)
+
+    return {
+        "ok": True,
+        "bucket": bucket,
+        "path": object_path,
+        "url": public_url,
+        "content_type": content_type,
+        "size_bytes": len(data),
+    }
 
 
 @router.post("/{company_id}/items")

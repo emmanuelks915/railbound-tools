@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 
     # Legacy fallback, only if needed
     supabase_service_role_key: str | None = None
+    supabase_storage_bucket: str = "shop-images"
 
     railbound_guild_id: int = 1462489358908129354
     staff_discord_ids: str = ""
