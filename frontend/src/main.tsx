@@ -1367,10 +1367,10 @@ function RpHubDashboard({
           </div>
         </div>
 
-        <div className="card">
+        <div className="card rp-recent-posts-card">
           <h2>Recent Posts</h2>
 
-          <div className="item-list">
+          <div className="item-list scroll-list">
             {(data?.recent_posts || []).length === 0 ? <p>No tracked posts found yet.</p> : null}
 
             {(data?.recent_posts || []).slice(0, 8).map((post: any) => (

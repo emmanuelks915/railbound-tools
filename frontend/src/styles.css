@@ -686,3 +686,34 @@ label textarea {
     grid-template-columns: 1fr;
   }
 }
+
+/* Scrollable timeline / recent post panels */
+
+.activity-timeline-card .activity-list,
+.rp-recent-posts-card .scroll-list {
+  max-height: 620px;
+  overflow-y: auto;
+  padding-right: 0.4rem;
+}
+
+.activity-timeline-card .activity-list::-webkit-scrollbar,
+.rp-recent-posts-card .scroll-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+.activity-timeline-card .activity-list::-webkit-scrollbar-track,
+.rp-recent-posts-card .scroll-list::-webkit-scrollbar-track {
+  background: rgba(61, 51, 43, 0.08);
+  border-radius: 999px;
+}
+
+.activity-timeline-card .activity-list::-webkit-scrollbar-thumb,
+.rp-recent-posts-card .scroll-list::-webkit-scrollbar-thumb {
+  background: rgba(47, 111, 115, 0.38);
+  border-radius: 999px;
+}
+
+.activity-timeline-card .activity-list::-webkit-scrollbar-thumb:hover,
+.rp-recent-posts-card .scroll-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(47, 111, 115, 0.58);
+}
