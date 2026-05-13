@@ -641,3 +641,48 @@ label textarea {
     grid-template-columns: 1fr;
   }
 }
+
+/* Activity Log */
+
+.activity-grid {
+  grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.2fr);
+}
+
+.activity-timeline-card {
+  min-height: 520px;
+}
+
+.activity-list {
+  gap: 0.85rem;
+}
+
+.activity-card {
+  border-left: 5px solid rgba(47, 111, 115, 0.35);
+}
+
+.activity-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.activity-status {
+  font-size: 0.78rem;
+  font-weight: 900;
+  color: rgba(44, 31, 22, 0.66);
+}
+
+.activity-card small {
+  display: block;
+  margin-top: 0.35rem;
+  color: rgba(44, 31, 22, 0.62);
+  line-height: 1.4;
+}
+
+@media (max-width: 860px) {
+  .activity-grid {
+    grid-template-columns: 1fr;
+  }
+}
