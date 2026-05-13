@@ -3,11 +3,12 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from postgrest.exceptions import APIError
 
 from app.models import StaffActionRequest
 from app.security import actor_from_header, require_staff
 from app.services import get_guild_id, sb_data
-from app.supabase_client import get_supabase
+from app.supabase_client import get_supabase, raise_clean_api_error
 
 router = APIRouter(prefix="/api/staff", tags=["staff"])
 
@@ -20,37 +21,46 @@ def list_stat_requests(
     require_staff(actor_discord_id)
 
     sb = get_supabase()
-    req_res = (
-        sb.table("stat_upgrade_requests")
-        .select("*")
-        .eq("guild_id", get_guild_id())
-        .eq("status", status)
-        .order("created_at", desc=True)
-        .limit(100)
-        .execute()
-    )
+
+    try:
+        req_res = (
+            sb.table("stat_upgrade_requests")
+            .select("*")
+            .eq("guild_id", get_guild_id())
+            .eq("status", status)
+            .order("created_at", desc=True)
+            .limit(100)
+            .execute()
+        )
+    except APIError as e:
+        raise_clean_api_error(e)
+
     requests = sb_data(req_res) or []
 
     out = []
     for req in requests:
         request_id = req["request_id"]
 
-        items_res = (
-            sb.table("stat_upgrade_request_items")
-            .select("*")
-            .eq("request_id", request_id)
-            .order("created_at", desc=False)
-            .execute()
-        )
-        items = sb_data(items_res) or []
+        try:
+            items_res = (
+                sb.table("stat_upgrade_request_items")
+                .select("*")
+                .eq("request_id", request_id)
+                .order("created_at", desc=False)
+                .execute()
+            )
 
-        char_res = (
-            sb.table("characters")
-            .select("character_id,name,user_id")
-            .eq("character_id", req["character_id"])
-            .limit(1)
-            .execute()
-        )
+            char_res = (
+                sb.table("characters")
+                .select("character_id,name,user_id")
+                .eq("character_id", req["character_id"])
+                .limit(1)
+                .execute()
+            )
+        except APIError as e:
+            raise_clean_api_error(e)
+
+        items = sb_data(items_res) or []
         char_rows = sb_data(char_res) or []
         character = char_rows[0] if char_rows else None
 
@@ -75,14 +85,18 @@ def approve_stat_request(
     require_staff(staff_id)
 
     sb = get_supabase()
-    rpc = sb.rpc(
-        "approve_stat_upgrade_request",
-        {
-            "p_request_id": str(request_id),
-            "p_staff_discord_id": int(staff_id),
-            "p_staff_note": payload.staff_note,
-        },
-    ).execute()
+
+    try:
+        rpc = sb.rpc(
+            "approve_stat_upgrade_request",
+            {
+                "p_request_id": str(request_id),
+                "p_staff_discord_id": int(staff_id),
+                "p_staff_note": payload.staff_note,
+            },
+        ).execute()
+    except APIError as e:
+        raise_clean_api_error(e)
 
     result = sb_data(rpc)
     if isinstance(result, list) and result:
@@ -101,14 +115,18 @@ def deny_stat_request(
     require_staff(staff_id)
 
     sb = get_supabase()
-    rpc = sb.rpc(
-        "deny_stat_upgrade_request",
-        {
-            "p_request_id": str(request_id),
-            "p_staff_discord_id": int(staff_id),
-            "p_staff_note": payload.staff_note,
-        },
-    ).execute()
+
+    try:
+        rpc = sb.rpc(
+            "deny_stat_upgrade_request",
+            {
+                "p_request_id": str(request_id),
+                "p_staff_discord_id": int(staff_id),
+                "p_staff_note": payload.staff_note,
+            },
+        ).execute()
+    except APIError as e:
+        raise_clean_api_error(e)
 
     result = sb_data(rpc)
     if isinstance(result, list) and result:
