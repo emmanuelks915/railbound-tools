@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routes import characters, combat, dashboard, inventory, shops, skills, staff, xp
+from app.routes import characters, combat, dashboard, inventory, shops, skills, staff, xp, rp
 
 settings = get_settings()
 
@@ -30,6 +30,7 @@ app.include_router(combat.router)
 app.include_router(inventory.router)
 app.include_router(shops.router)
 app.include_router(skills.router)
+app.include_router(rp.router)
 
 
 @app.get("/health")

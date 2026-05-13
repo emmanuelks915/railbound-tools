@@ -34,7 +34,7 @@ type CoreStats = {
   mana: number;
 };
 
-type Tab = "home" | "planner" | "oc" | "inventory" | "shops" | "skills" | "staff" | "combat";
+type Tab = "home" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "staff" | "combat";
 
 const STAT_LABELS: Record<keyof CoreStats, string> = {
   strength: "Strength",
@@ -91,6 +91,7 @@ function App() {
     ["inventory", Package, "Inventory"],
     ["shops", Store, "Shops"],
     ["skills", Sparkles, "Skills"],
+    ["rp", ClipboardList, "RP Hub"],
     ["staff", ShieldCheck, "Staff"],
     ["combat", ClipboardList, "Derived Stats"],
   ] as const;
@@ -137,6 +138,7 @@ function App() {
       {tab === "inventory" && <InventoryDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "shops" && <ShopDashboard discordId={discordId} />}
       {tab === "skills" && <SkillsDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "rp" && <RpHubDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "staff" && <StaffQueue discordId={discordId} />}
       {tab === "combat" && <DerivedStatsCalculator />}
     </main>
@@ -1086,6 +1088,268 @@ function SkillsDashboard({ discordId, selectedCharacterId, setSelectedCharacterI
     </RequireDiscord>
   );
 }
+
+function RpHubDashboard({
+  discordId,
+  selectedCharacterId,
+  setSelectedCharacterId,
+}: {
+  discordId: string;
+  selectedCharacterId: string;
+  setSelectedCharacterId: (id: string) => void;
+}) {
+  const [data, setData] = useState<any>(null);
+  const [message, setMessage] = useState("");
+  const [sceneFilter, setSceneFilter] = useState<"active" | "closed" | "claims">("active");
+
+  async function load() {
+    setMessage("");
+
+    const suffix = selectedCharacterId
+      ? `?character_id=${encodeURIComponent(selectedCharacterId)}`
+      : "";
+
+    const result = await apiFetch(`/api/rp/me${suffix}`, {}, discordId);
+    setData(result);
+  }
+
+  useEffect(() => {
+    if (discordId) {
+      load().catch((error) => setMessage(error.message));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId, selectedCharacterId]);
+
+  const scenes = sceneFilter === "closed" ? data?.closed_scenes || [] : data?.active_scenes || [];
+  const claims = data?.xp_claims || [];
+  const totals = data?.totals || {};
+
+  function statusLabel(value: string | undefined) {
+    return String(value || "unknown").replaceAll("_", " ").toUpperCase();
+  }
+
+  function claimStatusClass(value: string | undefined) {
+    const normalized = String(value || "").toLowerCase();
+
+    if (normalized.includes("approved") || normalized.includes("paid")) {
+      return "good";
+    }
+
+    if (normalized.includes("denied") || normalized.includes("error")) {
+      return "bad";
+    }
+
+    return "";
+  }
+
+  return (
+    <RequireDiscord discordId={discordId}>
+      <section className="grid rp-hub-grid">
+        <div className="card">
+          <div className="card-title-row">
+            <div>
+              <h2>RP Hub</h2>
+              <p className="muted-text">
+                Track the scenes, posts, XP claims, and Discord jump links tied to your OCs.
+              </p>
+            </div>
+            <button className="ghost" onClick={load}>
+              <RefreshCw size={16} /> Refresh
+            </button>
+          </div>
+
+          <CharacterSelect
+            discordId={discordId}
+            selectedCharacterId={selectedCharacterId}
+            setSelectedCharacterId={setSelectedCharacterId}
+            label="Filter by OC"
+          />
+
+          {message && <p className="message">{message}</p>}
+
+          <div className="summary">
+            <div>
+              <span>Active RPs</span>
+              <strong>{totals.active_scene_count ?? 0}</strong>
+            </div>
+            <div>
+              <span>Posts</span>
+              <strong>{totals.post_count ?? 0}</strong>
+            </div>
+            <div>
+              <span>Words</span>
+              <strong>{totals.word_count ?? 0}</strong>
+            </div>
+          </div>
+
+          <div className="summary">
+            <div>
+              <span>Estimated XP</span>
+              <strong>{totals.estimated_xp ?? 0}</strong>
+            </div>
+            <div>
+              <span>Approved XP</span>
+              <strong>{totals.approved_xp ?? 0}</strong>
+            </div>
+            <div>
+              <span>Closed RPs</span>
+              <strong>{totals.closed_scene_count ?? 0}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <h2>Recent Posts</h2>
+
+          <div className="item-list">
+            {(data?.recent_posts || []).length === 0 ? <p>No tracked posts found yet.</p> : null}
+
+            {(data?.recent_posts || []).slice(0, 8).map((post: any) => (
+              <div className="request-card" key={post.post_id}>
+                <div>
+                  <h3>{post.character_name}</h3>
+                  <p>
+                    {post.word_count} words • {new Date(post.posted_at).toLocaleString()}
+                  </p>
+                  {post.content_preview ? <small>{post.content_preview}</small> : null}
+                </div>
+
+                {post.discord_url ? (
+                  <a href={post.discord_url} target="_blank" rel="noreferrer">
+                    Open post
+                  </a>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card rp-main-panel">
+          <div className="card-title-row">
+            <h2>
+              {sceneFilter === "claims"
+                ? "XP Claims"
+                : sceneFilter === "closed"
+                  ? "Closed RPs"
+                  : "Active RPs"}
+            </h2>
+
+            <div className="actions">
+              <button
+                className={sceneFilter === "active" ? "" : "ghost"}
+                onClick={() => setSceneFilter("active")}
+              >
+                Active
+              </button>
+              <button
+                className={sceneFilter === "closed" ? "" : "ghost"}
+                onClick={() => setSceneFilter("closed")}
+              >
+                Closed
+              </button>
+              <button
+                className={sceneFilter === "claims" ? "" : "ghost"}
+                onClick={() => setSceneFilter("claims")}
+              >
+                Claims
+              </button>
+            </div>
+          </div>
+
+          {sceneFilter !== "claims" ? (
+            <div className="item-list">
+              {scenes.length === 0 ? <p>No scenes found for this filter.</p> : null}
+
+              {scenes.map((scene: any) => (
+                <div className="request-card rp-scene-card" key={scene.scene_id}>
+                  <div>
+                    <h3>{scene.title}</h3>
+                    <p>
+                      {statusLabel(scene.status)} • {scene.scene_type || "scene"} •{" "}
+                      {scene.xp_eligible ? "XP eligible" : "No XP"}
+                    </p>
+
+                    {scene.event?.title ? (
+                      <p>
+                        <strong>Event:</strong> {scene.event.title}
+                      </p>
+                    ) : null}
+
+                    <p>
+                      Your posts: {scene.my_post_count || 0} • Your words:{" "}
+                      {scene.my_word_count || 0}
+                    </p>
+
+                    {scene.latest_post?.content_preview ? (
+                      <small>Latest: {scene.latest_post.content_preview}</small>
+                    ) : null}
+                  </div>
+
+                  <div className="actions">
+                    {scene.discord_url ? (
+                      <a href={scene.discord_url} target="_blank" rel="noreferrer">
+                        Open thread
+                      </a>
+                    ) : null}
+
+                    {scene.latest_post?.discord_url ? (
+                      <a href={scene.latest_post.discord_url} target="_blank" rel="noreferrer">
+                        Latest post
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="item-list">
+              {claims.length === 0 ? <p>No RP XP claims found yet.</p> : null}
+
+              {claims.map((claim: any) => (
+                <div className="request-card rp-claim-card" key={claim.claim_id}>
+                  <div>
+                    <h3>{claim.character_name}</h3>
+                    <p>
+                      {claim.claim_type} • {claim.word_count} words • {claim.post_count} posts
+                    </p>
+                    <p>
+                      Estimated: {claim.estimated_xp} XP • Approved:{" "}
+                      {claim.approved_xp ?? "—"} XP
+                    </p>
+                    <p>
+                      Status:{" "}
+                      <strong className={claimStatusClass(claim.status)}>
+                        {statusLabel(claim.status)}
+                      </strong>{" "}
+                      • Payout:{" "}
+                      <strong className={claimStatusClass(claim.payout_status)}>
+                        {statusLabel(claim.payout_status)}
+                      </strong>
+                    </p>
+
+                    {claim.scene?.title ? (
+                      <small>Scene: {claim.scene.title}</small>
+                    ) : null}
+
+                    {claim.review_reason ? <small>Review: {claim.review_reason}</small> : null}
+                    {claim.payout_error ? <small className="bad">Payout error: {claim.payout_error}</small> : null}
+                  </div>
+
+                  {claim.scene?.discord_url ? (
+                    <a href={claim.scene.discord_url} target="_blank" rel="noreferrer">
+                      Open scene
+                    </a>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    </RequireDiscord>
+  );
+}
+
 
 function StaffQueue({ discordId }: { discordId: string }) {
   const [statRequests, setStatRequests] = useState<any[]>([]);
