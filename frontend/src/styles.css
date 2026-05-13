@@ -575,4 +575,36 @@ label textarea {
   }
 }
 
+/* Staff shop listing review */
+
+.staff-shop-review-card {
+  grid-column: 1 / -1;
+}
+
+.shop-review-card {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+}
+
+.shop-review-image {
+  width: 140px;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 18px;
+  border: 1px solid rgba(61, 51, 43, 0.12);
+  background: #f6efe4;
+}
+
+@media (max-width: 760px) {
+  .shop-review-card {
+    grid-template-columns: 1fr;
+  }
+
+  .shop-review-image {
+    width: 100%;
+    height: 220px;
+  }
+}
 
