@@ -10,6 +10,7 @@ from app.models import StaffActionRequest
 from app.security import actor_from_header, require_staff
 from app.services import get_guild_id, sb_data
 from app.supabase_client import get_supabase, raise_clean_api_error
+from app.discord_webhook import notify_shop_listing_reviewed, notify_stat_reviewed
 
 router = APIRouter(prefix="/api/staff", tags=["staff"])
 
@@ -103,6 +104,15 @@ def approve_stat_request(
     if isinstance(result, list) and result:
         result = result[0]
 
+    if isinstance(result, dict):
+        notify_stat_reviewed(
+            request_id=request_id,
+            action="approved",
+            staff_id=staff_id,
+            note=payload.staff_note,
+            result=result,
+        )
+
     return {"result": result}
 
 
@@ -132,6 +142,15 @@ def deny_stat_request(
     result = sb_data(rpc)
     if isinstance(result, list) and result:
         result = result[0]
+
+    if isinstance(result, dict):
+        notify_stat_reviewed(
+            request_id=request_id,
+            action="denied",
+            staff_id=staff_id,
+            note=payload.staff_note,
+            result=result,
+        )
 
     return {"result": result}
 
@@ -226,6 +245,14 @@ def approve_shop_item(
     rows = sb_data(update_res) or []
     item = rows[0] if rows else None
 
+    notify_shop_listing_reviewed(
+        item_id=item_id,
+        action="approved",
+        staff_id=staff_id,
+        note=payload.staff_note,
+        item=item,
+    )
+
     return {
         "ok": True,
         "item": item,
@@ -267,6 +294,14 @@ def deny_shop_item(
 
     rows = sb_data(update_res) or []
     item = rows[0] if rows else None
+
+    notify_shop_listing_reviewed(
+        item_id=item_id,
+        action="denied",
+        staff_id=staff_id,
+        note=payload.staff_note,
+        item=item,
+    )
 
     return {
         "ok": True,

@@ -8,6 +8,7 @@ from app.permissions import company_member_rank, is_staff, require_actor, requir
 from app.security import actor_from_header
 from app.services import get_guild_id, sb_data
 from app.supabase_client import get_supabase
+from app.discord_webhook import notify_shop_listing_submitted
 
 router = APIRouter(prefix="/api/shops", tags=["shops"])
 
@@ -341,6 +342,9 @@ def create_shop_item(
     ins = sb.table("shop_items").insert(row).execute()
     rows = sb_data(ins) or []
     created = rows[0] if rows else row
+
+    if isinstance(created, dict):
+        notify_shop_listing_submitted(created)
 
     return {
         "ok": True,

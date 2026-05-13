@@ -7,6 +7,7 @@ from app.models import PreviewRequest, SubmitStatRequest
 from app.security import actor_from_header
 from app.services import build_preview, get_guild_id, sb_data
 from app.supabase_client import get_supabase, raise_clean_api_error
+from app.discord_webhook import notify_stat_submitted
 
 router = APIRouter(prefix="/api", tags=["xp"])
 
@@ -47,5 +48,8 @@ def submit_stat_request(
     result = sb_data(rpc)
     if isinstance(result, list) and result:
         result = result[0]
+
+    if isinstance(result, dict):
+        notify_stat_submitted(result)
 
     return {"request": result}
