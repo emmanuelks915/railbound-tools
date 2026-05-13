@@ -793,10 +793,10 @@ function InventoryDashboard({
           </div>
         </div>
 
-        <div className="card loadout-builder-card">
+        <div className="card">
           <h2>Loadout Builder</h2>
           <p className="muted-text">
-Build a clean mission kit from your inventory, then save it as a named loadout.
+            Pick item quantities from inventory, name the loadout, then save it.
           </p>
 
           <label>
@@ -810,7 +810,7 @@ Build a clean mission kit from your inventory, then save it as a named loadout.
 
           <div className="summary">
             <div>
-              <span>Selected Items</span>
+              <span>Item Types</span>
               <strong>{selectedItemCount}</strong>
             </div>
             <div>
@@ -818,8 +818,8 @@ Build a clean mission kit from your inventory, then save it as a named loadout.
               <strong>{totalWu}</strong>
             </div>
             <div>
-              <span>Active Loadout</span>
-              <strong>{activeLoadout || "None"}</strong>
+              <span>Active</span>
+              <strong>{activeLoadout || "—"}</strong>
             </div>
           </div>
 
@@ -827,7 +827,7 @@ Build a clean mission kit from your inventory, then save it as a named loadout.
             <button className="ghost" onClick={fillFromCurrentInventory}>
               Fill Current Inventory
             </button>
-            <button className="ghost danger-soft" onClick={clearBuilder}>
+            <button className="ghost" onClick={clearBuilder}>
               <X size={16} /> Clear
             </button>
           </div>
@@ -854,11 +854,11 @@ Build a clean mission kit from your inventory, then save it as a named loadout.
           </div>
 
           <div className="actions">
-            <button className="primary-action" onClick={saveBuilderLoadout}>
-              <Save size={16} /> Save Loadout
+            <button onClick={saveBuilderLoadout}>
+              <Save size={16} /> Save Built Loadout
             </button>
-            <button className="ghost secondary-action" onClick={saveSnapshot}>
-              Save Current Inventory Snapshot
+            <button className="ghost" onClick={saveSnapshot}>
+              Save Full Inventory Snapshot
             </button>
           </div>
         </div>
@@ -924,40 +924,6 @@ function ShopDashboard({ discordId }: { discordId: string }) {
   const [shop, setShop] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
   const [message, setMessage] = useState("");
-  const [createOpen, setCreateOpen] = useState(true);
-  const [listingForm, setListingForm] = useState({
-    name: "",
-    description: "",
-    image_url: "",
-    price: "0",
-    stock: "",
-    item_type: "item",
-    item_class: "",
-    recipe_link: "",
-    special_effects: "",
-    usage_information: "",
-    stat_limits: "",
-  });
-
-  function updateListingForm(key: string, value: string) {
-    setListingForm((current) => ({ ...current, [key]: value }));
-  }
-
-  function resetListingForm() {
-    setListingForm({
-      name: "",
-      description: "",
-      image_url: "",
-      price: "0",
-      stock: "",
-      item_type: "item",
-      item_class: "",
-      recipe_link: "",
-      special_effects: "",
-      usage_information: "",
-      stat_limits: "",
-    });
-  }
 
   async function loadShops() {
     setMessage("");
@@ -993,66 +959,15 @@ function ShopDashboard({ discordId }: { discordId: string }) {
     await loadShop(shop.company_id);
   }
 
-  async function createListing() {
-    if (!shopId) {
-      setMessage("Select a shop first.");
-      return;
-    }
-
-    if (!listingForm.name.trim()) {
-      setMessage("Listing name is required.");
-      return;
-    }
-
-    const price = Number(listingForm.price || 0);
-    if (Number.isNaN(price) || price < 0) {
-      setMessage("Price must be 0 or higher.");
-      return;
-    }
-
-    const stockText = listingForm.stock.trim();
-    const stock = stockText === "" ? null : Number(stockText);
-    if (stock !== null && (Number.isNaN(stock) || stock < 0)) {
-      setMessage("Stock must be blank, 0, or higher.");
-      return;
-    }
-
-    await apiFetch(`/api/shops/${shopId}/items`, {
-      method: "POST",
-      body: JSON.stringify({
-        name: listingForm.name.trim(),
-        description: listingForm.description.trim(),
-        image_url: listingForm.image_url.trim() || null,
-        price,
-        stock,
-        item_type: listingForm.item_type.trim() || "item",
-        item_class: listingForm.item_class.trim() || null,
-        recipe_link: listingForm.recipe_link.trim() || null,
-        special_effects: listingForm.special_effects.trim() || null,
-        usage_information: listingForm.usage_information.trim() || null,
-        stat_limits: listingForm.stat_limits.trim() || null,
-      }),
-    }, discordId);
-
-    setMessage("Listing submitted for staff review.");
-    resetListingForm();
-    await loadShop(shopId);
-  }
-
   async function patchItem(itemId: string, patch: Record<string, unknown>) {
     await apiFetch(`/api/shops/items/${itemId}`, { method: "PATCH", body: JSON.stringify(patch) }, discordId);
     setMessage("Listing updated.");
     await loadShop();
   }
 
-  function listingStatus(item: any) {
-    const raw = String(item.review_status || (item.is_active ? "active" : "draft"));
-    return raw.replaceAll("_", " ").toUpperCase();
-  }
-
   return (
     <RequireDiscord discordId={discordId}>
-      <section className="grid shop-grid">
+      <section className="grid">
         <div className="card">
           <div className="card-title-row">
             <h2>Shop Dashboard</h2>
@@ -1078,92 +993,15 @@ function ShopDashboard({ discordId }: { discordId: string }) {
           ) : <p>Select a shop to manage.</p>}
         </div>
 
-        <div className="card shop-create-card">
-          <div className="card-title-row">
-            <div>
-              <h2>Create Listing</h2>
-              <p className="muted-text">Submit a shop item for staff review. Approved listings can be published to Discord later.</p>
-            </div>
-            <button className="ghost" onClick={() => setCreateOpen((value) => !value)}>
-              {createOpen ? "Collapse" : "Open"}
-            </button>
-          </div>
-
-          {createOpen ? (
-            <>
-              <div className="shop-create-grid">
-                <label>
-                  Item Name
-                  <input value={listingForm.name} onChange={(e) => updateListingForm("name", e.target.value)} placeholder="Clockwork Grapple" />
-                </label>
-                <label>
-                  Price
-                  <input type="number" min={0} value={listingForm.price} onChange={(e) => updateListingForm("price", e.target.value)} />
-                </label>
-                <label>
-                  Stock
-                  <input type="number" min={0} value={listingForm.stock} onChange={(e) => updateListingForm("stock", e.target.value)} placeholder="Blank = unlimited" />
-                </label>
-                <label>
-                  Item Type
-                  <input value={listingForm.item_type} onChange={(e) => updateListingForm("item_type", e.target.value)} placeholder="item, service, recipe..." />
-                </label>
-                <label>
-                  Item Class
-                  <input value={listingForm.item_class} onChange={(e) => updateListingForm("item_class", e.target.value)} placeholder="Weapon, Armor, Consumable..." />
-                </label>
-                <label>
-                  Image URL
-                  <input value={listingForm.image_url} onChange={(e) => updateListingForm("image_url", e.target.value)} placeholder="https://..." />
-                </label>
-                <label className="full-span">
-                  Description
-                  <textarea value={listingForm.description} onChange={(e) => updateListingForm("description", e.target.value)} placeholder="What is this listing?" />
-                </label>
-                <label className="full-span">
-                  Recipe / Sheet Link
-                  <input value={listingForm.recipe_link} onChange={(e) => updateListingForm("recipe_link", e.target.value)} placeholder="Optional doc/sheet link" />
-                </label>
-                <label className="full-span">
-                  Stat Limits
-                  <textarea value={listingForm.stat_limits} onChange={(e) => updateListingForm("stat_limits", e.target.value)} placeholder="Optional stat requirements or limits..." />
-                </label>
-                <label className="full-span">
-                  Special Effects
-                  <textarea value={listingForm.special_effects} onChange={(e) => updateListingForm("special_effects", e.target.value)} placeholder="Optional effects..." />
-                </label>
-                <label className="full-span">
-                  Usage Information
-                  <textarea value={listingForm.usage_information} onChange={(e) => updateListingForm("usage_information", e.target.value)} placeholder="How should players use this?" />
-                </label>
-              </div>
-
-              {listingForm.image_url.trim() ? (
-                <div className="shop-image-preview">
-                  <span>Image Preview</span>
-                  <img src={listingForm.image_url.trim()} alt="Listing preview" />
-                </div>
-              ) : null}
-
-              <div className="actions">
-                <button className="primary-action" onClick={createListing}><Send size={16} /> Submit Listing</button>
-                <button className="ghost secondary-action" onClick={resetListingForm}>Clear Form</button>
-              </div>
-            </>
-          ) : null}
-        </div>
-
-        <div className="card shop-listings-card">
+        <div className="card">
           <h2>Listings</h2>
           <div className="item-list">
             {items.length === 0 ? <p>No listings found.</p> : null}
             {items.map((item) => (
-              <div className="request-card shop-listing-card" key={item.item_id}>
-                {item.image_url ? <img src={item.image_url} alt="" /> : null}
+              <div className="request-card" key={item.item_id}>
                 <div>
                   <h3>{item.name}</h3>
-                  <p>Price: {item.price} • Stock: {item.stock ?? "∞"} • Status: {listingStatus(item)}</p>
-                  {item.description ? <small>{item.description}</small> : null}
+                  <p>Price: {item.price} • Stock: {item.stock ?? "∞"} • Status: {item.review_status || (item.is_active ? "ACTIVE" : "DRAFT")}</p>
                 </div>
                 <div className="inline-form compact-inline">
                   <input type="number" defaultValue={item.stock ?? 0} onBlur={(e) => patchItem(item.item_id, { stock: Number(e.target.value) })} />
@@ -1252,14 +1090,20 @@ function SkillsDashboard({ discordId, selectedCharacterId, setSelectedCharacterI
 function StaffQueue({ discordId }: { discordId: string }) {
   const [statRequests, setStatRequests] = useState<any[]>([]);
   const [skillRequests, setSkillRequests] = useState<any[]>([]);
+  const [shopRequests, setShopRequests] = useState<any[]>([]);
   const [message, setMessage] = useState("");
 
   async function loadRequests() {
     setMessage("");
+
     const stats = await apiFetch("/api/staff/stat-requests?status=pending", {}, discordId);
     setStatRequests(stats.requests || []);
+
     const skills = await apiFetch("/api/staff/skill-requests?status=pending", {}, discordId);
     setSkillRequests(skills.requests || []);
+
+    const shops = await apiFetch("/api/staff/shop-items?status=pending_staff_review", {}, discordId);
+    setShopRequests(shops.items || []);
   }
 
   useEffect(() => {
@@ -1269,15 +1113,49 @@ function StaffQueue({ discordId }: { discordId: string }) {
 
   async function actStat(requestId: string, action: "approve" | "deny") {
     const note = window.prompt(action === "approve" ? "Approval note?" : "Denial reason?") || "";
-    await apiFetch(`/api/staff/stat-requests/${requestId}/${action}`, { method: "POST", body: JSON.stringify({ staff_note: note }) }, discordId);
+
+    await apiFetch(
+      `/api/staff/stat-requests/${requestId}/${action}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ staff_note: note }),
+      },
+      discordId
+    );
+
     setMessage(`Stat request ${action}d.`);
     await loadRequests();
   }
 
   async function actSkill(requestId: string, action: "approve" | "deny") {
     const note = window.prompt(action === "approve" ? "Approval note?" : "Denial reason?") || "";
-    await apiFetch(`/api/staff/skill-requests/${requestId}/${action}`, { method: "POST", body: JSON.stringify({ staff_note: note }) }, discordId);
+
+    await apiFetch(
+      `/api/staff/skill-requests/${requestId}/${action}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ staff_note: note }),
+      },
+      discordId
+    );
+
     setMessage(`Skill request ${action}d.`);
+    await loadRequests();
+  }
+
+  async function actShopItem(itemId: string, action: "approve" | "deny") {
+    const note = window.prompt(action === "approve" ? "Approval note?" : "Denial reason?") || "";
+
+    await apiFetch(
+      `/api/staff/shop-items/${itemId}/${action}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ staff_note: note }),
+      },
+      discordId
+    );
+
+    setMessage(`Shop listing ${action}d.`);
     await loadRequests();
   }
 
@@ -1287,27 +1165,40 @@ function StaffQueue({ discordId }: { discordId: string }) {
         <div className="card">
           <div className="card-title-row">
             <h2>Stat Review Queue</h2>
-            <button className="ghost" onClick={loadRequests}><RefreshCw size={16} /> Refresh</button>
+            <button className="ghost" onClick={loadRequests}>
+              <RefreshCw size={16} /> Refresh
+            </button>
           </div>
+
           {message && <p className="message">{message}</p>}
+
           <div className="item-list">
             {statRequests.length === 0 && <p>No pending stat requests.</p>}
+
             {statRequests.map((request) => (
               <div className="request-card" key={request.request_id}>
                 <div>
                   <h3>{request.character?.name || "Unknown OC"}</h3>
-                  <p>Requested by: {request.requested_by_discord_id}</p>
                   <p>Total: {request.total_cost} XP</p>
                   {request.submitter_note && <p>Note: {request.submitter_note}</p>}
                 </div>
+
                 <ul>
                   {request.items.map((item: any) => (
-                    <li key={item.item_id}>{STAT_LABELS[item.stat_key as keyof CoreStats]}: {item.current_value} → {item.target_value} ({item.cost} XP)</li>
+                    <li key={item.item_id}>
+                      {STAT_LABELS[item.stat_key as keyof CoreStats]}: {item.current_value} →{" "}
+                      {item.target_value} ({item.cost} XP)
+                    </li>
                   ))}
                 </ul>
+
                 <div className="actions">
-                  <button onClick={() => actStat(request.request_id, "approve")}><Check size={16} /> Approve</button>
-                  <button className="danger" onClick={() => actStat(request.request_id, "deny")}><X size={16} /> Deny</button>
+                  <button onClick={() => actStat(request.request_id, "approve")}>
+                    <Check size={16} /> Approve
+                  </button>
+                  <button className="danger" onClick={() => actStat(request.request_id, "deny")}>
+                    <X size={16} /> Deny
+                  </button>
                 </div>
               </div>
             ))}
@@ -1316,8 +1207,10 @@ function StaffQueue({ discordId }: { discordId: string }) {
 
         <div className="card">
           <h2>Skill Review Queue</h2>
+
           <div className="item-list">
             {skillRequests.length === 0 && <p>No pending skill requests.</p>}
+
             {skillRequests.map((request) => (
               <div className="request-card" key={request.request_id}>
                 <div>
@@ -1325,9 +1218,70 @@ function StaffQueue({ discordId }: { discordId: string }) {
                   <p>OC: {request.character?.name || "Unknown OC"}</p>
                   <p>Cost: {request.cost} XP</p>
                 </div>
+
                 <div className="actions">
-                  <button onClick={() => actSkill(request.request_id, "approve")}><Check size={16} /> Approve</button>
-                  <button className="danger" onClick={() => actSkill(request.request_id, "deny")}><X size={16} /> Deny</button>
+                  <button onClick={() => actSkill(request.request_id, "approve")}>
+                    <Check size={16} /> Approve
+                  </button>
+                  <button className="danger" onClick={() => actSkill(request.request_id, "deny")}>
+                    <X size={16} /> Deny
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card staff-shop-review-card">
+          <h2>Shop Listing Review Queue</h2>
+          <p className="muted-text">
+            Review submitted player shop listings before they go live.
+          </p>
+
+          <div className="item-list">
+            {shopRequests.length === 0 && <p>No pending shop listings.</p>}
+
+            {shopRequests.map((item) => (
+              <div className="request-card shop-review-card" key={item.item_id}>
+                {item.image_url ? (
+                  <img
+                    className="shop-review-image"
+                    src={item.image_url}
+                    alt={item.name || "Shop item"}
+                  />
+                ) : null}
+
+                <div>
+                  <h3>{item.name}</h3>
+                  <p>
+                    Shop: {item.company?.name || "Unknown Shop"} • Price: {item.price} • Stock:{" "}
+                    {item.stock ?? "∞"}
+                  </p>
+
+                  {item.item_type || item.item_class ? (
+                    <p>
+                      Type: {item.item_type || "—"} • Class: {item.item_class || "—"}
+                    </p>
+                  ) : null}
+
+                  {item.description ? <p>{item.description}</p> : null}
+                  {item.special_effects ? <p><strong>Effects:</strong> {item.special_effects}</p> : null}
+                  {item.usage_information ? <p><strong>Usage:</strong> {item.usage_information}</p> : null}
+
+                  {item.recipe_link ? (
+                    <a href={item.recipe_link} target="_blank" rel="noreferrer">
+                      Open recipe / sheet
+                    </a>
+                  ) : null}
+                </div>
+
+                <div className="actions">
+                  <button onClick={() => actShopItem(item.item_id, "approve")}>
+                    <Check size={16} /> Approve
+                  </button>
+                  <button className="danger" onClick={() => actShopItem(item.item_id, "deny")}>
+                    <X size={16} /> Deny
+                  </button>
                 </div>
               </div>
             ))}
