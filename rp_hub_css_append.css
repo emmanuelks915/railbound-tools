@@ -1,0 +1,33 @@
+/* RP Hub */
+
+.rp-hub-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.8fr);
+}
+
+.rp-main-panel {
+  grid-column: 1 / -1;
+}
+
+.rp-scene-card,
+.rp-claim-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+}
+
+.rp-scene-card small,
+.rp-claim-card small {
+  display: block;
+  margin-top: 0.35rem;
+  color: rgba(44, 31, 22, 0.65);
+  line-height: 1.4;
+}
+
+@media (max-width: 860px) {
+  .rp-hub-grid,
+  .rp-scene-card,
+  .rp-claim-card {
+    grid-template-columns: 1fr;
+  }
+}
