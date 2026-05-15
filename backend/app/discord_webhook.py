@@ -79,7 +79,7 @@ def notify_stat_submitted(request: dict[str, Any] | None) -> bool:
         color=0x2F6F73,
         fields=[
             _field("Request ID", request.get("request_id"), inline=False),
-            _field("Character ID", request.get("character_id"), inline=False),
+            _field("Character", request.get("character_name") or request.get("character_id"), inline=False),
             _field("Requested By", request.get("requested_by_discord_id")),
             _field("Total Cost", f"{request.get('total_cost', '—')} XP"),
             _field("Status", request.get("status")),
@@ -156,4 +156,50 @@ def notify_shop_listing_reviewed(
             _field("Status", item.get("review_status") or "—"),
         ],
         url=item.get("image_url"),
+    )
+
+def notify_skill_submitted(request: dict[str, Any] | None) -> bool:
+    if not request:
+        return False
+
+    return notify_staff_webhook(
+        title="✨ New Skill Request Submitted",
+        description="A player submitted a skill purchase request for staff review.",
+        color=0x2F6F73,
+        fields=[
+            _field("Request ID", request.get("request_id"), inline=False),
+            _field("Character", request.get("character_name") or request.get("character_id"), inline=False),
+            _field("Skill", request.get("skill_name") or request.get("skill_key"), inline=False),
+            _field("Requested By", request.get("requested_by_discord_id")),
+            _field("Cost", f"{request.get('cost', '—')} XP"),
+            _field("Status", request.get("status")),
+            _field("Submitter Note", request.get("submitter_note") or "—", inline=False),
+        ],
+    )
+
+
+def notify_skill_reviewed(
+    *,
+    request_id: Any,
+    action: str,
+    staff_id: Any,
+    note: str | None = None,
+    result: dict[str, Any] | None = None,
+) -> bool:
+    approved = action.lower() == "approved"
+
+    return notify_staff_webhook(
+        title="✅ Skill Request Approved" if approved else "❌ Skill Request Denied",
+        description="A staff member reviewed a skill purchase request.",
+        color=0x2F8F5B if approved else 0x9C3D3D,
+        fields=[
+            _field("Request ID", request_id, inline=False),
+            _field("Reviewed By", staff_id),
+            _field("Action", action),
+            _field("Skill", (result.get("skill_name") or result.get("skill_key")) if isinstance(result, dict) else "—", inline=False),
+            _field("Character", (result.get("character_name") or result.get("character_id")) if isinstance(result, dict) else "—", inline=False),
+            _field("Cost", f"{result.get('cost', '—')} XP" if isinstance(result, dict) else "—"),
+            _field("Note", note or "—", inline=False),
+            _field("Result", result.get("status") if isinstance(result, dict) else "—"),
+        ],
     )

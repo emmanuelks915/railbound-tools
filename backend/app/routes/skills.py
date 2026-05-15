@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Any
 
 from uuid import UUID
 
@@ -9,8 +10,60 @@ from app.permissions import require_character_access, is_staff
 from app.security import actor_from_header, require_staff
 from app.services import get_guild_id, get_wallet, sb_data
 from app.supabase_client import get_supabase
+from app.discord_webhook import notify_skill_reviewed, notify_skill_submitted
 
 router = APIRouter(prefix="/api", tags=["skills"])
+
+def _skill_request_for_webhook(sb, request_id: str | UUID) -> dict[str, Any] | None:
+    """Fetch the full request row after RPC calls so webhook embeds have character/requester details."""
+
+    gid = get_guild_id()
+
+    req_res = (
+        sb.table("skill_purchase_requests")
+        .select("*")
+        .eq("guild_id", gid)
+        .eq("request_id", str(request_id))
+        .limit(1)
+        .execute()
+    )
+    req_rows = sb_data(req_res) or []
+
+    if not req_rows:
+        return None
+
+    req = req_rows[0]
+
+    char_res = (
+        sb.table("characters")
+        .select("character_id,name,user_id")
+        .eq("guild_id", gid)
+        .eq("character_id", req["character_id"])
+        .limit(1)
+        .execute()
+    )
+    char_rows = sb_data(char_res) or []
+    character = char_rows[0] if char_rows else None
+
+    skill_res = (
+        sb.table("skill_definitions")
+        .select("skill_key,name,tree,tier,cost")
+        .eq("guild_id", gid)
+        .eq("skill_key", req["skill_key"])
+        .limit(1)
+        .execute()
+    )
+    skill_rows = sb_data(skill_res) or []
+    skill = skill_rows[0] if skill_rows else None
+
+    return {
+        **req,
+        "character": character,
+        "character_name": character.get("name") if character else None,
+        "skill": skill,
+        "skill_name": skill.get("name") if skill else req.get("skill_key"),
+    }
+
 
 
 @router.get("/skills")
@@ -135,6 +188,10 @@ def submit_skill_request(payload: SkillPurchaseRequest, actor_discord_id: int | 
     if isinstance(result, list) and result:
         result = result[0]
 
+    if isinstance(result, dict):
+        full_request = _skill_request_for_webhook(sb, result.get("request_id") or result.get("id"))
+        notify_skill_submitted(full_request or result)
+
     return {"request": result}
 
 
@@ -204,6 +261,16 @@ def approve_skill_request(request_id: UUID, payload: StaffActionRequest, actor_d
     if isinstance(result, list) and result:
         result = result[0]
 
+    if isinstance(result, dict):
+        full_request = _skill_request_for_webhook(sb, request_id)
+        notify_skill_reviewed(
+            request_id=request_id,
+            action="approved",
+            staff_id=staff_id,
+            note=payload.staff_note,
+            result=full_request or result,
+        )
+
     return {"result": result}
 
 
@@ -225,5 +292,14 @@ def deny_skill_request(request_id: UUID, payload: StaffActionRequest, actor_disc
     result = sb_data(rpc)
     if isinstance(result, list) and result:
         result = result[0]
+
+    if isinstance(result, dict):
+        notify_skill_reviewed(
+            request_id=request_id,
+            action="denied",
+            staff_id=staff_id,
+            note=payload.staff_note,
+            result=result,
+        )
 
     return {"result": result}
