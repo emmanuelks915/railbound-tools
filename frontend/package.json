@@ -1,8 +1,9 @@
 {
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b && vite build"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
