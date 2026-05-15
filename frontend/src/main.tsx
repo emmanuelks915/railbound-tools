@@ -89,9 +89,9 @@ function App() {
     ["activity", ClipboardList, "Activity"],
     ["planner", Calculator, "XP Planner"],
     ["oc", UserRound, "OC"],
+    ["skills", Sparkles, "Skills"],
     ["inventory", Package, "Inventory"],
     ["shops", Store, "Shops"],
-    ["skills", Sparkles, "Skills"],
     ["rp", ClipboardList, "RP Hub"],
     ["staff", ShieldCheck, "Staff"],
     ["combat", ClipboardList, "Derived Stats"],
@@ -493,13 +493,58 @@ function PreviewPanel({ preview }: { preview: any }) {
 
 function OCDashboard({ discordId, selectedCharacterId, setSelectedCharacterId }: { discordId: string; selectedCharacterId: string; setSelectedCharacterId: (id: string) => void }) {
   const [summary, setSummary] = useState<any>(null);
+  const [ownedSkills, setOwnedSkills] = useState<any[]>([]);
+  const [skillRequests, setSkillRequests] = useState<any[]>([]);
   const [message, setMessage] = useState("");
 
   async function load() {
     if (!selectedCharacterId) return;
+
     setMessage("");
-    const data = await apiFetch(`/api/characters/${selectedCharacterId}/summary`, {}, discordId);
-    setSummary(data);
+
+    const [summaryData, catalogData, characterSkillData] = await Promise.all([
+      apiFetch(`/api/characters/${selectedCharacterId}/summary`, {}, discordId),
+      apiFetch("/api/skills", {}, discordId),
+      apiFetch(`/api/characters/${selectedCharacterId}/skills`, {}, discordId),
+    ]);
+
+    setSummary(summaryData);
+
+    const catalog = catalogData.skills || [];
+    const ownedKeys = characterSkillData.owned_keys || [];
+
+    const owned = ownedKeys
+      .map((skillKey: string) => {
+        const skill = catalog.find((entry: any) => entry.skill_key === skillKey);
+
+        return {
+          skill_key: skillKey,
+          ...(skill || {}),
+        };
+      })
+      .sort((a: any, b: any) => {
+        const treeCompare = String(a.tree || "").localeCompare(String(b.tree || ""));
+        if (treeCompare !== 0) return treeCompare;
+
+        const tierCompare = Number(a.tier ?? 0) - Number(b.tier ?? 0);
+        if (tierCompare !== 0) return tierCompare;
+
+        return String(a.name || a.skill_key).localeCompare(String(b.name || b.skill_key));
+      });
+
+    setOwnedSkills(owned);
+    const enrichedRequests = (characterSkillData.requests || []).map((request: any) => {
+      const skill = catalog.find((entry: any) => entry.skill_key === request.skill_key);
+
+      return {
+        ...request,
+        skill_name: skill?.name || request.skill_key,
+        tree: skill?.tree,
+        tier: skill?.tier,
+      };
+    });
+
+    setSkillRequests(enrichedRequests);
   }
 
   useEffect(() => {
@@ -507,9 +552,18 @@ function OCDashboard({ discordId, selectedCharacterId, setSelectedCharacterId }:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCharacterId, discordId]);
 
+  const groupedOwnedSkills = ownedSkills.reduce<Record<string, any[]>>((groups, skill) => {
+    const tree = String(skill.tree || "Other");
+    if (!groups[tree]) groups[tree] = [];
+    groups[tree].push(skill);
+    return groups;
+  }, {});
+
+  const pendingRequests = skillRequests.filter((request) => String(request.status || "").toLowerCase() === "pending");
+
   return (
     <RequireDiscord discordId={discordId}>
-      <section className="grid">
+      <section className="grid oc-dashboard-grid">
         <div className="card">
           <div className="card-title-row">
             <h2>OC Dashboard</h2>
@@ -533,6 +587,65 @@ function OCDashboard({ discordId, selectedCharacterId, setSelectedCharacterId }:
             </>
           )}
         </div>
+
+        <div className="card oc-skills-card">
+          <div className="card-title-row">
+            <div>
+              <h2>Owned Skills</h2>
+              <p className="muted-text">A clean list of skills this OC already has.</p>
+            </div>
+            <span className="pill good">{ownedSkills.length} owned</span>
+          </div>
+
+          {!selectedCharacterId ? <p>Select an OC to view owned skills.</p> : null}
+
+          {selectedCharacterId && ownedSkills.length === 0 ? (
+            <p>No owned skills found yet. Requested skills will appear here after staff approval.</p>
+          ) : null}
+
+          {Object.entries(groupedOwnedSkills).map(([tree, skills]) => (
+            <div className="owned-skill-group" key={tree}>
+              <div className="owned-skill-group-heading">
+                <h3>{tree}</h3>
+                <span>{skills.length}</span>
+              </div>
+
+              <div className="owned-skill-list">
+                {skills.map((skill) => (
+                  <div className="owned-skill-row" key={skill.skill_key}>
+                    <div>
+                      <strong>{skill.name || skill.skill_key}</strong>
+                    </div>
+                    <div className="owned-skill-meta">
+                      <span>Tier {skill.tier ?? "—"}</span>
+                      <span>{skill.cost ?? 0} XP</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {pendingRequests.length > 0 ? (
+            <div className="oc-pending-skills">
+              <h3>Pending Skill Requests</h3>
+              <div className="owned-skill-list">
+                {pendingRequests.slice(0, 6).map((request) => (
+                  <div className="owned-skill-row pending" key={request.request_id}>
+                    <div>
+                      <strong>{request.skill_name || request.skill_key}</strong>
+                    </div>
+                    <div className="owned-skill-meta">
+                      <span>Pending</span>
+                      <span>{request.cost ?? 0} XP</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
         <div className="card">
           <h2>Derived Stats</h2>
           {!summary ? <p>Select an OC to load derived stats.</p> : (
