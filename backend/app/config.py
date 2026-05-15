@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
     discord_staff_webhook_url: str = ""
 
+    discord_oauth_client_id: str = ""
+    discord_oauth_client_secret: str = ""
+    discord_oauth_redirect_uri: str = "http://localhost:8000/api/auth/discord/callback"
+    frontend_url: str = "http://localhost:5173"
+    auth_session_secret: str = "dev-change-me"
+    allow_dev_login: bool = False
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property

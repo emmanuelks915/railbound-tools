@@ -18,6 +18,7 @@ import {
 import "./styles.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const ALLOW_DEV_LOGIN = import.meta.env.VITE_ALLOW_DEV_LOGIN === "true";
 
 type Character = {
   character_id: string;
@@ -59,7 +60,7 @@ async function apiFetch(path: string, options: RequestInit = {}, discordId?: str
   const authToken = localStorage.getItem("railbound_auth_token");
   if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
 
-  if (discordId) headers.set("X-Discord-Id", discordId);
+  if (ALLOW_DEV_LOGIN && discordId) headers.set("X-Discord-Id", discordId);
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -185,7 +186,8 @@ function App() {
             )}
           </div>
 
-          <label className="auth-dev-login">
+          {ALLOW_DEV_LOGIN ? (
+<label className="auth-dev-login">
             <span>Dev fallback</span>
             <input
               value={discordId}
@@ -193,6 +195,7 @@ function App() {
               placeholder="Paste Discord ID for local testing"
             />
           </label>
+          ) : null}
         </div>
       </section>
 
@@ -1205,7 +1208,7 @@ function ShopDashboard({ discordId }: { discordId: string }) {
 
     try {
       const headers = new Headers();
-      if (discordId) headers.set("X-Discord-Id", discordId);
+      if (ALLOW_DEV_LOGIN && discordId) headers.set("X-Discord-Id", discordId);
 
       const response = await fetch(`${API_BASE}/api/shops/${shopId}/images`, {
         method: "POST",
