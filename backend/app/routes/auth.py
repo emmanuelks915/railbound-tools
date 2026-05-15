@@ -1,0 +1,194 @@
+from __future__ import annotations
+
+import json
+import secrets
+import urllib.parse
+import urllib.request
+import urllib.error
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Header
+from fastapi.responses import RedirectResponse
+
+from app.auth_tokens import create_session_token, verify_session_token
+from app.config import get_settings
+from app.permissions import is_staff
+from app.security import actor_from_header
+
+router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+DISCORD_AUTH_URL = "https://discord.com/oauth2/authorize"
+DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
+DISCORD_ME_URL = "https://discord.com/api/users/@me"
+
+
+def _post_form(url: str, data: dict[str, str]) -> dict[str, Any]:
+    encoded = urllib.parse.urlencode(data).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=encoded,
+        method="POST",
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+            "User-Agent": "RailboundToolsOAuth/1.0",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=15) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _get_json(url: str, *, bearer_token: str) -> dict[str, Any]:
+    request = urllib.request.Request(
+        url,
+        method="GET",
+        headers={
+            "Authorization": f"Bearer {bearer_token}",
+            "Accept": "application/json",
+            "User-Agent": "RailboundToolsOAuth/1.0",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=15) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+@router.get("/discord/login")
+def discord_login():
+    settings = get_settings()
+
+    if not settings.discord_oauth_client_id or not settings.discord_oauth_redirect_uri:
+        raise HTTPException(status_code=500, detail="Discord OAuth is not configured.")
+
+    state = create_session_token(
+        {"purpose": "discord_oauth_state", "nonce": secrets.token_urlsafe(24)},
+        max_age_seconds=10 * 60,
+    )
+
+    params = {
+        "response_type": "code",
+        "client_id": settings.discord_oauth_client_id,
+        "redirect_uri": settings.discord_oauth_redirect_uri,
+        "scope": "identify",
+        "state": state,
+        "prompt": "consent",
+    }
+
+    return RedirectResponse(f"{DISCORD_AUTH_URL}?{urllib.parse.urlencode(params)}")
+
+
+@router.get("/discord/callback")
+def discord_callback(code: str = Query(...), state: str = Query(...)):
+    settings = get_settings()
+
+    state_payload = verify_session_token(state)
+    if not state_payload or state_payload.get("purpose") != "discord_oauth_state":
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state.")
+
+    if not settings.discord_oauth_client_id or not settings.discord_oauth_client_secret:
+        raise HTTPException(status_code=500, detail="Discord OAuth client ID/secret missing.")
+
+    try:
+        token_data = _post_form(
+            DISCORD_TOKEN_URL,
+            {
+                "client_id": settings.discord_oauth_client_id,
+                "client_secret": settings.discord_oauth_client_secret,
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": settings.discord_oauth_redirect_uri,
+            },
+        )
+        access_token = token_data.get("access_token")
+        if not access_token:
+            raise RuntimeError("Discord did not return an access token.")
+
+        discord_user = _get_json(DISCORD_ME_URL, bearer_token=str(access_token))
+    except urllib.error.HTTPError as exc:
+        try:
+            error_body = exc.read().decode("utf-8")
+        except Exception:
+            error_body = str(exc)
+
+        raise HTTPException(
+            status_code=400,
+            detail=f"Discord OAuth callback failed: HTTP {exc.code}: {error_body}",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Discord OAuth callback failed: {exc}") from exc
+
+    discord_id = str(discord_user.get("id") or "")
+    if not discord_id:
+        raise HTTPException(status_code=400, detail="Discord did not return a user ID.")
+
+    app_token = create_session_token(
+        {
+            "discord_id": discord_id,
+            "username": discord_user.get("username"),
+            "global_name": discord_user.get("global_name"),
+            "avatar": discord_user.get("avatar"),
+        },
+        max_age_seconds=60 * 60 * 24 * 7,
+    )
+
+    frontend_url = settings.frontend_url.rstrip("/")
+    return RedirectResponse(f"{frontend_url}/#auth_token={urllib.parse.quote(app_token)}")
+
+
+@router.get("/me")
+def auth_me(
+    actor_discord_id: int | None = Depends(actor_from_header),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
+    if actor_discord_id is None:
+        return {
+            "authenticated": False,
+            "discord_id": None,
+            "user": None,
+            "is_staff": False,
+        }
+
+    user = {
+        "discord_id": str(actor_discord_id),
+        "username": None,
+        "global_name": None,
+        "avatar": None,
+        "avatar_url": None,
+    }
+
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+        payload = verify_session_token(token)
+
+        if payload:
+            discord_id = str(payload.get("discord_id") or actor_discord_id)
+            avatar = payload.get("avatar")
+            avatar_url = None
+
+            if avatar:
+                ext = "gif" if str(avatar).startswith("a_") else "png"
+                avatar_url = f"https://cdn.discordapp.com/avatars/{discord_id}/{avatar}.{ext}?size=128"
+
+            user = {
+                "discord_id": discord_id,
+                "username": payload.get("username"),
+                "global_name": payload.get("global_name"),
+                "avatar": avatar,
+                "avatar_url": avatar_url,
+            }
+
+    return {
+        "authenticated": True,
+        "discord_id": str(actor_discord_id),
+        "user": user,
+        "is_staff": is_staff(actor_discord_id),
+    }
+def auth_me(actor_discord_id: int | None = Depends(actor_from_header)):
+    if actor_discord_id is None:
+        return {"authenticated": False, "discord_id": None, "user": None, "is_staff": False}
+
+    return {
+        "authenticated": True,
+        "discord_id": str(actor_discord_id),
+        "user": {"discord_id": str(actor_discord_id)},
+        "is_staff": is_staff(actor_discord_id),
+    }

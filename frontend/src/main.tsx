@@ -55,6 +55,10 @@ const blankStats: CoreStats = {
 async function apiFetch(path: string, options: RequestInit = {}, discordId?: string) {
   const headers = new Headers(options.headers || {});
   headers.set("Content-Type", "application/json");
+
+  const authToken = localStorage.getItem("railbound_auth_token");
+  if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
+
   if (discordId) headers.set("X-Discord-Id", discordId);
 
   const response = await fetch(`${API_BASE}${path}`, {
@@ -73,6 +77,7 @@ async function apiFetch(path: string, options: RequestInit = {}, discordId?: str
 
 function App() {
   const [tab, setTab] = useState<Tab>("home");
+  const [authUser, setAuthUser] = useState<any>(null);
   const [discordId, setDiscordId] = useState(() => localStorage.getItem("railbound_discord_id") || "");
   const [selectedCharacterId, setSelectedCharacterId] = useState(() => localStorage.getItem("railbound_character_id") || "");
 
@@ -84,9 +89,44 @@ function App() {
     localStorage.setItem("railbound_character_id", selectedCharacterId);
   }, [selectedCharacterId]);
 
+  useEffect(() => {
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const authToken = hash.get("auth_token");
+
+    if (authToken) {
+      localStorage.setItem("railbound_auth_token", authToken);
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+
+    const existingToken = authToken || localStorage.getItem("railbound_auth_token");
+
+    if (existingToken || discordId) {
+      apiFetch("/api/auth/me", {}, discordId)
+        .then((data) => {
+          if (data?.authenticated && data.discord_id) {
+            setAuthUser(data.user || { discord_id: data.discord_id });
+            setDiscordId(String(data.discord_id));
+          }
+        })
+        .catch(() => setAuthUser(null));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function loginWithDiscord() {
+    window.location.href = `${API_BASE}/api/auth/discord/login`;
+  }
+
+  function logoutDiscord() {
+    localStorage.removeItem("railbound_auth_token");
+    localStorage.removeItem("railbound_discord_id");
+    setAuthUser(null);
+    setDiscordId("");
+  }
+
   const tabs = [
     ["home", Home, "Dashboard"],
-    ["activity", ClipboardList, "Activity"],
+
     ["planner", Calculator, "XP Planner"],
     ["oc", UserRound, "OC"],
     ["skills", Sparkles, "Skills"],
@@ -94,6 +134,7 @@ function App() {
     ["shops", Store, "Shops"],
     ["rp", ClipboardList, "RP Hub"],
     ["staff", ShieldCheck, "Staff"],
+    ["activity", ClipboardList, "Activity"],
     ["combat", ClipboardList, "Derived Stats"],
   ] as const;
 
@@ -107,15 +148,52 @@ function App() {
             OC dashboard, XP planning, inventory, loadouts, player shops, skills, staff approvals, and combat math.
           </p>
         </div>
+        <div className="auth-box">
+                    <div className="auth-user">
+            {authUser?.avatar_url ? (
+              <img
+                src={authUser.avatar_url}
+                alt="Discord avatar"
+                className="auth-avatar"
+              />
+            ) : null}
 
-        <label className="discord-id-box">
-          <span>Testing Login</span>
-          <input
-            value={discordId}
-            onChange={(event) => setDiscordId(event.target.value)}
-            placeholder="Paste Discord ID for local testing"
-          />
-        </label>
+            <span>{authUser ? "Logged in with Discord" : "Login"}</span>
+
+            <strong>
+              {authUser
+                ? authUser.global_name || authUser.username || authUser.discord_id || discordId
+                : "Use Discord OAuth"}
+            </strong>
+
+            {authUser?.username ? (
+              <small>@{authUser.username}</small>
+            ) : discordId ? (
+              <small>Discord ID: {discordId}</small>
+            ) : null}
+          </div>
+
+          <div className="auth-actions">
+            {!authUser ? (
+              <button type="button" onClick={loginWithDiscord}>
+                Login with Discord
+              </button>
+            ) : (
+              <button type="button" className="ghost" onClick={logoutDiscord}>
+                Logout
+              </button>
+            )}
+          </div>
+
+          <label className="auth-dev-login">
+            <span>Dev fallback</span>
+            <input
+              value={discordId}
+              onChange={(event) => setDiscordId(event.target.value)}
+              placeholder="Paste Discord ID for local testing"
+            />
+          </label>
+        </div>
       </section>
 
       <nav className="tabs">
@@ -1702,166 +1780,200 @@ function SkillsDashboard({ discordId, selectedCharacterId, setSelectedCharacterI
 }
 
 function ActivityDashboard({ discordId }: { discordId: string }) {
-  const [activities, setActivities] = useState<any[]>([]);
-  const [totals, setTotals] = useState<any>({});
+  const [events, setEvents] = useState<any[]>([]);
+  const [sources, setSources] = useState<Record<string, number>>({});
+  const [activityType, setActivityType] = useState("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [message, setMessage] = useState("");
-  const [kindFilter, setKindFilter] = useState("all");
 
-  async function load() {
+  async function loadActivity(type = activityType) {
     setMessage("");
 
-    const data = await apiFetch("/api/activity/recent?limit=120", {}, discordId);
+    const params = new URLSearchParams({
+      type,
+      limit: "100",
+    });
 
-    setActivities(data.activities || []);
-    setTotals(data.totals || {});
+    if (startDate) params.set("start_date", startDate);
+    if (endDate) params.set("end_date", endDate);
+
+    const data = await apiFetch(`/api/activity/recent?${params.toString()}`, {}, discordId);
+
+    setEvents(data.events || []);
+    setSources(data.sources || {});
   }
 
   useEffect(() => {
-    if (discordId) {
-      load().catch((error) => setMessage(error.message));
-    }
+    if (discordId) loadActivity().catch((error) => setMessage(error.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discordId]);
+  }, [discordId, activityType, startDate, endDate]);
 
-  const visibleActivities = activities.filter((activity) => {
-    if (kindFilter === "all") return true;
-    return activity.kind === kindFilter;
-  });
-
-  function kindLabel(kind: string) {
-    return String(kind || "unknown").replaceAll("_", " ").toUpperCase();
+  function setFilter(type: string) {
+    setActivityType(type);
   }
 
-  function formatTime(value: string | undefined) {
+  function clearDates() {
+    setStartDate("");
+    setEndDate("");
+  }
+
+  function statusLabel(status: string | null | undefined) {
+    return String(status || "unknown").replaceAll("_", " ").toUpperCase();
+  }
+
+  function eventIcon(type: string) {
+    if (type === "skills") return "✨";
+    if (type === "stats") return "📈";
+    if (type === "shops") return "🛒";
+    if (type === "xp") return "⭐";
+    return "📝";
+  }
+
+  function formatDate(value: string | null | undefined) {
     if (!value) return "Unknown time";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleString();
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return String(value);
+
+    return parsed.toLocaleString();
   }
 
-  function statusClass(status: string | undefined) {
-    const normalized = String(status || "").toLowerCase();
+  function actorText(event: any) {
+    const pieces = [];
 
-    if (
-      normalized.includes("approved") ||
-      normalized.includes("paid") ||
-      normalized.includes("active") ||
-      normalized.includes("published")
-    ) {
-      return "good";
-    }
+    if (event.actor_id) pieces.push(`Actor: ${event.actor_id}`);
+    if (event.staff_id) pieces.push(`Staff: ${event.staff_id}`);
 
-    if (
-      normalized.includes("denied") ||
-      normalized.includes("rejected") ||
-      normalized.includes("error") ||
-      normalized.includes("failed")
-    ) {
-      return "bad";
-    }
-
-    return "";
+    return pieces.join(" • ");
   }
 
   return (
     <RequireDiscord discordId={discordId}>
-      <section className="grid activity-grid">
-        <div className="card">
+      <section className="activity-page-v1">
+        <div className="card activity-hero-card">
           <div className="card-title-row">
             <div>
               <h2>Recent Activity</h2>
               <p className="muted-text">
-                Staff-facing timeline of approvals, shop listings, RP XP claims, and tool activity.
+                A staff paper trail for stat requests, skill purchases, shop listings, and XP changes.
               </p>
             </div>
-
-            <button className="ghost" onClick={load}>
+            <button className="ghost" onClick={() => loadActivity()}>
               <RefreshCw size={16} /> Refresh
             </button>
           </div>
 
           {message && <p className="message">{message}</p>}
 
-          <div className="summary">
-            <div>
-              <span>Total</span>
-              <strong>{totals.count ?? 0}</strong>
-            </div>
-            <div>
-              <span>Stats</span>
-              <strong>{totals.stat_requests ?? 0}</strong>
-            </div>
-            <div>
-              <span>Shops</span>
-              <strong>{totals.shop_listings ?? 0}</strong>
-            </div>
-          </div>
-
-          <div className="summary">
-            <div>
-              <span>RP Claims</span>
-              <strong>{totals.rp_xp_claims ?? 0}</strong>
-            </div>
-            <div>
-              <span>Skills</span>
-              <strong>{totals.skill_requests ?? 0}</strong>
-            </div>
-            <div>
-              <span>Showing</span>
-              <strong>{visibleActivities.length}</strong>
-            </div>
-          </div>
-
-          <label>
-            Filter Activity
-            <select value={kindFilter} onChange={(event) => setKindFilter(event.target.value)}>
-              <option value="all">All activity</option>
-              <option value="stat_request">Stat requests</option>
-              <option value="shop_listing">Shop listings</option>
-              <option value="rp_xp_claim">RP XP claims</option>
-              <option value="skill_request">Skill requests</option>
-            </select>
-          </label>
-        </div>
-
-        <div className="card activity-timeline-card">
-          <h2>Timeline</h2>
-
-          <div className="item-list activity-list">
-            {visibleActivities.length === 0 ? <p>No recent activity found.</p> : null}
-
-            {visibleActivities.map((activity) => (
-              <div className="request-card activity-card" key={activity.id}>
-                <div>
-                  <div className="activity-card-header">
-                    <span className="pill">{kindLabel(activity.kind)}</span>
-                    {activity.status ? (
-                      <span className={`activity-status ${statusClass(activity.status)}`}>
-                        {String(activity.status).replaceAll("_", " ").toUpperCase()}
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <h3>{activity.title}</h3>
-                  <p>{activity.description}</p>
-
-                  <small>
-                    {formatTime(activity.time)}
-                    {activity.actor_discord_id ? ` • Actor: ${activity.actor_discord_id}` : ""}
-                  </small>
-
-                  {activity.payout_status ? (
-                    <small>
-                      Payout:{" "}
-                      <strong className={statusClass(activity.payout_status)}>
-                        {String(activity.payout_status).replaceAll("_", " ").toUpperCase()}
-                      </strong>
-                    </small>
-                  ) : null}
-                </div>
-              </div>
+          <div className="activity-filter-tabs">
+            {[
+              ["all", "All"],
+              ["skills", "Skills"],
+              ["stats", "Stats"],
+              ["shops", "Shops"],
+              ["xp", "XP"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                className={activityType === value ? "active" : ""}
+                onClick={() => setFilter(value)}
+              >
+                {label}
+                <span>{value === "all" ? events.length : sources[value] ?? 0}</span>
+              </button>
             ))}
           </div>
+
+          <div className="activity-date-filters">
+            <label>
+              From
+              <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+            </label>
+            <label>
+              To
+              <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+            </label>
+            <button className="ghost" onClick={clearDates} disabled={!startDate && !endDate}>
+              Clear Dates
+            </button>
+          </div>
+        </div>
+
+        <div className="activity-timeline">
+          {events.length === 0 ? (
+            <div className="card">
+              <p>No activity found for this filter.</p>
+            </div>
+          ) : null}
+
+          {events.map((event, index) => (
+            <div className={`activity-card ${event.type}`} key={`${event.type}-${event.details?.request_id || event.details?.item_id || index}`}>
+              <div className="activity-marker">{eventIcon(event.type)}</div>
+
+              <div className="activity-content">
+                <div className="activity-card-header">
+                  <div>
+                    <span className="activity-type-label">{String(event.type || "activity").toUpperCase()}</span>
+                    <h3>{event.title}</h3>
+                  </div>
+                  <span className={`pill ${String(event.status || "").includes("approved") ? "good" : ""}`}>
+                    {statusLabel(event.status)}
+                  </span>
+                </div>
+
+                <p className="activity-time">{formatDate(event.timestamp)}</p>
+
+                {event.character?.name ? (
+                  <p>
+                    OC: <strong>{event.character.name}</strong>
+                  </p>
+                ) : null}
+
+                {event.details?.cost !== undefined && event.details?.cost !== null ? (
+                  <p>Cost: <strong>{event.details.cost} XP</strong></p>
+                ) : null}
+
+                {event.details?.amount !== undefined && event.details?.amount !== null ? (
+                  <p>Amount: <strong>{event.details.amount} XP</strong></p>
+                ) : null}
+
+                {event.details?.skill?.tree ? (
+                  <p>
+                    Tree: <strong>{event.details.skill.tree}</strong>
+                    {event.details.skill.tier !== undefined ? <> • Tier: <strong>{event.details.skill.tier}</strong></> : null}
+                  </p>
+                ) : null}
+
+                {event.details?.price !== undefined && event.details?.price !== null ? (
+                  <p>Price: <strong>{event.details.price}</strong></p>
+                ) : null}
+
+                {event.details?.reason ? (
+                  <div className="activity-note">
+                    <strong>Reason</strong>
+                    <p>{event.details.reason}</p>
+                  </div>
+                ) : null}
+
+                {event.details?.note ? (
+                  <div className="activity-note">
+                    <strong>Submitter Note</strong>
+                    <p>{event.details.note}</p>
+                  </div>
+                ) : null}
+
+                {event.details?.staff_note ? (
+                  <div className="activity-note staff">
+                    <strong>Staff Note</strong>
+                    <p>{event.details.staff_note}</p>
+                  </div>
+                ) : null}
+
+                {actorText(event) ? <small>{actorText(event)}</small> : null}
+              </div>
+            </div>
+          ))}
         </div>
       </section>
     </RequireDiscord>
@@ -2135,6 +2247,7 @@ function StaffQueue({ discordId }: { discordId: string }) {
   const [skillRequests, setSkillRequests] = useState<any[]>([]);
   const [shopRequests, setShopRequests] = useState<any[]>([]);
   const [message, setMessage] = useState("");
+  const [activeQueue, setActiveQueue] = useState<"stats" | "skills" | "shops">("skills");
 
   async function loadRequests() {
     setMessage("");
@@ -2202,12 +2315,29 @@ function StaffQueue({ discordId }: { discordId: string }) {
     await loadRequests();
   }
 
+  function checkPill(ok: boolean, label: string, badLabel?: string) {
+    return (
+      <span className={`review-check-pill ${ok ? "good" : "bad"}`}>
+        {ok ? "✓" : "!"} {ok ? label : badLabel || label}
+      </span>
+    );
+  }
+
+  function skillRequestTitle(request: any) {
+    return request.skill?.name || request.skill_key || "Unknown Skill";
+  }
+
   return (
     <RequireDiscord discordId={discordId}>
-      <section className="grid">
-        <div className="card">
+      <section className="staff-dashboard-v2">
+        <div className="card staff-overview-card">
           <div className="card-title-row">
-            <h2>Stat Review Queue</h2>
+            <div>
+              <h2>Staff Review Center</h2>
+              <p className="muted-text">
+                Review pending stat requests, skill purchases, and shop listings.
+              </p>
+            </div>
             <button className="ghost" onClick={loadRequests}>
               <RefreshCw size={16} /> Refresh
             </button>
@@ -2215,121 +2345,200 @@ function StaffQueue({ discordId }: { discordId: string }) {
 
           {message && <p className="message">{message}</p>}
 
-          <div className="item-list">
-            {statRequests.length === 0 && <p>No pending stat requests.</p>}
-
-            {statRequests.map((request) => (
-              <div className="request-card" key={request.request_id}>
-                <div>
-                  <h3>{request.character?.name || "Unknown OC"}</h3>
-                  <p>Total: {request.total_cost} XP</p>
-                  {request.submitter_note && <p>Note: {request.submitter_note}</p>}
-                </div>
-
-                <ul>
-                  {request.items.map((item: any) => (
-                    <li key={item.item_id}>
-                      {STAT_LABELS[item.stat_key as keyof CoreStats]}: {item.current_value} →{" "}
-                      {item.target_value} ({item.cost} XP)
-                    </li>
-                  ))}
-                </ul>
-
-                <div className="actions">
-                  <button onClick={() => actStat(request.request_id, "approve")}>
-                    <Check size={16} /> Approve
-                  </button>
-                  <button className="danger" onClick={() => actStat(request.request_id, "deny")}>
-                    <X size={16} /> Deny
-                  </button>
-                </div>
-              </div>
-            ))}
+          <div className="staff-queue-tabs">
+            <button className={activeQueue === "skills" ? "active" : ""} onClick={() => setActiveQueue("skills")}>
+              Skill Requests <span>{skillRequests.length}</span>
+            </button>
+            <button className={activeQueue === "stats" ? "active" : ""} onClick={() => setActiveQueue("stats")}>
+              Stat Requests <span>{statRequests.length}</span>
+            </button>
+            <button className={activeQueue === "shops" ? "active" : ""} onClick={() => setActiveQueue("shops")}>
+              Shop Listings <span>{shopRequests.length}</span>
+            </button>
           </div>
         </div>
 
-        <div className="card">
-          <h2>Skill Review Queue</h2>
-
-          <div className="item-list">
-            {skillRequests.length === 0 && <p>No pending skill requests.</p>}
-
-            {skillRequests.map((request) => (
-              <div className="request-card" key={request.request_id}>
-                <div>
-                  <h3>{request.skill?.name || request.skill_key}</h3>
-                  <p>OC: {request.character?.name || "Unknown OC"}</p>
-                  <p>Cost: {request.cost} XP</p>
-                </div>
-
-                <div className="actions">
-                  <button onClick={() => actSkill(request.request_id, "approve")}>
-                    <Check size={16} /> Approve
-                  </button>
-                  <button className="danger" onClick={() => actSkill(request.request_id, "deny")}>
-                    <X size={16} /> Deny
-                  </button>
-                </div>
+        {activeQueue === "skills" ? (
+          <div className="card staff-section-card">
+            <div className="card-title-row">
+              <div>
+                <h2>Skill Request Queue</h2>
+                <p className="muted-text">
+                  Review skill prerequisites, XP, and ownership before approving.
+                </p>
               </div>
-            ))}
+              <span className="pill">{skillRequests.length} pending</span>
+            </div>
+
+            <div className="item-list skill-review-list">
+              {skillRequests.length === 0 && <p>No pending skill requests.</p>}
+
+              {skillRequests.map((request) => {
+                const checks = request.review_checks || {};
+                const safeToApprove = !!checks.safe_to_approve;
+
+                return (
+                  <div className={`request-card skill-review-card-v2 ${safeToApprove ? "safe" : "needs-review"}`} key={request.request_id}>
+                    <div className="skill-review-header">
+                      <div>
+                        <div className="skill-review-eyebrow">
+                          <span>{request.skill?.tree || "Unknown Tree"}</span>
+                          <span>Tier {request.skill?.tier ?? "—"}</span>
+                          <span>{checks.cost ?? request.cost ?? request.skill?.cost ?? 0} XP</span>
+                        </div>
+                        <h3>{skillRequestTitle(request)}</h3>
+                        <p>
+                          OC: <strong>{request.character?.name || "Unknown OC"}</strong>
+                          {request.character?.user_id ? <> • Player: <strong>{request.character.user_id}</strong></> : null}
+                        </p>
+                      </div>
+                      <span className={`pill ${safeToApprove ? "good" : "bad"}`}>
+                        {safeToApprove ? "Safe to Approve" : "Needs Review"}
+                      </span>
+                    </div>
+
+                    <div className="review-check-grid">
+                      {checkPill(!!checks.has_enough_xp, `${checks.available_xp ?? 0} XP available`, `Needs ${checks.cost ?? request.cost ?? 0} XP`)}
+                      {checkPill(!checks.already_owned, "Not owned", "Already owned")}
+                      {checkPill(!!checks.skill_active, "Skill active", "Inactive / unreleased")}
+                      {checkPill(!!checks.prerequisites_met, "Prereqs met", "Missing prereqs")}
+                    </div>
+
+                    {checks.prereq_names?.length ? (
+                      <div className="skill-review-detail-box">
+                        <strong>Prerequisites</strong>
+                        <p>{checks.prereq_names.join(", ")}</p>
+                      </div>
+                    ) : (
+                      <div className="skill-review-detail-box">
+                        <strong>Prerequisites</strong>
+                        <p>None listed.</p>
+                      </div>
+                    )}
+
+                    {checks.missing_prereq_keys?.length ? (
+                      <div className="skill-review-warning">
+                        Missing: {checks.missing_prereq_keys.join(", ")}
+                      </div>
+                    ) : null}
+
+                    {request.submitter_note ? (
+                      <div className="skill-review-detail-box">
+                        <strong>Player Note</strong>
+                        <p>{request.submitter_note}</p>
+                      </div>
+                    ) : null}
+
+                    <div className="actions">
+                      <button disabled={!safeToApprove} onClick={() => actSkill(request.request_id, "approve")}>
+                        <Check size={16} /> Approve
+                      </button>
+                      <button className="danger" onClick={() => actSkill(request.request_id, "deny")}>
+                        <X size={16} /> Deny
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        ) : null}
 
-        <div className="card staff-shop-review-card">
-          <h2>Shop Listing Review Queue</h2>
-          <p className="muted-text">
-            Review submitted player shop listings before they go live.
-          </p>
+        {activeQueue === "stats" ? (
+          <div className="card staff-section-card">
+            <h2>Stat Review Queue</h2>
 
-          <div className="item-list">
-            {shopRequests.length === 0 && <p>No pending shop listings.</p>}
+            <div className="item-list">
+              {statRequests.length === 0 && <p>No pending stat requests.</p>}
 
-            {shopRequests.map((item) => (
-              <div className="request-card shop-review-card" key={item.item_id}>
-                {item.image_url ? (
-                  <img
-                    className="shop-review-image"
-                    src={item.image_url}
-                    alt={item.name || "Shop item"}
-                  />
-                ) : null}
+              {statRequests.map((request) => (
+                <div className="request-card" key={request.request_id}>
+                  <div>
+                    <h3>{request.character?.name || "Unknown OC"}</h3>
+                    <p>Total: {request.total_cost} XP</p>
+                    {request.submitter_note && <p>Note: {request.submitter_note}</p>}
+                  </div>
 
-                <div>
-                  <h3>{item.name}</h3>
-                  <p>
-                    Shop: {item.company?.name || "Unknown Shop"} • Price: {item.price} • Stock:{" "}
-                    {item.stock ?? "∞"}
-                  </p>
+                  <ul>
+                    {request.items.map((item: any) => (
+                      <li key={item.item_id}>
+                        {STAT_LABELS[item.stat_key as keyof CoreStats]}: {item.current_value} →{" "}
+                        {item.target_value} ({item.cost} XP)
+                      </li>
+                    ))}
+                  </ul>
 
-                  {item.item_type || item.item_class ? (
+                  <div className="actions">
+                    <button onClick={() => actStat(request.request_id, "approve")}>
+                      <Check size={16} /> Approve
+                    </button>
+                    <button className="danger" onClick={() => actStat(request.request_id, "deny")}>
+                      <X size={16} /> Deny
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {activeQueue === "shops" ? (
+          <div className="card staff-section-card staff-shop-review-card">
+            <h2>Shop Listing Review Queue</h2>
+            <p className="muted-text">
+              Review submitted player shop listings before they go live.
+            </p>
+
+            <div className="item-list">
+              {shopRequests.length === 0 && <p>No pending shop listings.</p>}
+
+              {shopRequests.map((item) => (
+                <div className="request-card shop-review-card" key={item.item_id}>
+                  {item.image_url ? (
+                    <img
+                      className="shop-review-image"
+                      src={item.image_url}
+                      alt={item.name || "Shop item"}
+                    />
+                  ) : null}
+
+                  <div>
+                    <h3>{item.name}</h3>
                     <p>
-                      Type: {item.item_type || "—"} • Class: {item.item_class || "—"}
+                      Shop: {item.company?.name || "Unknown Shop"} • Price: {item.price} • Stock:{" "}
+                      {item.stock ?? "∞"}
                     </p>
-                  ) : null}
 
-                  {item.description ? <p>{item.description}</p> : null}
-                  {item.special_effects ? <p><strong>Effects:</strong> {item.special_effects}</p> : null}
-                  {item.usage_information ? <p><strong>Usage:</strong> {item.usage_information}</p> : null}
+                    {item.item_type || item.item_class ? (
+                      <p>
+                        Type: {item.item_type || "—"} • Class: {item.item_class || "—"}
+                      </p>
+                    ) : null}
 
-                  {item.recipe_link ? (
-                    <a href={item.recipe_link} target="_blank" rel="noreferrer">
-                      Open recipe / sheet
-                    </a>
-                  ) : null}
+                    {item.description ? <p>{item.description}</p> : null}
+                    {item.special_effects ? <p><strong>Effects:</strong> {item.special_effects}</p> : null}
+                    {item.usage_information ? <p><strong>Usage:</strong> {item.usage_information}</p> : null}
+
+                    {item.recipe_link ? (
+                      <a href={item.recipe_link} target="_blank" rel="noreferrer">
+                        Open recipe / sheet
+                      </a>
+                    ) : null}
+                  </div>
+
+                  <div className="actions">
+                    <button onClick={() => actShopItem(item.item_id, "approve")}>
+                      <Check size={16} /> Approve
+                    </button>
+                    <button className="danger" onClick={() => actShopItem(item.item_id, "deny")}>
+                      <X size={16} /> Deny
+                    </button>
+                  </div>
                 </div>
-
-                <div className="actions">
-                  <button onClick={() => actShopItem(item.item_id, "approve")}>
-                    <Check size={16} /> Approve
-                  </button>
-                  <button className="danger" onClick={() => actShopItem(item.item_id, "deny")}>
-                    <X size={16} /> Deny
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        ) : null}
       </section>
     </RequireDiscord>
   );
