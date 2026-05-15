@@ -1,54 +1,71 @@
-# Shop Image Upload Patch
+# Disable Dev Login for Production
 
-Adds Supabase Storage image upload to shop listings.
+This patch makes the manual Discord ID fallback local-only.
 
-## Commands from project root
+## What it changes
+
+Backend:
+
+- Adds `ALLOW_DEV_LOGIN=false` config
+- Backend ignores `X-Discord-Id` unless `ALLOW_DEV_LOGIN=true`
+- OAuth `Authorization: Bearer ...` still works normally
+
+Frontend:
+
+- Adds `VITE_ALLOW_DEV_LOGIN=false`
+- Hides the manual "Dev fallback" box unless `VITE_ALLOW_DEV_LOGIN=true`
+- Only sends `X-Discord-Id` if dev login is enabled
+
+## Run from project root
 
 ```powershell
-Expand-Archive -Path "$env:USERPROFILE\Downloads\shop_image_upload_patch.zip" -DestinationPath . -Force
-python patch_shop_image_upload.py
+Expand-Archive -Path "$env:USERPROFILE\Downloads\disable_dev_login_for_production_patch.zip" -DestinationPath . -Force
+python patch_disable_dev_login_for_production.py
 ```
 
-## Supabase step
+## Set local env values
 
-Run the SQL file this patch creates:
+In `backend\.env`, add:
 
-```txt
-database/004_shop_images_storage_bucket.sql
+```env
+ALLOW_DEV_LOGIN=false
 ```
 
-It creates/updates a public `shop-images` bucket with an 8 MB limit.
+In `frontend\.env`, add:
 
-## Install backend dependency and restart
+```env
+VITE_ALLOW_DEV_LOGIN=false
+```
+
+If you ever need the manual fallback locally, set both to `true`, then restart backend and frontend.
+
+## Restart
+
+Backend:
 
 ```powershell
 cd backend
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-## Frontend
+Frontend:
 
 ```powershell
-cd frontend
+cd ..\frontend
 npm run dev
 ```
 
 ## Test
 
-Go to:
-
-```txt
-Shops → Create Listing → Upload Image
-```
-
-The upload should populate the Image URL field and show in preview.
+- You should only see the Discord OAuth login/profile box.
+- The Dev fallback input should be hidden.
+- Logged-in OAuth pages should still work.
 
 ## Commit
 
 ```powershell
-git add backend/app/config.py backend/app/routes/shops.py backend/requirements.txt backend/.env.example database/004_shop_images_storage_bucket.sql frontend/src/main.tsx frontend/src/styles.css
-git commit -m "Add shop image uploads"
+git add backend/app/config.py backend/app/security.py backend/.env.example frontend/.env.example frontend/src/main.tsx
+git commit -m "Disable dev login outside local mode"
 git push
 ```

@@ -1,0 +1,251 @@
+from __future__ import annotations
+
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from app.models import SkillPurchaseRequest, StaffActionRequest
+from app.permissions import require_character_access, is_staff
+from app.security import actor_from_header, require_staff
+from app.services import get_guild_id, get_wallet, sb_data
+from app.supabase_client import get_supabase
+from app.discord_webhook import notify_skill_reviewed, notify_skill_submitted
+
+router = APIRouter(prefix="/api", tags=["skills"])
+
+
+@router.get("/skills")
+def list_skill_catalog(
+    tree: str | None = Query(default=None),
+    active_only: bool = True,
+    search: str | None = Query(default=None),
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    if actor_discord_id is None:
+        raise HTTPException(status_code=401, detail="Missing X-Discord-Id header.")
+
+    sb = get_supabase()
+    gid = get_guild_id()
+
+    if not active_only and not is_staff(actor_discord_id):
+        active_only = True
+
+    q = (
+        sb.table("skill_definitions")
+        .select("*")
+        .eq("guild_id", gid)
+        .order("tree", desc=False)
+        .order("tier", desc=False)
+        .order("sort_order", desc=False)
+        .limit(2000)
+    )
+
+    if tree and tree != "all":
+        q = q.eq("tree", tree)
+
+    if active_only:
+        q = q.eq("is_active", True)
+
+    skills = sb_data(q.execute()) or []
+
+    if search:
+        needle = search.strip().lower()
+        if needle:
+            skills = [
+                skill
+                for skill in skills
+                if needle in str(skill.get("name") or "").lower()
+                or needle in str(skill.get("skill_key") or "").lower()
+                or needle in str(skill.get("tree") or "").lower()
+                or needle in str(skill.get("description") or "").lower()
+                or needle in str(skill.get("effects") or "").lower()
+                or needle in str(skill.get("usage") or "").lower()
+            ]
+
+    trees = sorted({str(skill.get("tree") or "General") for skill in skills})
+
+    return {
+        "skills": skills,
+        "trees": trees,
+        "count": len(skills),
+    }
+
+
+@router.get("/characters/{character_id}/skills")
+def character_skills(character_id: UUID, actor_discord_id: int | None = Depends(actor_from_header)):
+    sb = get_supabase()
+    require_character_access(sb, character_id, actor_discord_id)
+    gid = get_guild_id()
+
+    owned_res = (
+        sb.table("oc_skills")
+        .select("*")
+        .eq("guild_id", gid)
+        .eq("character_id", str(character_id))
+        .execute()
+    )
+    owned = sb_data(owned_res) or []
+    owned_keys = [str(r.get("skill_key")) for r in owned if r.get("skill_key")]
+
+    pending_res = (
+        sb.table("skill_purchase_requests")
+        .select("*")
+        .eq("guild_id", gid)
+        .eq("character_id", str(character_id))
+        .order("created_at", desc=True)
+        .limit(250)
+        .execute()
+    )
+
+    requests = sb_data(pending_res) or []
+    pending_keys = [
+        str(r.get("skill_key"))
+        for r in requests
+        if str(r.get("status") or "").lower() == "pending" and r.get("skill_key")
+    ]
+
+    return {
+        "owned": owned,
+        "owned_keys": owned_keys,
+        "pending_keys": pending_keys,
+        "wallet": get_wallet(sb, character_id, gid),
+        "requests": requests,
+    }
+
+
+@router.post("/skill-requests")
+def submit_skill_request(payload: SkillPurchaseRequest, actor_discord_id: int | None = Depends(actor_from_header)):
+    if actor_discord_id is not None and actor_discord_id != payload.requested_by_discord_id:
+        raise HTTPException(status_code=403, detail="Header Discord ID does not match submitter.")
+
+    sb = get_supabase()
+    require_character_access(sb, payload.character_id, payload.requested_by_discord_id)
+
+    rpc = sb.rpc(
+        "submit_skill_purchase_request",
+        {
+            "p_guild_id": get_guild_id(),
+            "p_character_id": str(payload.character_id),
+            "p_skill_key": payload.skill_key,
+            "p_requested_by_discord_id": int(payload.requested_by_discord_id),
+            "p_submitter_note": payload.submitter_note,
+        },
+    ).execute()
+
+    result = sb_data(rpc)
+    if isinstance(result, list) and result:
+        result = result[0]
+
+    if isinstance(result, dict):
+        notify_skill_submitted(result)
+
+    return {"request": result}
+
+
+@router.get("/staff/skill-requests")
+def list_skill_requests(status: str = Query(default="pending"), actor_discord_id: int | None = Depends(actor_from_header)):
+    require_staff(actor_discord_id)
+    sb = get_supabase()
+    gid = get_guild_id()
+
+    req_res = (
+        sb.table("skill_purchase_requests")
+        .select("*")
+        .eq("guild_id", gid)
+        .eq("status", status)
+        .order("created_at", desc=True)
+        .limit(100)
+        .execute()
+    )
+
+    reqs = sb_data(req_res) or []
+    out = []
+
+    for req in reqs:
+        char_res = (
+            sb.table("characters")
+            .select("character_id,name,user_id")
+            .eq("guild_id", gid)
+            .eq("character_id", req["character_id"])
+            .limit(1)
+            .execute()
+        )
+        skill_res = (
+            sb.table("skill_definitions")
+            .select("*")
+            .eq("guild_id", gid)
+            .eq("skill_key", req["skill_key"])
+            .limit(1)
+            .execute()
+        )
+        out.append(
+            {
+                **req,
+                "character": (sb_data(char_res) or [None])[0],
+                "skill": (sb_data(skill_res) or [None])[0],
+            }
+        )
+
+    return {"requests": out}
+
+
+@router.post("/staff/skill-requests/{request_id}/approve")
+def approve_skill_request(request_id: UUID, payload: StaffActionRequest, actor_discord_id: int | None = Depends(actor_from_header)):
+    staff_id = payload.staff_discord_id or actor_discord_id
+    require_staff(staff_id)
+    sb = get_supabase()
+
+    rpc = sb.rpc(
+        "approve_skill_purchase_request",
+        {
+            "p_request_id": str(request_id),
+            "p_staff_discord_id": int(staff_id),
+            "p_staff_note": payload.staff_note,
+        },
+    ).execute()
+
+    result = sb_data(rpc)
+    if isinstance(result, list) and result:
+        result = result[0]
+
+    if isinstance(result, dict):
+        notify_skill_reviewed(
+            request_id=request_id,
+            action="approved",
+            staff_id=staff_id,
+            note=payload.staff_note,
+            result=result,
+        )
+
+    return {"result": result}
+
+
+@router.post("/staff/skill-requests/{request_id}/deny")
+def deny_skill_request(request_id: UUID, payload: StaffActionRequest, actor_discord_id: int | None = Depends(actor_from_header)):
+    staff_id = payload.staff_discord_id or actor_discord_id
+    require_staff(staff_id)
+    sb = get_supabase()
+
+    rpc = sb.rpc(
+        "deny_skill_purchase_request",
+        {
+            "p_request_id": str(request_id),
+            "p_staff_discord_id": int(staff_id),
+            "p_staff_note": payload.staff_note,
+        },
+    ).execute()
+
+    result = sb_data(rpc)
+    if isinstance(result, list) and result:
+        result = result[0]
+
+    if isinstance(result, dict):
+        notify_skill_reviewed(
+            request_id=request_id,
+            action="denied",
+            staff_id=staff_id,
+            note=payload.staff_note,
+            result=result,
+        )
+
+    return {"result": result}

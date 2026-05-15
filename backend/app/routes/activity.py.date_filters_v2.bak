@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, time, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -24,61 +24,6 @@ def _timestamp(row: dict[str, Any]) -> str:
             return str(value)
 
     return datetime.now(timezone.utc).isoformat()
-
-
-def _parse_datetime(value: str | None, *, end_of_day: bool = False) -> datetime | None:
-    if not value:
-        return None
-
-    raw = value.strip()
-    if not raw:
-        return None
-
-    try:
-        if "T" not in raw and len(raw) == 10:
-            parsed_date = datetime.strptime(raw, "%Y-%m-%d").date()
-            parsed = datetime.combine(parsed_date, time.max if end_of_day else time.min)
-        else:
-            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-
-        return parsed.astimezone(timezone.utc)
-    except Exception:
-        return None
-
-
-def _event_datetime(event: dict[str, Any]) -> datetime | None:
-    timestamp = event.get("timestamp")
-
-    if not timestamp:
-        return None
-
-    try:
-        parsed = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
-
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-
-        return parsed.astimezone(timezone.utc)
-    except Exception:
-        return None
-
-
-def _in_date_window(event: dict[str, Any], start_dt: datetime | None, end_dt: datetime | None) -> bool:
-    event_dt = _event_datetime(event)
-
-    if event_dt is None:
-        return not start_dt and not end_dt
-
-    if start_dt and event_dt < start_dt:
-        return False
-
-    if end_dt and event_dt > end_dt:
-        return False
-
-    return True
 
 
 def _safe_rows(sb, table: str, *, limit: int, order_by: str = "created_at") -> list[dict[str, Any]]:
@@ -169,8 +114,6 @@ def _event(
 def recent_activity(
     activity_type: str = Query(default="all", alias="type"),
     limit: int = Query(default=100, ge=1, le=250),
-    start_date: str | None = Query(default=None),
-    end_date: str | None = Query(default=None),
     actor_discord_id: int | None = Depends(actor_from_header),
 ):
     require_staff(actor_discord_id)
@@ -180,19 +123,17 @@ def recent_activity(
     want_all = activity_type == "all"
     events: list[dict[str, Any]] = []
 
-    fetch_limit = min(max(limit * 3, 100), 250)
-
-    stat_rows = _safe_rows(sb, "stat_upgrade_requests", limit=fetch_limit) if want_all or activity_type == "stats" else []
-    skill_rows = _safe_rows(sb, "skill_purchase_requests", limit=fetch_limit) if want_all or activity_type == "skills" else []
-    shop_rows = _safe_rows(sb, "shop_items", limit=fetch_limit) if want_all or activity_type == "shops" else []
+    stat_rows = _safe_rows(sb, "stat_upgrade_requests", limit=limit) if want_all or activity_type == "stats" else []
+    skill_rows = _safe_rows(sb, "skill_purchase_requests", limit=limit) if want_all or activity_type == "skills" else []
+    shop_rows = _safe_rows(sb, "shop_items", limit=limit) if want_all or activity_type == "shops" else []
 
     xp_rows: list[dict[str, Any]] = []
     if want_all or activity_type == "xp":
-        xp_rows = _safe_rows(sb, "oc_xp_transactions", limit=fetch_limit)
+        xp_rows = _safe_rows(sb, "oc_xp_transactions", limit=limit)
         if not xp_rows:
-            xp_rows = _safe_rows(sb, "character_xp_transactions", limit=fetch_limit)
+            xp_rows = _safe_rows(sb, "character_xp_transactions", limit=limit)
         if not xp_rows:
-            xp_rows = _safe_rows(sb, "xp_transactions", limit=fetch_limit)
+            xp_rows = _safe_rows(sb, "xp_transactions", limit=limit)
 
     character_ids: set[str] = set()
 
@@ -304,15 +245,6 @@ def recent_activity(
             )
         )
 
-    start_dt = _parse_datetime(start_date, end_of_day=False)
-    end_dt = _parse_datetime(end_date, end_of_day=True)
-
-    events = [
-        event
-        for event in events
-        if _in_date_window(event, start_dt, end_dt)
-    ]
-
     def sort_key(event: dict[str, Any]) -> str:
         return str(event.get("timestamp") or "")
 
@@ -321,10 +253,6 @@ def recent_activity(
     return {
         "events": events[:limit],
         "count": len(events[:limit]),
-        "date_filter": {
-            "start_date": start_date,
-            "end_date": end_date,
-        },
         "sources": {
             "stats": len(stat_rows),
             "skills": len(skill_rows),
