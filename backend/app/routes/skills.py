@@ -195,9 +195,78 @@ def submit_skill_request(payload: SkillPurchaseRequest, actor_discord_id: int | 
     return {"request": result}
 
 
+def _skill_prereq_keys(prerequisites: Any) -> list[str]:
+    if not prerequisites:
+        return []
+
+    if isinstance(prerequisites, list):
+        out: list[str] = []
+
+        for item in prerequisites:
+            if isinstance(item, str):
+                out.append(item)
+            elif isinstance(item, dict):
+                value = (
+                    item.get("skill_key")
+                    or item.get("skill")
+                    or item.get("key")
+                    or item.get("prereq_key")
+                )
+                if value:
+                    out.append(str(value))
+
+        return out
+
+    if isinstance(prerequisites, dict):
+        raw = (
+            prerequisites.get("skills")
+            or prerequisites.get("skill_keys")
+            or prerequisites.get("requires")
+            or prerequisites.get("prerequisites")
+            or prerequisites.get("required_skills")
+            or []
+        )
+
+        if isinstance(raw, str):
+            return [raw]
+
+        if isinstance(raw, list):
+            out: list[str] = []
+
+            for item in raw:
+                if isinstance(item, str):
+                    out.append(item)
+                elif isinstance(item, dict):
+                    value = (
+                        item.get("skill_key")
+                        or item.get("skill")
+                        or item.get("key")
+                        or item.get("prereq_key")
+                    )
+                    if value:
+                        out.append(str(value))
+
+            return out
+
+    if isinstance(prerequisites, str):
+        cleaned = prerequisites.strip()
+
+        if not cleaned or cleaned.lower() in {"none", "n/a", "na"}:
+            return []
+
+        # Keep loose prose prereqs visible as text, but do not treat them as a skill_key.
+        return []
+
+    return []
+
+
 @router.get("/staff/skill-requests")
-def list_skill_requests(status: str = Query(default="pending"), actor_discord_id: int | None = Depends(actor_from_header)):
+def list_skill_requests(
+    status: str = Query(default="pending"),
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
     require_staff(actor_discord_id)
+
     sb = get_supabase()
     gid = get_guild_id()
 
@@ -215,27 +284,110 @@ def list_skill_requests(status: str = Query(default="pending"), actor_discord_id
     out = []
 
     for req in reqs:
+        character_id = req.get("character_id")
+        skill_key = req.get("skill_key")
+
         char_res = (
             sb.table("characters")
             .select("character_id,name,user_id")
             .eq("guild_id", gid)
-            .eq("character_id", req["character_id"])
+            .eq("character_id", character_id)
             .limit(1)
             .execute()
         )
+
         skill_res = (
             sb.table("skill_definitions")
             .select("*")
             .eq("guild_id", gid)
-            .eq("skill_key", req["skill_key"])
+            .eq("skill_key", skill_key)
             .limit(1)
             .execute()
         )
+
+        character = (sb_data(char_res) or [None])[0]
+        skill = (sb_data(skill_res) or [None])[0]
+
+        wallet = None
+        owned_keys: list[str] = []
+        missing_prereqs: list[str] = []
+        prereq_keys: list[str] = []
+        prereq_names: list[str] = []
+
+        if character_id:
+            try:
+                wallet = get_wallet(sb, UUID(str(character_id)), gid)
+            except Exception:
+                wallet = None
+
+            owned_res = (
+                sb.table("oc_skills")
+                .select("skill_key")
+                .eq("guild_id", gid)
+                .eq("character_id", character_id)
+                .execute()
+            )
+            owned_rows = sb_data(owned_res) or []
+            owned_keys = [
+                str(row.get("skill_key"))
+                for row in owned_rows
+                if row.get("skill_key")
+            ]
+
+        if skill:
+            prereq_keys = _skill_prereq_keys(skill.get("prerequisites"))
+            missing_prereqs = [
+                key
+                for key in prereq_keys
+                if key not in owned_keys
+            ]
+
+            if prereq_keys:
+                prereq_res = (
+                    sb.table("skill_definitions")
+                    .select("skill_key,name")
+                    .eq("guild_id", gid)
+                    .in_("skill_key", prereq_keys)
+                    .execute()
+                )
+                prereq_rows = sb_data(prereq_res) or []
+                prereq_name_lookup = {
+                    row.get("skill_key"): row.get("name")
+                    for row in prereq_rows
+                }
+                prereq_names = [
+                    prereq_name_lookup.get(key) or key
+                    for key in prereq_keys
+                ]
+
+        available_xp = int((wallet or {}).get("available_xp") or 0)
+        cost = int(req.get("cost") or (skill or {}).get("cost") or 0)
+        already_owned = skill_key in owned_keys
+        skill_active = bool((skill or {}).get("is_active", True))
+        has_enough_xp = available_xp >= cost
+        prerequisites_met = len(missing_prereqs) == 0
+
+        review_checks = {
+            "skill_active": skill_active,
+            "already_owned": already_owned,
+            "has_enough_xp": has_enough_xp,
+            "available_xp": available_xp,
+            "cost": cost,
+            "prerequisites_met": prerequisites_met,
+            "prereq_keys": prereq_keys,
+            "prereq_names": prereq_names,
+            "missing_prereq_keys": missing_prereqs,
+            "owned_skill_count": len(owned_keys),
+            "safe_to_approve": skill_active and not already_owned and has_enough_xp and prerequisites_met,
+        }
+
         out.append(
             {
                 **req,
-                "character": (sb_data(char_res) or [None])[0],
-                "skill": (sb_data(skill_res) or [None])[0],
+                "character": character,
+                "skill": skill,
+                "wallet": wallet,
+                "review_checks": review_checks,
             }
         )
 
@@ -294,12 +446,13 @@ def deny_skill_request(request_id: UUID, payload: StaffActionRequest, actor_disc
         result = result[0]
 
     if isinstance(result, dict):
+        full_request = _skill_request_for_webhook(sb, request_id)
         notify_skill_reviewed(
             request_id=request_id,
             action="denied",
             staff_id=staff_id,
             note=payload.staff_note,
-            result=result,
+            result=full_request or result,
         )
 
     return {"result": result}
