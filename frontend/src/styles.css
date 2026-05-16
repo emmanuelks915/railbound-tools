@@ -2113,3 +2113,172 @@ label textarea {
     display: grid;
   }
 }
+
+/* Citizen Registry Profile Polish v1 */
+
+.registry-polish-layout {
+  align-items: start;
+}
+
+.registry-polish-profile {
+  overflow: hidden;
+}
+
+.registry-polish-header {
+  align-items: center;
+  border-bottom: 1px solid rgba(61, 51, 43, 0.1);
+  padding-bottom: 1rem;
+}
+
+.registry-polish-header img,
+.registry-polish-header .registry-profile-placeholder {
+  width: 118px;
+  height: 118px;
+  border-radius: 28px;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.registry-polish-heading {
+  min-width: 0;
+}
+
+.registry-polish-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.45rem;
+}
+
+.registry-polish-actions a {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.38rem 0.65rem;
+  background: rgba(47, 111, 115, 0.12);
+  color: rgb(31, 92, 96);
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.registry-profile-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0.9rem 0;
+  border-bottom: 1px solid rgba(61, 51, 43, 0.1);
+}
+
+.registry-profile-tabs button {
+  border-radius: 999px;
+  padding: 0.52rem 0.78rem;
+  background: rgba(255, 255, 255, 0.55);
+  color: rgba(44, 31, 22, 0.72);
+  border: 1px solid rgba(61, 51, 43, 0.1);
+  box-shadow: none;
+}
+
+.registry-profile-tabs button.active {
+  background: rgba(47, 111, 115, 0.16);
+  border-color: rgba(47, 111, 115, 0.35);
+  color: rgb(31, 92, 96);
+}
+
+.registry-tab-panel {
+  padding-top: 1rem;
+}
+
+.citizen-file-grid.polished,
+.registry-wallet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+
+.registry-wallet-grid > div,
+.citizen-file-grid.polished > div {
+  border-radius: 18px;
+  padding: 0.85rem;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(61, 51, 43, 0.08);
+}
+
+.registry-wallet-grid span,
+.citizen-file-grid.polished span {
+  display: block;
+  color: rgba(44, 31, 22, 0.58);
+  font-size: 0.75rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.registry-wallet-grid strong,
+.citizen-file-grid.polished strong {
+  display: block;
+  margin-top: 0.25rem;
+}
+
+.registry-wallet-preview {
+  border-radius: 20px;
+  padding: 1rem;
+  background: rgba(47, 111, 115, 0.07);
+  border: 1px solid rgba(47, 111, 115, 0.14);
+}
+
+.registry-overview-blurb {
+  border-radius: 20px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(61, 51, 43, 0.08);
+}
+
+.registry-empty-state {
+  grid-column: 1 / -1;
+  border-radius: 20px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px dashed rgba(61, 51, 43, 0.14);
+}
+
+.registry-empty-state strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.registry-stat-grid.polished {
+  align-items: stretch;
+}
+
+.registry-chip-list.polished,
+.registry-inventory-list.polished {
+  min-height: 120px;
+}
+
+.registry-rp-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.public-profile-editor.compact {
+  margin-top: 0;
+}
+
+@media (max-width: 760px) {
+  .registry-polish-header {
+    align-items: flex-start;
+  }
+
+  .registry-polish-header img,
+  .registry-polish-header .registry-profile-placeholder {
+    width: 92px;
+    height: 92px;
+    border-radius: 22px;
+  }
+
+  .registry-rp-row {
+    align-items: flex-start;
+  }
+}

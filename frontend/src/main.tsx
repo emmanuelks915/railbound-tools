@@ -2648,6 +2648,7 @@ function OCRegistry({ discordId }: { discordId: string }) {
   const [selected, setSelected] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
+  const [profileTab, setProfileTab] = useState("overview");
   const [profileForm, setProfileForm] = useState({
     occupation: "",
     affiliation: "",
@@ -2657,6 +2658,7 @@ function OCRegistry({ discordId }: { discordId: string }) {
   });
   const [profileMessage, setProfileMessage] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [balanceData, setBalanceData] = useState<any>(null);
 
   function syncProfileForm(character: any) {
     setProfileForm({
@@ -2693,10 +2695,57 @@ function OCRegistry({ discordId }: { discordId: string }) {
   async function openCharacter(characterId: string) {
     setMessage("");
     setProfileMessage("");
+    setProfileTab("overview");
+    setBalanceData(null);
 
     const data = await apiFetch(`/api/registry/characters/${characterId}`, {}, discordId);
     setSelected(data.character);
     syncProfileForm(data.character);
+  }
+
+  async function loadBalances(characterId: string) {
+    if (!discordId || !characterId) return;
+
+    try {
+      const data = await apiFetch(`/api/characters/${characterId}/balances`, {}, discordId);
+      setBalanceData(data);
+    } catch {
+      setBalanceData(null);
+    }
+  }
+
+  async function savePublicProfile() {
+    if (!selected?.character_id) return;
+
+    setSavingProfile(true);
+    setProfileMessage("");
+
+    try {
+      const data = await apiFetch(
+        `/api/registry/characters/${selected.character_id}/profile`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(profileForm),
+        },
+        discordId
+      );
+
+      const updated = data.character;
+      setSelected(updated);
+      syncProfileForm(updated);
+
+      setCharacters((current) =>
+        current.map((character) =>
+          character.character_id === updated.character_id ? { ...character, ...updated } : character
+        )
+      );
+
+      setProfileMessage("Public profile updated.");
+    } catch (error: any) {
+      setProfileMessage(error.message || "Could not update public profile.");
+    } finally {
+      setSavingProfile(false);
+    }
   }
 
   async function uploadPortraitFile(file: File | null) {
@@ -2742,44 +2791,20 @@ function OCRegistry({ discordId }: { discordId: string }) {
     }
   }
 
-  async function savePublicProfile() {
-    if (!selected?.character_id) return;
-
-    setSavingProfile(true);
-    setProfileMessage("");
-
-    try {
-      const data = await apiFetch(
-        `/api/registry/characters/${selected.character_id}/profile`,
-        {
-          method: "PATCH",
-          body: JSON.stringify(profileForm),
-        },
-        discordId
-      );
-
-      const updated = data.character;
-      setSelected(updated);
-      syncProfileForm(updated);
-
-      setCharacters((current) =>
-        current.map((character) =>
-          character.character_id === updated.character_id ? { ...character, ...updated } : character
-        )
-      );
-
-      setProfileMessage("Public profile updated.");
-    } catch (error: any) {
-      setProfileMessage(error.message || "Could not update public profile.");
-    } finally {
-      setSavingProfile(false);
-    }
-  }
-
   useEffect(() => {
     if (discordId) loadRegistry().catch((error) => setMessage(error.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discordId]);
+
+  const canEditSelected =
+    selected?.owner_discord_id && discordId && String(selected.owner_discord_id) === String(discordId);
+
+  useEffect(() => {
+    if (canEditSelected && selected?.character_id) {
+      loadBalances(selected.character_id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canEditSelected, selected?.character_id, discordId]);
 
   function formatKey(value: string) {
     return String(value || "")
@@ -2806,6 +2831,7 @@ function OCRegistry({ discordId }: { discordId: string }) {
     if (normalized === "active") return "active";
     if (normalized === "quiet") return "quiet";
     if (normalized === "inactive") return "inactive";
+    if (normalized === "archived") return "inactive";
     return "unknown";
   }
 
@@ -2859,19 +2885,35 @@ function OCRegistry({ discordId }: { discordId: string }) {
     });
   }
 
-  const canEditSelected =
-    selected?.owner_discord_id && discordId && String(selected.owner_discord_id) === String(discordId);
+  function publicTabs() {
+    const tabs = [
+      ["overview", "Overview"],
+      ["stats", "Stats"],
+      ["traits", "Traits"],
+      ["skills", "Skills"],
+      ["inventory", "Inventory"],
+      ["activity", "RP Activity"],
+    ];
+
+    if (canEditSelected) tabs.push(["edit", "Edit"]);
+
+    return tabs;
+  }
+
+  const xp = balanceData?.xp || {};
+  const currencies = balanceData?.currencies || [];
+  const lastSeen = selected?.last_seen;
 
   return (
     <RequireDiscord discordId={discordId}>
-      <section className="registry-page-v2">
+      <section className="registry-page-v2 registry-polish-page">
         <div className="card registry-hero-card">
           <div className="card-title-row">
             <div>
               <span className="activity-type-label">Public Records</span>
               <h2>Citizen Registry</h2>
               <p className="muted-text">
-                Browse active citizens of Railbound, review their affiliations, and open full public character files.
+                Browse Railbound citizens, open public character files, and review stats, skills, inventory, and RP activity.
               </p>
             </div>
             <button className="ghost" onClick={() => loadRegistry()}>
@@ -2894,7 +2936,7 @@ function OCRegistry({ discordId }: { discordId: string }) {
           {message && <p className="message">{message}</p>}
         </div>
 
-        <div className="registry-layout registry-layout-v2">
+        <div className="registry-layout registry-layout-v2 registry-polish-layout">
           <div className="registry-list card">
             <div className="card-title-row">
               <h3>Roster</h3>
@@ -2934,229 +2976,300 @@ function OCRegistry({ discordId }: { discordId: string }) {
             </div>
           </div>
 
-          <div className="registry-profile card">
+          <div className="registry-profile card registry-polish-profile">
             {!selected ? (
               <p className="muted-text">Select a citizen to view their public file.</p>
             ) : (
               <>
-                <div className="registry-profile-header citizen-file-header">
+                <div className="registry-profile-header citizen-file-header registry-polish-header">
                   {selected.portrait_url ? (
                     <img src={selected.portrait_url} alt="" />
                   ) : (
                     <div className="registry-profile-placeholder">{String(selected.name || "?").slice(0, 1)}</div>
                   )}
 
-                  <div>
+                  <div className="registry-polish-heading">
                     <span className="activity-type-label">Citizen File</span>
                     <h2>{selected.name}</h2>
                     <p className="muted-text">
                       {[selected.occupation, selected.affiliation, selected.origin].filter(Boolean).join(" • ") ||
                         "Public character file"}
                     </p>
-                    <div className="citizen-file-meta">
+
+                    <div className="citizen-file-meta registry-polish-actions">
                       <span className={`citizen-status ${statusClass(selected.status)}`}>{selected.status || "Unknown"}</span>
                       {selected.owner_display_name ? <small>Player: {selected.owner_display_name}</small> : null}
+                      {selected.sheet_url ? (
+                        <a href={selected.sheet_url} target="_blank" rel="noreferrer">
+                          Open Sheet
+                        </a>
+                      ) : null}
                     </div>
                   </div>
                 </div>
 
-                <div className="citizen-file-grid">
-                  <div>
-                    <span>Name</span>
-                    <strong>{selected.name}</strong>
-                  </div>
-                  <div>
-                    <span>Occupation</span>
-                    <strong>{fieldValue(selected.occupation)}</strong>
-                  </div>
-                  <div>
-                    <span>Status</span>
-                    <strong>{selected.status || "Unknown"}</strong>
-                  </div>
-                  <div>
-                    <span>Affiliation</span>
-                    <strong>{fieldValue(selected.affiliation)}</strong>
-                  </div>
-                  <div>
-                    <span>Origin</span>
-                    <strong>{fieldValue(selected.origin)}</strong>
-                  </div>
-                  <div>
-                    <span>Last Seen</span>
-                    <strong>{selected.last_seen?.label || "No recent sightings"}</strong>
-                    {selected.last_seen?.at ? <small>{formatDate(selected.last_seen.at)}</small> : null}
-                  </div>
+                <div className="registry-profile-tabs">
+                  {publicTabs().map(([key, label]) => (
+                    <button
+                      type="button"
+                      key={key}
+                      className={profileTab === key ? "active" : ""}
+                      onClick={() => setProfileTab(key)}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
 
-                {canEditSelected ? (
-                  <div className="registry-section public-profile-editor">
-                    <div className="card-title-row">
+                {profileTab === "overview" ? (
+                  <div className="registry-tab-panel">
+                    <div className="citizen-file-grid polished">
                       <div>
-                        <h3>Edit Public Profile</h3>
-                        <p className="muted-text">
-                          These fields appear on the Citizen Registry and your public character file.
-                        </p>
+                        <span>Name</span>
+                        <strong>{selected.name}</strong>
+                      </div>
+                      <div>
+                        <span>Occupation</span>
+                        <strong>{fieldValue(selected.occupation)}</strong>
+                      </div>
+                      <div>
+                        <span>Status</span>
+                        <strong>{selected.status || "Unknown"}</strong>
+                      </div>
+                      <div>
+                        <span>Affiliation</span>
+                        <strong>{fieldValue(selected.affiliation)}</strong>
+                      </div>
+                      <div>
+                        <span>Origin</span>
+                        <strong>{fieldValue(selected.origin)}</strong>
+                      </div>
+                      <div>
+                        <span>Last Seen</span>
+                        <strong>{lastSeen?.label || "No recent sightings"}</strong>
+                        {lastSeen?.at ? <small>{formatDate(lastSeen.at)}</small> : null}
                       </div>
                     </div>
 
-                    <div className="public-profile-form">
-                      <label>
-                        <span>Occupation</span>
-                        <input
-                          value={profileForm.occupation}
-                          onChange={(event) => setProfileForm((current) => ({ ...current, occupation: event.target.value }))}
-                          placeholder="Engineer, Mercenary, Doctor, Smuggler..."
-                        />
-                      </label>
-
-                      <label>
-                        <span>Affiliation</span>
-                        <input
-                          value={profileForm.affiliation}
-                          onChange={(event) => setProfileForm((current) => ({ ...current, affiliation: event.target.value }))}
-                          placeholder="Guild, crew, company, faction..."
-                        />
-                      </label>
-
-                      <label>
-                        <span>Character Sheet Link</span>
-                        <input
-                          value={profileForm.sheet_url}
-                          onChange={(event) => setProfileForm((current) => ({ ...current, sheet_url: event.target.value }))}
-                          placeholder="https://..."
-                        />
-                      </label>
-
-                      <label>
-                        <span>Portrait/Image Link</span>
-                        <input
-                          value={profileForm.portrait_url}
-                          onChange={(event) => setProfileForm((current) => ({ ...current, portrait_url: event.target.value }))}
-                          placeholder="https://..."
-                        />
-                      </label>
-
-                      <label className="public-profile-upload-row">
-                        <span>Upload Portrait</span>
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp,image/gif"
-                          onChange={(event) => uploadPortraitFile(event.target.files?.[0] || null)}
-                          disabled={savingProfile}
-                        />
-                      </label>
-
-                      <label className="public-profile-form-wide">
-                        <span>Public Blurb</span>
-                        <textarea
-                          value={profileForm.blurb}
-                          onChange={(event) => setProfileForm((current) => ({ ...current, blurb: event.target.value }))}
-                          placeholder="A short public-facing description for other players."
-                          rows={4}
-                        />
-                      </label>
-                    </div>
-
-                    <div className="auth-actions">
-                      <button onClick={savePublicProfile} disabled={savingProfile}>
-                        {savingProfile ? "Saving..." : "Save Public Profile"}
-                      </button>
-                      {profileMessage ? <span className="muted-text">{profileMessage}</span> : null}
-                    </div>
-                  </div>
-                ) : null}
-
-                {selected.sheet_url ? (
-                  <div className="registry-section">
-                    <h3>Character Sheet</h3>
-                    <a href={selected.sheet_url} target="_blank" rel="noreferrer">
-                      Open character sheet
-                    </a>
-                  </div>
-                ) : null}
-
-                {selected.blurb ? (
-                  <div className="registry-section">
-                    <h3>Overview</h3>
-                    <p>{selected.blurb}</p>
-                  </div>
-                ) : null}
-
-                <div className="registry-section">
-                  <h3>Stats</h3>
-                  <div className="registry-stat-grid">
-                    {visibleStats(selected.stats).length === 0 ? (
-                      <p className="muted-text">No public stats found yet.</p>
+                    {canEditSelected && (balanceData || currencies.length > 0) ? (
+                      <div className="registry-section registry-wallet-preview">
+                        <h3>Private Balance Preview</h3>
+                        <div className="registry-wallet-grid">
+                          <div>
+                            <span>Available XP</span>
+                            <strong>{xp.available_xp ?? xp.current_xp ?? "—"}</strong>
+                          </div>
+                          {currencies.map((currency: any, index: number) => (
+                            <div key={`${currency.currency_id || currency.name}-${index}`}>
+                              <span>{currency.ticker || currency.name || "Currency"}</span>
+                              <strong>{currency.balance ?? 0}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     ) : null}
 
-                    {visibleStats(selected.stats).map(([key, value]) => (
-                      <div className="registry-stat" key={key}>
-                        <span>{formatKey(key)}</span>
-                        <strong>{String(value)}</strong>
+                    {selected.blurb ? (
+                      <div className="registry-section registry-overview-blurb">
+                        <h3>Overview</h3>
+                        <p>{selected.blurb}</p>
                       </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="registry-section">
-                  <h3>Skills</h3>
-                  <div className="registry-chip-list">
-                    {(selected.skills || []).length === 0 ? <p className="muted-text">No public skills found yet.</p> : null}
-                    {(selected.skills || []).map((skill: any, index: number) => (
-                      <span className="registry-chip" key={`${skill.skill_key || skill.name}-${index}`}>
-                        {skill.name || skill.skill_key}
-                        {skill.tree ? <small>{skill.tree}</small> : null}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="registry-section">
-                  <h3>Traits</h3>
-                  <div className="registry-chip-list">
-                    {(selected.traits || []).length === 0 ? <p className="muted-text">No public traits found yet.</p> : null}
-                    {(selected.traits || []).map((trait: any, index: number) => (
-                      <span className="registry-chip" key={`${trait.name}-${index}`}>
-                        {trait.name}
-                        {trait.type ? <small>{trait.type}</small> : null}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="registry-section">
-                  <h3>Inventory</h3>
-                  <div className="registry-inventory-list">
-                    {(selected.inventory || []).length === 0 ? <p className="muted-text">No public inventory found yet.</p> : null}
-                    {(selected.inventory || []).map((item: any, index: number) => (
-                      <div className="registry-inventory-item" key={`${item.name}-${index}`}>
-                        <strong>{item.name}</strong>
-                        <span>Qty: {item.quantity || 1}</span>
-                        {item.type ? <small>{item.type}</small> : null}
+                    ) : (
+                      <div className="registry-empty-state">
+                        <strong>No public overview yet.</strong>
+                        <p className="muted-text">This citizen has not added a public blurb.</p>
                       </div>
-                    ))}
+                    )}
                   </div>
-                </div>
+                ) : null}
 
-                <div className="registry-section">
-                  <h3>Recent RP Activity</h3>
-                  <div className="registry-inventory-list">
-                    {(selected.recent_posts || []).length === 0 ? <p className="muted-text">No recent RP activity found.</p> : null}
-                    {(selected.recent_posts || []).map((post: any, index: number) => (
-                      <div className="registry-inventory-item" key={`${post.created_at}-${index}`}>
-                        <div>
-                          <strong>{post.channel_label || "Unknown location"}</strong>
-                          <small>{formatDate(post.created_at)}</small>
+                {profileTab === "stats" ? (
+                  <div className="registry-tab-panel">
+                    <div className="registry-stat-grid polished">
+                      {visibleStats(selected.stats).length === 0 ? (
+                        <div className="registry-empty-state">
+                          <strong>No public stats found yet.</strong>
+                          <p className="muted-text">Stats will appear here once this OC has registered stat data.</p>
                         </div>
-                        {post.jump_url ? (
-                          <a href={post.jump_url} target="_blank" rel="noreferrer">
-                            Open
-                          </a>
-                        ) : null}
-                      </div>
-                    ))}
+                      ) : null}
+
+                      {visibleStats(selected.stats).map(([key, value]) => (
+                        <div className="registry-stat" key={key}>
+                          <span>{formatKey(key)}</span>
+                          <strong>{String(value)}</strong>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                ) : null}
+
+                {profileTab === "traits" ? (
+                  <div className="registry-tab-panel">
+                    <div className="registry-chip-list polished">
+                      {(selected.traits || []).length === 0 ? (
+                        <div className="registry-empty-state">
+                          <strong>No public traits found yet.</strong>
+                          <p className="muted-text">Traits will appear here once attached to this OC.</p>
+                        </div>
+                      ) : null}
+
+                      {(selected.traits || []).map((trait: any, index: number) => (
+                        <span className="registry-chip" key={`${trait.name}-${index}`}>
+                          {trait.name}
+                          {trait.type ? <small>{formatKey(trait.type)}</small> : null}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {profileTab === "skills" ? (
+                  <div className="registry-tab-panel">
+                    <div className="registry-chip-list polished">
+                      {(selected.skills || []).length === 0 ? (
+                        <div className="registry-empty-state">
+                          <strong>No public skills found yet.</strong>
+                          <p className="muted-text">Purchased or granted skills will appear here.</p>
+                        </div>
+                      ) : null}
+
+                      {(selected.skills || []).map((skill: any, index: number) => (
+                        <span className="registry-chip" key={`${skill.skill_key || skill.name}-${index}`}>
+                          {skill.name || formatKey(skill.skill_key)}
+                          {skill.tree ? <small>{skill.tree}</small> : null}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {profileTab === "inventory" ? (
+                  <div className="registry-tab-panel">
+                    <div className="registry-inventory-list polished">
+                      {(selected.inventory || []).length === 0 ? (
+                        <div className="registry-empty-state">
+                          <strong>No public inventory found yet.</strong>
+                          <p className="muted-text">Inventory items will appear here once logged.</p>
+                        </div>
+                      ) : null}
+
+                      {(selected.inventory || []).map((item: any, index: number) => (
+                        <div className="registry-inventory-item" key={`${item.name}-${index}`}>
+                          <strong>{item.name}</strong>
+                          <span>Qty: {item.quantity || 1}</span>
+                          {item.type ? <small>{item.type}</small> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {profileTab === "activity" ? (
+                  <div className="registry-tab-panel">
+                    <div className="registry-inventory-list polished">
+                      {(selected.recent_posts || []).length === 0 ? (
+                        <div className="registry-empty-state">
+                          <strong>No recent RP activity found.</strong>
+                          <p className="muted-text">Last Seen and recent RP posts will appear here after tracked RP activity.</p>
+                        </div>
+                      ) : null}
+
+                      {(selected.recent_posts || []).map((post: any, index: number) => (
+                        <div className="registry-inventory-item registry-rp-row" key={`${post.created_at}-${index}`}>
+                          <div>
+                            <strong>{post.channel_label || "Unknown location"}</strong>
+                            <small>{formatDate(post.created_at)}</small>
+                          </div>
+                          {post.jump_url ? (
+                            <a href={post.jump_url} target="_blank" rel="noreferrer">
+                              Open
+                            </a>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {profileTab === "edit" && canEditSelected ? (
+                  <div className="registry-tab-panel">
+                    <div className="registry-section public-profile-editor compact">
+                      <div className="card-title-row">
+                        <div>
+                          <h3>Edit Public Profile</h3>
+                          <p className="muted-text">
+                            These fields appear on the Citizen Registry and public character file.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="public-profile-form">
+                        <label>
+                          <span>Occupation</span>
+                          <input
+                            value={profileForm.occupation}
+                            onChange={(event) => setProfileForm((current) => ({ ...current, occupation: event.target.value }))}
+                            placeholder="Engineer, Mercenary, Doctor, Smuggler..."
+                          />
+                        </label>
+
+                        <label>
+                          <span>Affiliation</span>
+                          <input
+                            value={profileForm.affiliation}
+                            onChange={(event) => setProfileForm((current) => ({ ...current, affiliation: event.target.value }))}
+                            placeholder="Guild, crew, company, faction..."
+                          />
+                        </label>
+
+                        <label>
+                          <span>Character Sheet Link</span>
+                          <input
+                            value={profileForm.sheet_url}
+                            onChange={(event) => setProfileForm((current) => ({ ...current, sheet_url: event.target.value }))}
+                            placeholder="https://..."
+                          />
+                        </label>
+
+                        <label>
+                          <span>Portrait/Image Link</span>
+                          <input
+                            value={profileForm.portrait_url}
+                            onChange={(event) => setProfileForm((current) => ({ ...current, portrait_url: event.target.value }))}
+                            placeholder="https://..."
+                          />
+                        </label>
+
+                        <label className="public-profile-upload-row">
+                          <span>Upload Portrait</span>
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,image/gif"
+                            onChange={(event) => uploadPortraitFile(event.target.files?.[0] || null)}
+                            disabled={savingProfile}
+                          />
+                        </label>
+
+                        <label className="public-profile-form-wide">
+                          <span>Public Blurb</span>
+                          <textarea
+                            value={profileForm.blurb}
+                            onChange={(event) => setProfileForm((current) => ({ ...current, blurb: event.target.value }))}
+                            placeholder="A short public-facing description for other players."
+                            rows={4}
+                          />
+                        </label>
+                      </div>
+
+                      <div className="auth-actions">
+                        <button onClick={savePublicProfile} disabled={savingProfile}>
+                          {savingProfile ? "Saving..." : "Save Public Profile"}
+                        </button>
+                        {profileMessage ? <span className="muted-text">{profileMessage}</span> : null}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </>
             )}
           </div>
@@ -3165,6 +3278,8 @@ function OCRegistry({ discordId }: { discordId: string }) {
     </RequireDiscord>
   );
 }
+
+
 
 function ActivityDashboard({ discordId }: { discordId: string }) {
   const [events, setEvents] = useState<any[]>([]);
