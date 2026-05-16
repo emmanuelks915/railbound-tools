@@ -1777,6 +1777,467 @@ function OCRegistry({ discordId }: { discordId: string }) {
   const [selected, setSelected] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
+  const [profileForm, setProfileForm] = useState({
+    occupation: "",
+    affiliation: "",
+    sheet_url: "",
+    portrait_url: "",
+    blurb: "",
+  });
+  const [profileMessage, setProfileMessage] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  function syncProfileForm(character: any) {
+    setProfileForm({
+      occupation: character?.occupation || "",
+      affiliation: character?.affiliation || "",
+      sheet_url: character?.sheet_url || "",
+      portrait_url: character?.portrait_url || "",
+      blurb: character?.blurb || "",
+    });
+  }
+
+  async function loadRegistry(query = search) {
+    setMessage("");
+
+    const params = new URLSearchParams({
+      limit: "120",
+    });
+
+    if (query.trim()) params.set("search", query.trim());
+
+    const data = await apiFetch(`/api/registry/characters?${params.toString()}`, {}, discordId);
+    const rows = data.characters || [];
+
+    setCharacters(rows);
+
+    if (!selected && rows.length > 0) {
+      openCharacter(rows[0].character_id).catch(() => {
+        setSelected(rows[0]);
+        syncProfileForm(rows[0]);
+      });
+    }
+  }
+
+  async function openCharacter(characterId: string) {
+    setMessage("");
+    setProfileMessage("");
+
+    const data = await apiFetch(`/api/registry/characters/${characterId}`, {}, discordId);
+    setSelected(data.character);
+    syncProfileForm(data.character);
+  }
+
+  async function savePublicProfile() {
+    if (!selected?.character_id) return;
+
+    setSavingProfile(true);
+    setProfileMessage("");
+
+    try {
+      const data = await apiFetch(
+        `/api/registry/characters/${selected.character_id}/profile`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(profileForm),
+        },
+        discordId
+      );
+
+      const updated = data.character;
+      setSelected(updated);
+      syncProfileForm(updated);
+
+      setCharacters((current) =>
+        current.map((character) =>
+          character.character_id === updated.character_id ? { ...character, ...updated } : character
+        )
+      );
+
+      setProfileMessage("Public profile updated.");
+    } catch (error: any) {
+      setProfileMessage(error.message || "Could not update public profile.");
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  useEffect(() => {
+    if (discordId) loadRegistry().catch((error) => setMessage(error.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId]);
+
+  function formatKey(value: string) {
+    return String(value || "")
+      .replaceAll("_", " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  function formatDate(value: string | null | undefined) {
+    if (!value) return "No recent sightings";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+
+    return date.toLocaleString();
+  }
+
+  function fieldValue(value: any) {
+    return value ? String(value) : "—";
+  }
+
+  function statusClass(status: string | null | undefined) {
+    const normalized = String(status || "unknown").toLowerCase();
+
+    if (normalized === "active") return "active";
+    if (normalized === "quiet") return "quiet";
+    if (normalized === "inactive") return "inactive";
+    return "unknown";
+  }
+
+  function visibleStats(stats: any) {
+    if (!stats) return [];
+
+    const hidden = new Set(["guild_id", "character_id", "id", "created_at", "updated_at"]);
+    const preferredOrder = [
+      "strength",
+      "dexterity",
+      "stamina",
+      "magic_affinity",
+      "mana",
+      "hp",
+      "health",
+      "speed",
+      "dodge",
+      "blitz",
+      "carry_capacity",
+      "safe_output",
+      "fortitude",
+      "reaction_score",
+      "available_xp",
+      "spent_xp",
+      "total_xp",
+      "xp",
+    ];
+
+    const entries = Object.entries(stats).filter(
+      ([key, value]) => !hidden.has(key) && value !== null && value !== undefined && typeof value !== "object"
+    );
+
+    return entries.sort(([a], [b]) => {
+      const ai = preferredOrder.indexOf(a);
+      const bi = preferredOrder.indexOf(b);
+
+      if (ai === -1 && bi === -1) return a.localeCompare(b);
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+
+      return ai - bi;
+    });
+  }
+
+  const canEditSelected =
+    selected?.owner_discord_id && discordId && String(selected.owner_discord_id) === String(discordId);
+
+  return (
+    <RequireDiscord discordId={discordId}>
+      <section className="registry-page-v2">
+        <div className="card registry-hero-card">
+          <div className="card-title-row">
+            <div>
+              <span className="activity-type-label">Public Records</span>
+              <h2>Citizen Registry</h2>
+              <p className="muted-text">
+                Browse active citizens of Railbound, review their affiliations, and open full public character files.
+              </p>
+            </div>
+            <button className="ghost" onClick={() => loadRegistry()}>
+              <RefreshCw size={16} /> Refresh
+            </button>
+          </div>
+
+          <div className="registry-search-row">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") loadRegistry();
+              }}
+              placeholder="Search name, occupation, affiliation, origin..."
+            />
+            <button onClick={() => loadRegistry()}>Search</button>
+          </div>
+
+          {message && <p className="message">{message}</p>}
+        </div>
+
+        <div className="registry-layout registry-layout-v2">
+          <div className="registry-list card">
+            <div className="card-title-row">
+              <h3>Roster</h3>
+              <span className="pill">{characters.length} citizens</span>
+            </div>
+
+            <div className="registry-card-scroll">
+              {characters.length === 0 ? <p className="muted-text">No citizens found yet.</p> : null}
+
+              {characters.map((character) => (
+                <button
+                  type="button"
+                  key={character.character_id}
+                  className={`citizen-registry-card ${selected?.character_id === character.character_id ? "active" : ""}`}
+                  onClick={() => openCharacter(character.character_id)}
+                >
+                  <div className="citizen-card-topline">
+                    <div>
+                      <strong>{character.name}</strong>
+                      <span>{fieldValue(character.occupation)}</span>
+                    </div>
+                    <em className={`citizen-status ${statusClass(character.status)}`}>{character.status || "Unknown"}</em>
+                  </div>
+
+                  <dl className="citizen-card-fields">
+                    <div>
+                      <dt>Affiliation</dt>
+                      <dd>{fieldValue(character.affiliation)}</dd>
+                    </div>
+                    <div>
+                      <dt>Last Seen</dt>
+                      <dd>{character.last_seen?.label || "No recent sightings"}</dd>
+                    </div>
+                  </dl>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="registry-profile card">
+            {!selected ? (
+              <p className="muted-text">Select a citizen to view their public file.</p>
+            ) : (
+              <>
+                <div className="registry-profile-header citizen-file-header">
+                  {selected.portrait_url ? (
+                    <img src={selected.portrait_url} alt="" />
+                  ) : (
+                    <div className="registry-profile-placeholder">{String(selected.name || "?").slice(0, 1)}</div>
+                  )}
+
+                  <div>
+                    <span className="activity-type-label">Citizen File</span>
+                    <h2>{selected.name}</h2>
+                    <p className="muted-text">
+                      {[selected.occupation, selected.affiliation, selected.origin].filter(Boolean).join(" • ") ||
+                        "Public character file"}
+                    </p>
+                    <div className="citizen-file-meta">
+                      <span className={`citizen-status ${statusClass(selected.status)}`}>{selected.status || "Unknown"}</span>
+                      {selected.owner_display_name ? <small>Player: {selected.owner_display_name}</small> : null}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="citizen-file-grid">
+                  <div>
+                    <span>Name</span>
+                    <strong>{selected.name}</strong>
+                  </div>
+                  <div>
+                    <span>Occupation</span>
+                    <strong>{fieldValue(selected.occupation)}</strong>
+                  </div>
+                  <div>
+                    <span>Status</span>
+                    <strong>{selected.status || "Unknown"}</strong>
+                  </div>
+                  <div>
+                    <span>Affiliation</span>
+                    <strong>{fieldValue(selected.affiliation)}</strong>
+                  </div>
+                  <div>
+                    <span>Origin</span>
+                    <strong>{fieldValue(selected.origin)}</strong>
+                  </div>
+                  <div>
+                    <span>Last Seen</span>
+                    <strong>{selected.last_seen?.label || "No recent sightings"}</strong>
+                    {selected.last_seen?.at ? <small>{formatDate(selected.last_seen.at)}</small> : null}
+                  </div>
+                </div>
+
+                {canEditSelected ? (
+                  <div className="registry-section public-profile-editor">
+                    <div className="card-title-row">
+                      <div>
+                        <h3>Edit Public Profile</h3>
+                        <p className="muted-text">
+                          These fields appear on the Citizen Registry and your public character file.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="public-profile-form">
+                      <label>
+                        <span>Occupation</span>
+                        <input
+                          value={profileForm.occupation}
+                          onChange={(event) => setProfileForm((current) => ({ ...current, occupation: event.target.value }))}
+                          placeholder="Engineer, Mercenary, Doctor, Smuggler..."
+                        />
+                      </label>
+
+                      <label>
+                        <span>Affiliation</span>
+                        <input
+                          value={profileForm.affiliation}
+                          onChange={(event) => setProfileForm((current) => ({ ...current, affiliation: event.target.value }))}
+                          placeholder="Guild, crew, company, faction..."
+                        />
+                      </label>
+
+                      <label>
+                        <span>Character Sheet Link</span>
+                        <input
+                          value={profileForm.sheet_url}
+                          onChange={(event) => setProfileForm((current) => ({ ...current, sheet_url: event.target.value }))}
+                          placeholder="https://..."
+                        />
+                      </label>
+
+                      <label>
+                        <span>Portrait/Image Link</span>
+                        <input
+                          value={profileForm.portrait_url}
+                          onChange={(event) => setProfileForm((current) => ({ ...current, portrait_url: event.target.value }))}
+                          placeholder="https://..."
+                        />
+                      </label>
+
+                      <label className="public-profile-form-wide">
+                        <span>Public Blurb</span>
+                        <textarea
+                          value={profileForm.blurb}
+                          onChange={(event) => setProfileForm((current) => ({ ...current, blurb: event.target.value }))}
+                          placeholder="A short public-facing description for other players."
+                          rows={4}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="auth-actions">
+                      <button onClick={savePublicProfile} disabled={savingProfile}>
+                        {savingProfile ? "Saving..." : "Save Public Profile"}
+                      </button>
+                      {profileMessage ? <span className="muted-text">{profileMessage}</span> : null}
+                    </div>
+                  </div>
+                ) : null}
+
+                {selected.sheet_url ? (
+                  <div className="registry-section">
+                    <h3>Character Sheet</h3>
+                    <a href={selected.sheet_url} target="_blank" rel="noreferrer">
+                      Open character sheet
+                    </a>
+                  </div>
+                ) : null}
+
+                {selected.blurb ? (
+                  <div className="registry-section">
+                    <h3>Overview</h3>
+                    <p>{selected.blurb}</p>
+                  </div>
+                ) : null}
+
+                <div className="registry-section">
+                  <h3>Stats</h3>
+                  <div className="registry-stat-grid">
+                    {visibleStats(selected.stats).length === 0 ? (
+                      <p className="muted-text">No public stats found yet.</p>
+                    ) : null}
+
+                    {visibleStats(selected.stats).map(([key, value]) => (
+                      <div className="registry-stat" key={key}>
+                        <span>{formatKey(key)}</span>
+                        <strong>{String(value)}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="registry-section">
+                  <h3>Skills</h3>
+                  <div className="registry-chip-list">
+                    {(selected.skills || []).length === 0 ? <p className="muted-text">No public skills found yet.</p> : null}
+                    {(selected.skills || []).map((skill: any, index: number) => (
+                      <span className="registry-chip" key={`${skill.skill_key || skill.name}-${index}`}>
+                        {skill.name || skill.skill_key}
+                        {skill.tree ? <small>{skill.tree}</small> : null}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="registry-section">
+                  <h3>Traits</h3>
+                  <div className="registry-chip-list">
+                    {(selected.traits || []).length === 0 ? <p className="muted-text">No public traits found yet.</p> : null}
+                    {(selected.traits || []).map((trait: any, index: number) => (
+                      <span className="registry-chip" key={`${trait.name}-${index}`}>
+                        {trait.name}
+                        {trait.type ? <small>{trait.type}</small> : null}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="registry-section">
+                  <h3>Inventory</h3>
+                  <div className="registry-inventory-list">
+                    {(selected.inventory || []).length === 0 ? <p className="muted-text">No public inventory found yet.</p> : null}
+                    {(selected.inventory || []).map((item: any, index: number) => (
+                      <div className="registry-inventory-item" key={`${item.name}-${index}`}>
+                        <strong>{item.name}</strong>
+                        <span>Qty: {item.quantity || 1}</span>
+                        {item.type ? <small>{item.type}</small> : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="registry-section">
+                  <h3>Recent RP Activity</h3>
+                  <div className="registry-inventory-list">
+                    {(selected.recent_posts || []).length === 0 ? <p className="muted-text">No recent RP activity found.</p> : null}
+                    {(selected.recent_posts || []).map((post: any, index: number) => (
+                      <div className="registry-inventory-item" key={`${post.created_at}-${index}`}>
+                        <div>
+                          <strong>{post.channel_label || "Unknown location"}</strong>
+                          <small>{formatDate(post.created_at)}</small>
+                        </div>
+                        {post.jump_url ? (
+                          <a href={post.jump_url} target="_blank" rel="noreferrer">
+                            Open
+                          </a>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+    </RequireDiscord>
+  );
+}
+
+: { discordId: string }) {
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [selected, setSelected] = useState<any>(null);
+  const [search, setSearch] = useState("");
+  const [message, setMessage] = useState("");
 
   async function loadRegistry(query = search) {
     setMessage("");

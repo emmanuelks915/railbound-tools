@@ -6,9 +6,10 @@ import os
 import urllib.request
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
 from app.security import actor_from_header
+from app.permissions import is_staff
 from app.services import get_guild_id, sb_data
 from app.supabase_client import get_supabase
 
@@ -861,6 +862,106 @@ def get_registry_character(
     return {
         "character": _normalize_character(
             row,
+            stats_by_id=stats_by_id,
+            skills_by_id=skills_by_id,
+            traits_by_id=traits_by_id,
+            inventory_by_id=inventory_by_id,
+            recent_posts_by_id=recent_posts_by_id,
+            users_by_id=users_by_id,
+        )
+    }
+
+
+PUBLIC_PROFILE_FIELDS = {
+    "occupation": 80,
+    "affiliation": 120,
+    "sheet_url": 500,
+    "portrait_url": 500,
+    "blurb": 1200,
+}
+
+
+def _clean_public_profile_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    cleaned: dict[str, Any] = {}
+
+    for key, max_len in PUBLIC_PROFILE_FIELDS.items():
+        if key not in payload:
+            continue
+
+        value = payload.get(key)
+
+        if value is None:
+            cleaned[key] = None
+            continue
+
+        value = str(value).strip()
+
+        if not value:
+            cleaned[key] = None
+            continue
+
+        cleaned[key] = value[:max_len]
+
+    return cleaned
+
+
+@router.patch("/characters/{character_id}/profile")
+def update_registry_character_profile(
+    character_id: str,
+    payload: dict[str, Any] = Body(...),
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    if actor_discord_id is None:
+        raise HTTPException(status_code=401, detail="Login with Discord required.")
+
+    sb = get_supabase()
+
+    row = _safe_select_one(sb, "characters", "character_id", character_id)
+    target_column = "character_id"
+
+    if not row:
+        row = _safe_select_one(sb, "characters", "id", character_id)
+        target_column = "id"
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Character not found.")
+
+    owner_id = _owner_id(row)
+    actor_is_owner = owner_id is not None and str(owner_id) == str(actor_discord_id)
+    actor_is_staff = is_staff(int(actor_discord_id))
+
+    if not actor_is_owner and not actor_is_staff:
+        raise HTTPException(status_code=403, detail="You can only edit your own public OC profile.")
+
+    cleaned = _clean_public_profile_payload(payload)
+
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="No public profile fields were provided.")
+
+    query = sb.table("characters").update(cleaned).eq(target_column, character_id)
+    if row.get("guild_id") is not None:
+        query = query.eq("guild_id", get_guild_id())
+
+    updated_rows = _as_list(query.execute())
+
+    updated = updated_rows[0] if updated_rows else _safe_select_one(sb, "characters", target_column, character_id)
+    if not updated:
+        raise HTTPException(status_code=500, detail="Profile updated, but the updated character could not be reloaded.")
+
+    cid = _character_id(updated)
+    character_ids = [cid] if cid else [character_id]
+    owner_id = _owner_id(updated)
+    users_by_id = _user_lookup(sb, {str(owner_id)} if owner_id else set())
+
+    stats_by_id = _public_stat_rows(sb, character_ids)
+    skills_by_id = _public_skill_rows(sb, character_ids)
+    traits_by_id = _public_trait_rows(sb, character_ids)
+    inventory_by_id = _public_inventory_rows(sb, character_ids)
+    recent_posts_by_id = _public_recent_posts(sb, character_ids)
+
+    return {
+        "character": _normalize_character(
+            updated,
             stats_by_id=stats_by_id,
             skills_by_id=skills_by_id,
             traits_by_id=traits_by_id,

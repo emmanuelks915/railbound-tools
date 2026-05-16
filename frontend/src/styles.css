@@ -1616,3 +1616,47 @@ label textarea {
   align-self: center;
   white-space: nowrap;
 }
+
+/* Public profile editor */
+
+.public-profile-editor {
+  border-radius: 22px;
+  padding: 1rem;
+  background: rgba(47, 111, 115, 0.07);
+  border: 1px solid rgba(47, 111, 115, 0.16);
+}
+
+.public-profile-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.public-profile-form label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.public-profile-form span {
+  font-size: 0.75rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(44, 31, 22, 0.58);
+}
+
+.public-profile-form textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 110px;
+}
+
+.public-profile-form-wide {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 720px) {
+  .public-profile-form {
+    grid-template-columns: 1fr;
+  }
+}
