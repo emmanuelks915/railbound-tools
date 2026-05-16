@@ -1956,3 +1956,54 @@ label textarea {
   margin-top: 0.3rem;
   font-size: 1.4rem;
 }
+
+/* OC money balances */
+
+.oc-money-card {
+  margin-bottom: 1rem;
+}
+
+.oc-money-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+
+.oc-money-tile {
+  border-radius: 18px;
+  padding: 0.95rem;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(61, 51, 43, 0.09);
+}
+
+.oc-money-tile span {
+  display: block;
+  color: rgba(44, 31, 22, 0.58);
+  font-size: 0.75rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.oc-money-tile strong {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 1.45rem;
+}
+
+.oc-money-tile small {
+  display: block;
+  margin-top: 0.2rem;
+  color: rgba(44, 31, 22, 0.56);
+  font-weight: 750;
+}
+
+.oc-money-tile.xp-tile {
+  background: rgba(47, 111, 115, 0.1);
+  border-color: rgba(47, 111, 115, 0.2);
+}
+
+.oc-money-tile.currency-tile {
+  background: rgba(173, 120, 48, 0.1);
+  border-color: rgba(173, 120, 48, 0.18);
+}

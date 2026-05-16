@@ -632,6 +632,85 @@ function OCBalancesCard({ discordId, characterId }: { discordId: string; charact
   );
 }
 
+function OCMoneyCard({ discordId, characterId }: { discordId: string; characterId: string }) {
+  const [data, setData] = useState<any>(null);
+  const [message, setMessage] = useState("");
+
+  async function loadBalances() {
+    if (!discordId || !characterId) return;
+
+    setMessage("");
+
+    try {
+      const result = await apiFetch(`/api/characters/${characterId}/balances`, {}, discordId);
+      setData(result);
+    } catch (error: any) {
+      setData(null);
+      setMessage(error.message || "Could not load money balances.");
+    }
+  }
+
+  useEffect(() => {
+    loadBalances();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId, characterId]);
+
+  if (!characterId) return null;
+
+  const xp = data?.xp || {};
+  const currencies = data?.currencies || [];
+
+  return (
+    <div className="card oc-money-card">
+      <div className="card-title-row">
+        <div>
+          <span className="activity-type-label">Wallet</span>
+          <h3>XP & Currency</h3>
+          <p className="muted-text">The selected OC’s current progression and money balances.</p>
+        </div>
+        <button className="ghost" onClick={loadBalances}>
+          <RefreshCw size={16} /> Refresh
+        </button>
+      </div>
+
+      {message ? <p className="message">{message}</p> : null}
+
+      <div className="oc-money-grid">
+        <div className="oc-money-tile xp-tile">
+          <span>Available XP</span>
+          <strong>{xp.available_xp ?? xp.current_xp ?? "—"}</strong>
+        </div>
+        <div className="oc-money-tile">
+          <span>Total XP</span>
+          <strong>{xp.total_xp ?? "—"}</strong>
+        </div>
+        <div className="oc-money-tile">
+          <span>Spent XP</span>
+          <strong>{xp.spent_xp ?? "—"}</strong>
+        </div>
+
+        {currencies.length === 0 ? (
+          <div className="oc-money-tile">
+            <span>Currency</span>
+            <strong>—</strong>
+          </div>
+        ) : null}
+
+        {currencies.map((currency: any, index: number) => (
+          <div className="oc-money-tile currency-tile" key={`${currency.currency_id || currency.name}-${index}`}>
+            <span>
+              {currency.emoji ? `${currency.emoji} ` : ""}
+              {currency.ticker || currency.name || "Currency"}
+            </span>
+            <strong>{currency.balance ?? 0}</strong>
+            {currency.name && currency.ticker ? <small>{currency.name}</small> : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function OCDashboard({ discordId, selectedCharacterId, setSelectedCharacterId }: { discordId: string; selectedCharacterId: string; setSelectedCharacterId: (id: string) => void }) {
   const [summary, setSummary] = useState<any>(null);
   const [ownedSkills, setOwnedSkills] = useState<any[]>([]);
@@ -704,6 +783,7 @@ function OCDashboard({ discordId, selectedCharacterId, setSelectedCharacterId }:
 
   return (
     <RequireDiscord discordId={discordId}>
+      <OCMoneyCard discordId={discordId} characterId={selectedCharacterId} />
       <section className="grid oc-dashboard-grid">
         <div className="card">
           <div className="card-title-row">
