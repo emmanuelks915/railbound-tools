@@ -210,7 +210,7 @@ function App() {
       {tab === "shops" && <ShopDashboard discordId={discordId} />}
       {tab === "skills" && <SkillsDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "rp" && <RpHubDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
-      {tab === "register" && <OCRegistrationDashboard discordId={discordId} jump={jump} />}
+      {tab === "register" && <OCRegistrationDashboard discordId={discordId} jump={setTab} />}
       {tab === "registry" && <OCRegistry discordId={discordId} />}
       {tab === "staff" && <StaffQueue discordId={discordId} />}
       {tab === "combat" && <DerivedStatsCalculator />}
