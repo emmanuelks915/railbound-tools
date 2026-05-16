@@ -304,12 +304,21 @@ def create_character(payload: dict[str, Any] = Body(...), actor_discord_id: int 
     if error:
         raise HTTPException(status_code=400, detail=error)
 
-    existing = _as_list(
-        sb.table("characters")
-        .select("character_id,name")
-        .eq("user_id", int(actor_discord_id))
-        .execute()
-    )
+    try:
+        existing = _as_list(
+            sb.table("characters")
+            .select("character_id,name")
+            .eq("guild_id", get_guild_id())
+            .eq("user_id", int(actor_discord_id))
+            .execute()
+        )
+    except Exception:
+        existing = _as_list(
+            sb.table("characters")
+            .select("character_id,name")
+            .eq("user_id", int(actor_discord_id))
+            .execute()
+        )
     for row in existing:
         if str(row.get("name") or "").casefold() == name.casefold():
             raise HTTPException(status_code=400, detail=f"You already have an OC named {row.get('name')}.")
@@ -320,6 +329,7 @@ def create_character(payload: dict[str, Any] = Body(...), actor_discord_id: int 
         pass
 
     character_payload: dict[str, Any] = {
+        "guild_id": get_guild_id(),
         "user_id": int(actor_discord_id),
         "name": name,
     }
