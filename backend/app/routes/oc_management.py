@@ -1,0 +1,329 @@
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import APIRouter, Body, Depends, HTTPException
+
+from app.permissions import is_staff
+from app.security import actor_from_header
+from app.services import get_guild_id, sb_data
+from app.supabase_client import get_supabase
+
+router = APIRouter(prefix="/api/characters", tags=["oc-management"])
+
+PUBLIC_PROFILE_FIELDS = {
+    "name": 64,
+    "occupation": 80,
+    "affiliation": 120,
+    "sheet_url": 500,
+    "portrait_url": 500,
+    "blurb": 1200,
+}
+
+
+def _as_list(value: Any) -> list[dict[str, Any]]:
+    rows = sb_data(value) or []
+    return rows if isinstance(rows, list) else []
+
+
+def _safe_rows(builder) -> list[dict[str, Any]]:
+    try:
+        return _as_list(builder.execute())
+    except Exception:
+        return []
+
+
+def _load_character(sb, character_id: str) -> tuple[dict[str, Any] | None, str]:
+    for column in ("character_id", "id"):
+        rows = _safe_rows(
+            sb.table("characters")
+            .select("*")
+            .eq("guild_id", get_guild_id())
+            .eq(column, character_id)
+            .limit(1)
+        )
+        if rows:
+            return rows[0], column
+
+        rows = _safe_rows(
+            sb.table("characters")
+            .select("*")
+            .eq(column, character_id)
+            .limit(1)
+        )
+        if rows:
+            return rows[0], column
+
+    return None, "character_id"
+
+
+def _owner_id(character: dict[str, Any]) -> str | None:
+    value = (
+        character.get("user_id")
+        or character.get("discord_id")
+        or character.get("owner_discord_id")
+        or character.get("player_discord_id")
+    )
+    return str(value) if value is not None else None
+
+
+def _can_edit(character: dict[str, Any], actor_discord_id: int | None) -> bool:
+    if actor_discord_id is None:
+        return False
+
+    owner_id = _owner_id(character)
+    if owner_id is not None and str(owner_id) == str(actor_discord_id):
+        return True
+
+    return is_staff(int(actor_discord_id))
+
+
+def _require_edit(character: dict[str, Any], actor_discord_id: int | None) -> None:
+    if actor_discord_id is None:
+        raise HTTPException(status_code=401, detail="Login with Discord required.")
+
+    if not _can_edit(character, actor_discord_id):
+        raise HTTPException(status_code=403, detail="You can only edit your own OC.")
+
+
+def _require_staff(actor_discord_id: int | None) -> None:
+    if actor_discord_id is None:
+        raise HTTPException(status_code=401, detail="Login with Discord required.")
+
+    if not is_staff(int(actor_discord_id)):
+        raise HTTPException(status_code=403, detail="Staff only.")
+
+
+def _clean_update_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    cleaned: dict[str, Any] = {}
+
+    for key, max_len in PUBLIC_PROFILE_FIELDS.items():
+        if key not in payload:
+            continue
+
+        value = payload.get(key)
+
+        if value is None:
+            cleaned[key] = None
+            continue
+
+        value = str(value).strip()
+
+        if not value:
+            cleaned[key] = None
+            continue
+
+        cleaned[key] = value[:max_len]
+
+    if "name" in cleaned and not cleaned["name"]:
+        raise HTTPException(status_code=400, detail="OC name cannot be blank.")
+
+    return cleaned
+
+
+def _delete_where(sb, table: str, column: str, character_id: str) -> int:
+    try:
+        result = sb.table(table).delete().eq(column, character_id).execute()
+        return len(_as_list(result))
+    except Exception:
+        return 0
+
+
+def _delete_related_rows(sb, character_id: str) -> dict[str, int]:
+    deleted: dict[str, int] = {}
+
+    targets = [
+        ("character_traits", "character_id"),
+        ("oc_traits", "character_id"),
+        ("character_skills", "character_id"),
+        ("oc_skills", "character_id"),
+        ("character_inventory", "character_id"),
+        ("oc_inventory", "character_id"),
+        ("inventory", "character_id"),
+        ("wallets", "character_id"),
+        ("character_wallets", "character_id"),
+        ("transactions", "character_id"),
+        ("transactions", "from_character_id"),
+        ("transactions", "to_character_id"),
+        ("oc_xp_transactions", "character_id"),
+        ("oc_xp_transactions", "from_character_id"),
+        ("oc_xp_transactions", "to_character_id"),
+        ("stat_requests", "character_id"),
+        ("skill_requests", "character_id"),
+        ("rp_posts", "character_id"),
+        ("rp_messages", "character_id"),
+        ("rp_activity", "character_id"),
+        ("rp_logs", "character_id"),
+    ]
+
+    for table, column in targets:
+        count = _delete_where(sb, table, column, character_id)
+        if count:
+            deleted[f"{table}.{column}"] = count
+
+    return deleted
+
+
+@router.get("/{character_id}/manage")
+def get_character_management_info(
+    character_id: str,
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    sb = get_supabase()
+    character, _ = _load_character(sb, character_id)
+
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found.")
+
+    if actor_discord_id is None:
+        raise HTTPException(status_code=401, detail="Login with Discord required.")
+
+    return {
+        "character": character,
+        "can_edit": _can_edit(character, actor_discord_id),
+        "is_staff": is_staff(int(actor_discord_id)),
+        "owner_discord_id": _owner_id(character),
+    }
+
+
+@router.patch("/{character_id}/manage")
+def update_character_management_info(
+    character_id: str,
+    payload: dict[str, Any] = Body(...),
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    sb = get_supabase()
+    character, id_column = _load_character(sb, character_id)
+
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found.")
+
+    _require_edit(character, actor_discord_id)
+
+    cleaned = _clean_update_payload(payload)
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="No editable OC fields were provided.")
+
+    try:
+        query = sb.table("characters").update(cleaned).eq(id_column, character_id)
+        if character.get("guild_id") is not None:
+            query = query.eq("guild_id", get_guild_id())
+
+        updated = _as_list(query.execute())
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not update OC: {exc}")
+
+    return {
+        "character": updated[0] if updated else {**character, **cleaned},
+        "message": "OC updated.",
+    }
+
+
+@router.post("/{character_id}/archive")
+def archive_character(
+    character_id: str,
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    sb = get_supabase()
+    character, id_column = _load_character(sb, character_id)
+
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found.")
+
+    _require_edit(character, actor_discord_id)
+
+    # Support whichever visibility field exists. If one fails, try the next.
+    attempts = [
+        {"is_active": False},
+        {"archived": True},
+        {"status": "Archived"},
+    ]
+
+    last_error: Exception | None = None
+    for payload in attempts:
+        try:
+            query = sb.table("characters").update(payload).eq(id_column, character_id)
+            if character.get("guild_id") is not None:
+                query = query.eq("guild_id", get_guild_id())
+
+            rows = _as_list(query.execute())
+            return {
+                "character": rows[0] if rows else {**character, **payload},
+                "message": "OC archived.",
+            }
+        except Exception as exc:
+            last_error = exc
+            continue
+
+    raise HTTPException(status_code=500, detail=f"Could not archive OC: {last_error}")
+
+
+@router.post("/{character_id}/restore")
+def restore_character(
+    character_id: str,
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    sb = get_supabase()
+    character, id_column = _load_character(sb, character_id)
+
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found.")
+
+    _require_edit(character, actor_discord_id)
+
+    attempts = [
+        {"is_active": True},
+        {"archived": False},
+        {"status": "Active"},
+    ]
+
+    last_error: Exception | None = None
+    for payload in attempts:
+        try:
+            query = sb.table("characters").update(payload).eq(id_column, character_id)
+            if character.get("guild_id") is not None:
+                query = query.eq("guild_id", get_guild_id())
+
+            rows = _as_list(query.execute())
+            return {
+                "character": rows[0] if rows else {**character, **payload},
+                "message": "OC restored.",
+            }
+        except Exception as exc:
+            last_error = exc
+            continue
+
+    raise HTTPException(status_code=500, detail=f"Could not restore OC: {last_error}")
+
+
+@router.delete("/{character_id}")
+def delete_character_staff_only(
+    character_id: str,
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    _require_staff(actor_discord_id)
+
+    sb = get_supabase()
+    character, id_column = _load_character(sb, character_id)
+
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found.")
+
+    deleted_related = _delete_related_rows(sb, character_id)
+
+    try:
+        query = sb.table("characters").delete().eq(id_column, character_id)
+        if character.get("guild_id") is not None:
+            query = query.eq("guild_id", get_guild_id())
+
+        deleted_character = _as_list(query.execute())
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not delete OC: {exc}")
+
+    return {
+        "deleted": bool(deleted_character),
+        "character_id": character_id,
+        "name": character.get("name"),
+        "related_rows": deleted_related,
+        "message": f"Deleted {character.get('name') or 'OC'}.",
+    }

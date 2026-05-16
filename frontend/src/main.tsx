@@ -711,6 +711,228 @@ function OCMoneyCard({ discordId, characterId }: { discordId: string; characterI
   );
 }
 
+function OCManagementCard({ discordId, characterId }: { discordId: string; characterId: string }) {
+  const [data, setData] = useState<any>(null);
+  const [form, setForm] = useState({
+    name: "",
+    occupation: "",
+    affiliation: "",
+    sheet_url: "",
+    portrait_url: "",
+    blurb: "",
+  });
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+
+  async function loadManagement() {
+    if (!discordId || !characterId) return;
+
+    setMessage("");
+
+    try {
+      const result = await apiFetch(`/api/characters/${characterId}/manage`, {}, discordId);
+      setData(result);
+
+      const character = result.character || {};
+      setForm({
+        name: character.name || "",
+        occupation: character.occupation || "",
+        affiliation: character.affiliation || "",
+        sheet_url: character.sheet_url || "",
+        portrait_url: character.portrait_url || "",
+        blurb: character.blurb || "",
+      });
+    } catch (error: any) {
+      setData(null);
+      setMessage(error.message || "Could not load OC management.");
+    }
+  }
+
+  useEffect(() => {
+    loadManagement();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId, characterId]);
+
+  async function saveChanges() {
+    if (!characterId) return;
+
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const result = await apiFetch(
+        `/api/characters/${characterId}/manage`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(form),
+        },
+        discordId
+      );
+
+      setData((current: any) => ({ ...(current || {}), character: result.character }));
+      setMessage(result.message || "OC updated.");
+    } catch (error: any) {
+      setMessage(error.message || "Could not save OC changes.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function archiveOC() {
+    if (!characterId) return;
+
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const result = await apiFetch(
+        `/api/characters/${characterId}/archive`,
+        { method: "POST" },
+        discordId
+      );
+      setData((current: any) => ({ ...(current || {}), character: result.character }));
+      setMessage(result.message || "OC archived.");
+    } catch (error: any) {
+      setMessage(error.message || "Could not archive OC.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function restoreOC() {
+    if (!characterId) return;
+
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const result = await apiFetch(
+        `/api/characters/${characterId}/restore`,
+        { method: "POST" },
+        discordId
+      );
+      setData((current: any) => ({ ...(current || {}), character: result.character }));
+      setMessage(result.message || "OC restored.");
+    } catch (error: any) {
+      setMessage(error.message || "Could not restore OC.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteOC() {
+    if (!characterId || deleteConfirm !== "DELETE") return;
+
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const result = await apiFetch(
+        `/api/characters/${characterId}`,
+        { method: "DELETE" },
+        discordId
+      );
+
+      setMessage(result.message || "OC deleted.");
+      setData(null);
+      setDeleteConfirm("");
+    } catch (error: any) {
+      setMessage(error.message || "Could not delete OC.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!characterId) return null;
+
+  const character = data?.character || {};
+  const canEdit = data?.can_edit;
+  const staff = data?.is_staff;
+  const archived = character.is_active === false || character.archived === true || String(character.status || "").toLowerCase() === "archived";
+
+  return (
+    <div className="card oc-management-card">
+      <div className="card-title-row">
+        <div>
+          <span className="activity-type-label">Management</span>
+          <h3>Manage OC</h3>
+          <p className="muted-text">Edit this OC’s public dashboard information and manage visibility.</p>
+        </div>
+        <button className="ghost" onClick={loadManagement}>
+          <RefreshCw size={16} /> Refresh
+        </button>
+      </div>
+
+      {message ? <p className="message">{message}</p> : null}
+
+      {!canEdit ? (
+        <p className="muted-text">You can view this OC, but only the owner or staff can edit it.</p>
+      ) : (
+        <>
+          <div className="oc-management-form">
+            <label>
+              <span>Name</span>
+              <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
+            </label>
+
+            <label>
+              <span>Occupation</span>
+              <input value={form.occupation} onChange={(event) => setForm((current) => ({ ...current, occupation: event.target.value }))} />
+            </label>
+
+            <label>
+              <span>Affiliation</span>
+              <input value={form.affiliation} onChange={(event) => setForm((current) => ({ ...current, affiliation: event.target.value }))} />
+            </label>
+
+            <label>
+              <span>Sheet Link</span>
+              <input value={form.sheet_url} onChange={(event) => setForm((current) => ({ ...current, sheet_url: event.target.value }))} />
+            </label>
+
+            <label>
+              <span>Portrait URL</span>
+              <input value={form.portrait_url} onChange={(event) => setForm((current) => ({ ...current, portrait_url: event.target.value }))} />
+            </label>
+
+            <label className="oc-management-wide">
+              <span>Public Blurb</span>
+              <textarea rows={4} value={form.blurb} onChange={(event) => setForm((current) => ({ ...current, blurb: event.target.value }))} />
+            </label>
+          </div>
+
+          <div className="auth-actions">
+            <button onClick={saveChanges} disabled={saving}>{saving ? "Saving..." : "Save OC Changes"}</button>
+            {archived ? (
+              <button className="ghost" onClick={restoreOC} disabled={saving}>Restore OC</button>
+            ) : (
+              <button className="ghost" onClick={archiveOC} disabled={saving}>Archive OC</button>
+            )}
+          </div>
+
+          {staff ? (
+            <div className="oc-danger-zone">
+              <h4>Staff Danger Zone</h4>
+              <p className="muted-text">For test OCs or cleanup only. Type DELETE to permanently remove this OC and related rows.</p>
+              <div className="auth-actions">
+                <input
+                  value={deleteConfirm}
+                  onChange={(event) => setDeleteConfirm(event.target.value)}
+                  placeholder="Type DELETE"
+                />
+                <button className="danger-button" onClick={deleteOC} disabled={saving || deleteConfirm !== "DELETE"}>
+                  Delete OC
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
 function OCDashboard({ discordId, selectedCharacterId, setSelectedCharacterId }: { discordId: string; selectedCharacterId: string; setSelectedCharacterId: (id: string) => void }) {
   const [summary, setSummary] = useState<any>(null);
   const [ownedSkills, setOwnedSkills] = useState<any[]>([]);
@@ -784,6 +1006,7 @@ function OCDashboard({ discordId, selectedCharacterId, setSelectedCharacterId }:
   return (
     <RequireDiscord discordId={discordId}>
       <OCMoneyCard discordId={discordId} characterId={selectedCharacterId} />
+      <OCManagementCard discordId={discordId} characterId={selectedCharacterId} />
       <section className="grid oc-dashboard-grid">
         <div className="card">
           <div className="card-title-row">
