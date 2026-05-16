@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
+import os
+import urllib.request
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -269,6 +272,102 @@ def _iso(value: Any) -> str | None:
     return parsed.isoformat() if parsed else (str(value) if value else None)
 
 
+def _channel_label_from_row(row: dict[str, Any]) -> str | None:
+    for key in (
+        "channel_name",
+        "thread_name",
+        "scene_name",
+        "location_name",
+        "location",
+        "name",
+        "title",
+        "label",
+    ):
+        value = row.get(key)
+        if value:
+            return str(value)
+
+    return None
+
+
+def _channel_label_lookup(sb, channel_ids: set[str]) -> dict[str, str]:
+    if not channel_ids:
+        return {}
+
+    labels: dict[str, str] = {}
+
+    sources = [
+        ("rp_channels", ["channel_id", "discord_channel_id", "id"]),
+        ("rp_scenes", ["channel_id", "discord_channel_id", "thread_id", "id"]),
+        ("rp_threads", ["thread_id", "channel_id", "discord_channel_id", "id"]),
+        ("rp_locations", ["channel_id", "discord_channel_id", "id"]),
+        ("channels", ["channel_id", "discord_channel_id", "id"]),
+    ]
+
+    for table, id_columns in sources:
+        for id_column in id_columns:
+            rows = _safe_execute(
+                sb.table(table)
+                .select("*")
+                .eq("guild_id", get_guild_id())
+                .in_(id_column, list(channel_ids))
+                .limit(500)
+            )
+
+            if not rows:
+                rows = _safe_execute(
+                    sb.table(table)
+                    .select("*")
+                    .in_(id_column, list(channel_ids))
+                    .limit(500)
+                )
+
+            for row in rows:
+                channel_id = str(row.get(id_column) or "")
+                label = _channel_label_from_row(row)
+
+                if channel_id and label:
+                    labels[channel_id] = label
+
+            if labels:
+                return labels
+
+    return labels
+
+
+def _discord_channel_lookup(channel_ids: set[str]) -> dict[str, str]:
+    if not channel_ids:
+        return {}
+
+    token = os.getenv("DISCORD_BOT_TOKEN") or os.getenv("DISCORD_TOKEN")
+    if not token:
+        return {}
+
+    labels: dict[str, str] = {}
+
+    for channel_id in channel_ids:
+        try:
+            request = urllib.request.Request(
+                f"https://discord.com/api/v10/channels/{channel_id}",
+                method="GET",
+                headers={
+                    "Authorization": f"Bot {token}",
+                    "Accept": "application/json",
+                    "User-Agent": "RailboundToolsRegistry/1.0",
+                },
+            )
+
+            with urllib.request.urlopen(request, timeout=10) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+
+            label = payload.get("name")
+            if label:
+                labels[str(channel_id)] = str(label)
+        except Exception:
+            continue
+
+    return labels
+
 def _public_recent_posts(sb, character_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
     rows = _first_nonempty_source(
         sb,
@@ -280,6 +379,19 @@ def _public_recent_posts(sb, character_ids: list[str]) -> dict[str, list[dict[st
             ("rp_logs", "character_id"),
         ],
     )
+
+    channel_ids: set[str] = set()
+    for row in rows:
+        for key in ("channel_id", "discord_channel_id", "thread_id", "parent_channel_id", "scene_channel_id"):
+            value = row.get(key)
+            if value:
+                channel_ids.add(str(value))
+
+    channel_labels = _channel_label_lookup(sb, channel_ids)
+
+    # Optional live Discord fallback if DISCORD_BOT_TOKEN is set in backend env.
+    missing_ids = {cid for cid in channel_ids if cid not in channel_labels}
+    channel_labels.update(_discord_channel_lookup(missing_ids))
 
     cleaned: list[dict[str, Any]] = []
     for row in rows:
@@ -294,14 +406,37 @@ def _public_recent_posts(sb, character_ids: list[str]) -> dict[str, list[dict[st
             or row.get("message_created_at")
         )
 
-        channel_label = (
+        channel_id = (
+            row.get("channel_id")
+            or row.get("discord_channel_id")
+            or row.get("thread_id")
+            or row.get("parent_channel_id")
+            or row.get("scene_channel_id")
+        )
+        channel_id = str(channel_id) if channel_id else None
+
+        direct_label = (
             row.get("channel_name")
             or row.get("thread_name")
             or row.get("scene_name")
             or row.get("location")
-            or row.get("channel_id")
-            or "Unknown location"
+            or row.get("location_name")
+            or row.get("area")
+            or row.get("region")
         )
+
+        channel_label = (
+            str(direct_label)
+            if direct_label
+            else channel_labels.get(channel_id or "")
+            if channel_id
+            else None
+        )
+
+        # Final fallback. This is intentionally better than "Unknown location",
+        # and tells us exactly which channel needs a stored/display name later.
+        if not channel_label:
+            channel_label = f"Channel {channel_id}" if channel_id else "Unknown location"
 
         snippet = (
             row.get("snippet")
@@ -315,7 +450,8 @@ def _public_recent_posts(sb, character_ids: list[str]) -> dict[str, list[dict[st
             {
                 "character_id": cid,
                 "created_at": _iso(created_at),
-                "channel_label": str(channel_label),
+                "channel_id": channel_id,
+                "channel_label": channel_label,
                 "jump_url": row.get("jump_url") or row.get("post_url") or row.get("message_url"),
                 "words": row.get("word_count") or row.get("words"),
                 "snippet": str(snippet)[:260],
@@ -326,7 +462,6 @@ def _public_recent_posts(sb, character_ids: list[str]) -> dict[str, list[dict[st
     grouped = _group_by_character(cleaned)
 
     return {cid: posts[:8] for cid, posts in grouped.items()}
-
 
 def _last_seen_from_posts(posts: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not posts:

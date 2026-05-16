@@ -1602,3 +1602,17 @@ label textarea {
     grid-template-columns: 1fr;
   }
 }
+
+/* Citizen Registry RP location polish */
+
+.registry-inventory-item small {
+  display: block;
+  margin-top: 0.18rem;
+  color: rgba(44, 31, 22, 0.58);
+  font-weight: 750;
+}
+
+.registry-inventory-item a {
+  align-self: center;
+  white-space: nowrap;
+}
