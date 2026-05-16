@@ -1954,6 +1954,18 @@ function OCRegistrationDashboard({ discordId, jump }: { discordId: string; jump:
     }
   }
 
+  function prettyTraitTier(trait: any) {
+    const tier = String(trait.tier || "Trait").toLowerCase();
+
+    if (tier === "keystone") return "Keystone Trait";
+    if (tier === "minor") return "Minor Trait";
+    if (tier === "reliable") return "Reliable Trait";
+    if (tier === "negative") return "Negative Trait";
+    if (tier === "origin") return "Origin Trait";
+
+    return `${tier.slice(0, 1).toUpperCase()}${tier.slice(1)} Trait`;
+  }
+
   function traitLabel(trait: any) {
     const cost = Number(trait.cost || 0);
     const sign = cost > 0 ? `+${cost}` : String(cost);
@@ -2156,8 +2168,8 @@ function OCRegistrationDashboard({ discordId, jump }: { discordId: string; jump:
                     onClick={() => toggleTrait(trait.trait_id)}
                   >
                     <strong>{trait.name || "Trait"}</strong>
-                    <span>{trait.tier || "?"} • {Number(trait.cost || 0) >= 0 ? "+" : ""}{trait.cost || 0}</span>
-                    {trait.exclusive_group ? <small>Group: {trait.exclusive_group}</small> : null}
+                    <span className="trait-display-meta">{prettyTraitTier(trait)}</span>
+                    
                   </button>
                 );
               })}
@@ -2196,7 +2208,7 @@ function OCRegistrationDashboard({ discordId, jump }: { discordId: string; jump:
                   <div className="selected-trait-row" key={trait.trait_id}>
                     <div>
                       <strong>{trait.name}</strong>
-                      <span>{trait.tier} • {Number(trait.cost || 0) >= 0 ? "+" : ""}{trait.cost || 0}</span>
+                      <span className="trait-display-meta">{prettyTraitTier(trait)}</span>
                     </div>
                     {isOrigin ? (
                       <em>Origin</em>
