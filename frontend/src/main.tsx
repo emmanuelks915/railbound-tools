@@ -1104,7 +1104,9 @@ function InventoryDashboard({
   );
 }
 
-function ShopDashboard({ discordId }: { discordId: string }) {
+function ShopDashboard({ discordId }
+
+) {
   const [shops, setShops] = useState<any[]>([]);
   const [shopId, setShopId] = useState("");
   const [shop, setShop] = useState<any>(null);
