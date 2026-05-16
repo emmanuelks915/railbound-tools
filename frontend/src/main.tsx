@@ -1828,6 +1828,49 @@ function OCRegistry({ discordId }: { discordId: string }) {
     syncProfileForm(data.character);
   }
 
+  async function uploadPortraitFile(file: File | null) {
+    if (!file || !selected?.character_id) return;
+
+    setSavingProfile(true);
+    setProfileMessage("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch(`${API_BASE}/api/registry/characters/${selected.character_id}/portrait`, {
+        method: "POST",
+        headers: {
+          "X-Discord-ID": discordId,
+        },
+        credentials: "include",
+        body: formData,
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Could not upload portrait.");
+      }
+
+      const updated = data.character;
+      setSelected(updated);
+      syncProfileForm(updated);
+
+      setCharacters((current) =>
+        current.map((character) =>
+          character.character_id === updated.character_id ? { ...character, ...updated } : character
+        )
+      );
+
+      setProfileMessage("Portrait uploaded.");
+    } catch (error: any) {
+      setProfileMessage(error.message || "Could not upload portrait.");
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
   async function savePublicProfile() {
     if (!selected?.character_id) return;
 
@@ -2119,6 +2162,16 @@ function OCRegistry({ discordId }: { discordId: string }) {
                           value={profileForm.portrait_url}
                           onChange={(event) => setProfileForm((current) => ({ ...current, portrait_url: event.target.value }))}
                           placeholder="https://..."
+                        />
+                      </label>
+
+                      <label className="public-profile-upload-row">
+                        <span>Upload Portrait</span>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          onChange={(event) => uploadPortraitFile(event.target.files?.[0] || null)}
+                          disabled={savingProfile}
                         />
                       </label>
 

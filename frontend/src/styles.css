@@ -1660,3 +1660,15 @@ label textarea {
     grid-template-columns: 1fr;
   }
 }
+
+/* Citizen Registry portrait upload */
+
+.public-profile-upload-row {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.public-profile-upload-row input[type="file"] {
+  padding: 0.65rem;
+  background: rgba(255, 255, 255, 0.72);
+}
