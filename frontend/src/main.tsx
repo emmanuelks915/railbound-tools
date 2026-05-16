@@ -21,7 +21,7 @@ type CoreStats = {
   mana: number;
 };
 
-type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "staff" | "combat" | "registry";
+type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "staff" | "combat" | "registry" | "register";
 
 const STAT_LABELS: Record<keyof CoreStats, string> = {
   strength: "Strength",
@@ -120,6 +120,7 @@ function App() {
     ["inventory", Package, "Inventory"],
     ["shops", Store, "Shops"],
     ["rp", ClipboardList, "RP Hub"],
+    ["register", UserRound, "Register OC"],
     ["registry", Users, "OC Registry"],
     ["staff", ShieldCheck, "Staff"],
     ["activity", ClipboardList, "Activity"],
@@ -209,6 +210,7 @@ function App() {
       {tab === "shops" && <ShopDashboard discordId={discordId} />}
       {tab === "skills" && <SkillsDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "rp" && <RpHubDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "register" && <OCRegistrationDashboard discordId={discordId} jump={jump} />}
       {tab === "registry" && <OCRegistry discordId={discordId} />}
       {tab === "staff" && <StaffQueue discordId={discordId} />}
       {tab === "combat" && <DerivedStatsCalculator />}
@@ -357,6 +359,7 @@ function HomeDashboard({
             <button onClick={() => jump("planner")}><Calculator size={16} /> Plan Stats</button>
             <button onClick={() => jump("inventory")}><Package size={16} /> Manage Inventory</button>
             <button onClick={() => jump("skills")}><Sparkles size={16} /> Manage Skills</button>
+            <button onClick={() => jump("register")}><UserRound size={16} /> Register OC</button>
             <button onClick={() => jump("shops")}><Store size={16} /> Manage Shops</button>
             <button onClick={() => jump("staff")}><ShieldCheck size={16} /> Staff Queue</button>
           </div>
@@ -1767,6 +1770,288 @@ function SkillsDashboard({ discordId, selectedCharacterId, setSelectedCharacterI
             </div>
           </div>
         ) : null}
+      </section>
+    </RequireDiscord>
+  );
+}
+
+function OCRegistrationDashboard({ discordId, jump }: { discordId: string; jump: (tab: Tab) => void }) {
+  const [options, setOptions] = useState<any>({ traits: [], max_starting_traits: 8 });
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [validation, setValidation] = useState<any>(null);
+  const [form, setForm] = useState({
+    name: "",
+    sheet_url: "",
+    occupation: "",
+    affiliation: "",
+    blurb: "",
+    origin_trait_id: "",
+    trait_ids: [] as string[],
+  });
+
+  async function loadOptions() {
+    const data = await apiFetch("/api/oc-registration/options", {}, discordId);
+    setOptions(data);
+  }
+
+  useEffect(() => {
+    if (discordId) loadOptions().catch((error) => setMessage(error.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId]);
+
+  async function validate(nextForm = form) {
+    try {
+      const data = await apiFetch(
+        "/api/oc-registration/validate",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            origin_trait_id: nextForm.origin_trait_id,
+            trait_ids: nextForm.trait_ids,
+          }),
+        },
+        discordId
+      );
+      setValidation(data);
+      return data;
+    } catch (error: any) {
+      const data = { ok: false, error: error.message };
+      setValidation(data);
+      return data;
+    }
+  }
+
+  function updateForm(patch: Partial<typeof form>) {
+    const next = { ...form, ...patch };
+    setForm(next);
+    validate(next);
+  }
+
+  function toggleTrait(traitId: string) {
+    const exists = form.trait_ids.includes(traitId);
+    const nextTraitIds = exists
+      ? form.trait_ids.filter((id) => id !== traitId)
+      : [...form.trait_ids, traitId];
+
+    updateForm({ trait_ids: nextTraitIds });
+  }
+
+  async function submit() {
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const check = await validate();
+      if (check?.ok === false) {
+        setMessage(check.error || "Please fix the registration errors first.");
+        return;
+      }
+
+      const data = await apiFetch(
+        "/api/oc-registration/characters",
+        {
+          method: "POST",
+          body: JSON.stringify(form),
+        },
+        discordId
+      );
+
+      setMessage(data.message || "OC registered.");
+
+      setForm({
+        name: "",
+        sheet_url: "",
+        occupation: "",
+        affiliation: "",
+        blurb: "",
+        origin_trait_id: "",
+        trait_ids: [],
+      });
+      setValidation(null);
+
+      setTimeout(() => jump("registry"), 500);
+    } catch (error: any) {
+      setMessage(error.message || "Could not register OC.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function traitLabel(trait: any) {
+    const cost = Number(trait.cost || 0);
+    const sign = cost > 0 ? `+${cost}` : String(cost);
+    return `${trait.name || "Trait"} (${trait.tier || "?"}, ${sign})`;
+  }
+
+  const traits = options.traits || [];
+  const originTraits = traits.filter((trait: any) => String(trait.tier || "").toLowerCase() === "origin");
+  const startingTraits = traits.filter((trait: any) => String(trait.tier || "").toLowerCase() !== "origin");
+  const selectedTraitObjects = [
+    ...traits.filter((trait: any) => trait.trait_id === form.origin_trait_id),
+    ...traits.filter((trait: any) => form.trait_ids.includes(trait.trait_id)),
+  ];
+
+  const summary = validation?.summary || {
+    positive: 0,
+    negative: 0,
+    overdraft_limit: 5,
+  };
+
+  return (
+    <RequireDiscord discordId={discordId}>
+      <section className="oc-register-page">
+        <div className="card oc-register-hero">
+          <div>
+            <span className="activity-type-label">Guided Intake</span>
+            <h2>Register a New OC</h2>
+            <p className="muted-text">
+              Register the character, connect their sheet, set public registry basics, and select starting traits.
+            </p>
+          </div>
+          <button className="ghost" onClick={loadOptions}>
+            <RefreshCw size={16} /> Refresh Options
+          </button>
+        </div>
+
+        <div className="oc-register-layout">
+          <div className="card">
+            <h3>1. Character Basics</h3>
+            <p className="muted-text">
+              Your full sheet still handles appearance, wardrobe, health, backstory, inventory, skills, relationships,
+              missions, events, and XP audit. This form makes the official OC record.
+            </p>
+
+            <div className="oc-register-form">
+              <label>
+                <span>Character Name</span>
+                <input
+                  value={form.name}
+                  onChange={(event) => updateForm({ name: event.target.value })}
+                  placeholder="Meris Philon"
+                />
+              </label>
+
+              <label>
+                <span>Character Sheet Link</span>
+                <input
+                  value={form.sheet_url}
+                  onChange={(event) => updateForm({ sheet_url: event.target.value })}
+                  placeholder="https://..."
+                />
+              </label>
+
+              <label>
+                <span>Occupation</span>
+                <input
+                  value={form.occupation}
+                  onChange={(event) => updateForm({ occupation: event.target.value })}
+                  placeholder="Engineer, medic, smuggler..."
+                />
+              </label>
+
+              <label>
+                <span>Affiliation</span>
+                <input
+                  value={form.affiliation}
+                  onChange={(event) => updateForm({ affiliation: event.target.value })}
+                  placeholder="Guild, crew, company, faction..."
+                />
+              </label>
+
+              <label className="oc-register-wide">
+                <span>Public Blurb</span>
+                <textarea
+                  value={form.blurb}
+                  onChange={(event) => updateForm({ blurb: event.target.value })}
+                  placeholder="A short public-facing description for the Citizen Registry."
+                  rows={4}
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="card">
+            <h3>2. Starting Traits</h3>
+            <p className="muted-text">
+              Choose one Origin trait, then select up to {options.max_starting_traits || 8} starting traits.
+            </p>
+
+            <label>
+              <span>Origin Trait</span>
+              <select
+                value={form.origin_trait_id}
+                onChange={(event) => updateForm({ origin_trait_id: event.target.value })}
+              >
+                <option value="">No Origin selected</option>
+                {originTraits.map((trait: any) => (
+                  <option value={trait.trait_id} key={trait.trait_id}>
+                    {traitLabel(trait)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="trait-picker-grid">
+              {startingTraits.map((trait: any) => {
+                const selected = form.trait_ids.includes(trait.trait_id);
+                const disabled = !selected && form.trait_ids.length >= (options.max_starting_traits || 8);
+
+                return (
+                  <button
+                    type="button"
+                    key={trait.trait_id}
+                    className={`trait-picker-card ${selected ? "selected" : ""}`}
+                    disabled={disabled}
+                    onClick={() => toggleTrait(trait.trait_id)}
+                  >
+                    <strong>{trait.name || "Trait"}</strong>
+                    <span>{trait.tier || "?"} • {Number(trait.cost || 0) >= 0 ? "+" : ""}{trait.cost || 0}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="card oc-register-summary-card">
+            <h3>3. Review & Submit</h3>
+
+            <div className="summary">
+              <div>
+                <span>Positive</span>
+                <strong>{summary.positive}</strong>
+              </div>
+              <div>
+                <span>Negative</span>
+                <strong>{summary.negative}</strong>
+              </div>
+              <div>
+                <span>Limit</span>
+                <strong>{summary.overdraft_limit}</strong>
+              </div>
+            </div>
+
+            {validation?.error ? <p className="message">{validation.error}</p> : null}
+            {validation?.ok ? <p className="good-text">✅ Trait build is legal.</p> : null}
+
+            <h4>Selected Traits</h4>
+            <div className="registry-chip-list">
+              {selectedTraitObjects.length === 0 ? <p className="muted-text">No traits selected yet.</p> : null}
+              {selectedTraitObjects.map((trait: any) => (
+                <span className="registry-chip" key={trait.trait_id}>
+                  {trait.name}
+                  <small>{trait.tier}</small>
+                </span>
+              ))}
+            </div>
+
+            {message ? <p className="message">{message}</p> : null}
+
+            <button onClick={submit} disabled={saving || validation?.ok === false}>
+              {saving ? "Registering..." : "Register OC"}
+            </button>
+          </div>
+        </div>
       </section>
     </RequireDiscord>
   );

@@ -1672,3 +1672,106 @@ label textarea {
   padding: 0.65rem;
   background: rgba(255, 255, 255, 0.72);
 }
+
+/* Dashboard OC Registration */
+
+.oc-register-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.oc-register-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.oc-register-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.92fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.oc-register-layout .oc-register-summary-card {
+  grid-column: 1 / -1;
+}
+
+.oc-register-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.oc-register-form label,
+.oc-register-page label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.oc-register-form span,
+.oc-register-page label > span {
+  color: rgba(44, 31, 22, 0.58);
+  font-size: 0.75rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.oc-register-wide {
+  grid-column: 1 / -1;
+}
+
+.trait-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.65rem;
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.trait-picker-card {
+  display: grid;
+  gap: 0.25rem;
+  text-align: left;
+  border-radius: 18px;
+  padding: 0.85rem;
+  background: rgba(255, 255, 255, 0.68);
+  color: inherit;
+  border: 1px solid rgba(61, 51, 43, 0.1);
+  box-shadow: none;
+}
+
+.trait-picker-card.selected {
+  background: rgba(47, 111, 115, 0.14);
+  border-color: rgba(47, 111, 115, 0.42);
+}
+
+.trait-picker-card span {
+  color: rgba(44, 31, 22, 0.62);
+  font-weight: 800;
+}
+
+.trait-picker-card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.good-text {
+  color: #2f7b4f;
+  font-weight: 900;
+}
+
+@media (max-width: 920px) {
+  .oc-register-hero,
+  .oc-register-layout {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .oc-register-form {
+    grid-template-columns: 1fr;
+  }
+}
