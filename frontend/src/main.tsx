@@ -2104,7 +2104,7 @@ function OCRegistry({ discordId }: { discordId: string }) {
   );
 }
 
-: { discordId: string }) {
+) {
   const [characters, setCharacters] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
   const [search, setSearch] = useState("");
