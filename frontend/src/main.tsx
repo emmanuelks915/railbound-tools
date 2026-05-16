@@ -1,20 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import {
-  Calculator,
-  Check,
-  ClipboardList,
-  Home,
-  Package,
-  RefreshCw,
-  Save,
-  Send,
-  ShieldCheck,
-  Sparkles,
-  Store,
-  UserRound,
-  X,
-} from "lucide-react";
+import { Calculator, Check, ClipboardList, Home, Package, RefreshCw, Save, Send, ShieldCheck, Sparkles, Store, UserRound, X, , Users } from "lucide-react";
 import "./styles.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -35,7 +21,7 @@ type CoreStats = {
   mana: number;
 };
 
-type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "staff" | "combat";
+type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "staff" | "combat" | "registry";
 
 const STAT_LABELS: Record<keyof CoreStats, string> = {
   strength: "Strength",
@@ -134,6 +120,7 @@ function App() {
     ["inventory", Package, "Inventory"],
     ["shops", Store, "Shops"],
     ["rp", ClipboardList, "RP Hub"],
+    ["registry", Users, "OC Registry"],
     ["staff", ShieldCheck, "Staff"],
     ["activity", ClipboardList, "Activity"],
     ["combat", ClipboardList, "Derived Stats"],
@@ -222,6 +209,7 @@ function App() {
       {tab === "shops" && <ShopDashboard discordId={discordId} />}
       {tab === "skills" && <SkillsDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "rp" && <RpHubDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "registry" && <OCRegistry discordId={discordId} />}
       {tab === "staff" && <StaffQueue discordId={discordId} />}
       {tab === "combat" && <DerivedStatsCalculator />}
     </main>
@@ -1777,6 +1765,206 @@ function SkillsDashboard({ discordId, selectedCharacterId, setSelectedCharacterI
             </div>
           </div>
         ) : null}
+      </section>
+    </RequireDiscord>
+  );
+}
+
+function OCRegistry({ discordId }: { discordId: string }) {
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [selected, setSelected] = useState<any>(null);
+  const [search, setSearch] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function loadRegistry(query = search) {
+    setMessage("");
+
+    const params = new URLSearchParams({ limit: "120" });
+    if (query.trim()) params.set("search", query.trim());
+
+    const data = await apiFetch(`/api/registry/characters?${params.toString()}`, {}, discordId);
+    const rows = data.characters || [];
+
+    setCharacters(rows);
+    if (!selected && rows.length > 0) setSelected(rows[0]);
+  }
+
+  async function openCharacter(characterId: string) {
+    setMessage("");
+    const data = await apiFetch(`/api/registry/characters/${characterId}`, {}, discordId);
+    setSelected(data.character);
+  }
+
+  useEffect(() => {
+    if (discordId) loadRegistry().catch((error) => setMessage(error.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId]);
+
+  function formatKey(value: string) {
+    return String(value || "").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  function visibleStats(stats: any) {
+    if (!stats) return [];
+    const hidden = new Set(["guild_id", "character_id", "id", "created_at", "updated_at"]);
+    return Object.entries(stats)
+      .filter(([key, value]) => !hidden.has(key) && value !== null && value !== undefined && typeof value !== "object")
+      .slice(0, 20);
+  }
+
+  return (
+    <RequireDiscord discordId={discordId}>
+      <section className="registry-page-v1">
+        <div className="card registry-hero-card">
+          <div className="card-title-row">
+            <div>
+              <h2>OC Registry</h2>
+              <p className="muted-text">
+                Browse Railbound characters, compare public stats, and look through public skills, traits, and inventory.
+              </p>
+            </div>
+            <button className="ghost" onClick={() => loadRegistry()}>
+              <RefreshCw size={16} /> Refresh
+            </button>
+          </div>
+
+          <div className="registry-search-row">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") loadRegistry();
+              }}
+              placeholder="Search OC name, player ID, faction, origin..."
+            />
+            <button onClick={() => loadRegistry()}>Search</button>
+          </div>
+
+          {message && <p className="message">{message}</p>}
+        </div>
+
+        <div className="registry-layout">
+          <div className="registry-list card">
+            <div className="card-title-row">
+              <h3>Roster</h3>
+              <span className="pill">{characters.length} OCs</span>
+            </div>
+
+            <div className="registry-card-scroll">
+              {characters.length === 0 ? <p className="muted-text">No public OCs found yet.</p> : null}
+
+              {characters.map((character) => (
+                <button
+                  type="button"
+                  key={character.character_id}
+                  className={`registry-character-card ${selected?.character_id === character.character_id ? "active" : ""}`}
+                  onClick={() => openCharacter(character.character_id)}
+                >
+                  {character.portrait_url ? (
+                    <img src={character.portrait_url} alt="" />
+                  ) : (
+                    <div className="registry-portrait-placeholder">{String(character.name || "?").slice(0, 1)}</div>
+                  )}
+
+                  <div>
+                    <strong>{character.name}</strong>
+                    <span>
+                      {character.title || character.species || "Registered OC"}
+                      {character.faction ? ` • ${character.faction}` : ""}
+                    </span>
+                    {character.owner_discord_id ? <small>Player: {character.owner_discord_id}</small> : null}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="registry-profile card">
+            {!selected ? (
+              <p className="muted-text">Select an OC to view their public profile.</p>
+            ) : (
+              <>
+                <div className="registry-profile-header">
+                  {selected.portrait_url ? (
+                    <img src={selected.portrait_url} alt="" />
+                  ) : (
+                    <div className="registry-profile-placeholder">{String(selected.name || "?").slice(0, 1)}</div>
+                  )}
+
+                  <div>
+                    <span className="activity-type-label">Character Profile</span>
+                    <h2>{selected.name}</h2>
+                    <p className="muted-text">
+                      {[selected.title, selected.species, selected.origin, selected.faction].filter(Boolean).join(" • ") ||
+                        "Public OC profile"}
+                    </p>
+                    {selected.owner_discord_id ? <small>Player: {selected.owner_discord_id}</small> : null}
+                  </div>
+                </div>
+
+                {selected.blurb ? (
+                  <div className="registry-section">
+                    <h3>Overview</h3>
+                    <p>{selected.blurb}</p>
+                  </div>
+                ) : null}
+
+                <div className="registry-section">
+                  <h3>Stats</h3>
+                  <div className="registry-stat-grid">
+                    {visibleStats(selected.stats).length === 0 ? <p className="muted-text">No public stats found yet.</p> : null}
+                    {visibleStats(selected.stats).map(([key, value]) => (
+                      <div className="registry-stat" key={key}>
+                        <span>{formatKey(key)}</span>
+                        <strong>{String(value)}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="registry-section">
+                  <h3>Skills</h3>
+                  <div className="registry-chip-list">
+                    {(selected.skills || []).length === 0 ? <p className="muted-text">No public skills found yet.</p> : null}
+                    {(selected.skills || []).map((skill: any, index: number) => (
+                      <span className="registry-chip" key={`${skill.skill_key || skill.name}-${index}`}>
+                        {skill.name || skill.skill_key}
+                        {skill.tree ? <small>{skill.tree}</small> : null}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="registry-section">
+                  <h3>Traits</h3>
+                  <div className="registry-chip-list">
+                    {(selected.traits || []).length === 0 ? <p className="muted-text">No public traits found yet.</p> : null}
+                    {(selected.traits || []).map((trait: any, index: number) => (
+                      <span className="registry-chip" key={`${trait.name}-${index}`}>
+                        {trait.name}
+                        {trait.type ? <small>{trait.type}</small> : null}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="registry-section">
+                  <h3>Inventory</h3>
+                  <div className="registry-inventory-list">
+                    {(selected.inventory || []).length === 0 ? <p className="muted-text">No public inventory found yet.</p> : null}
+                    {(selected.inventory || []).map((item: any, index: number) => (
+                      <div className="registry-inventory-item" key={`${item.name}-${index}`}>
+                        <strong>{item.name}</strong>
+                        <span>Qty: {item.quantity || 1}</span>
+                        {item.type ? <small>{item.type}</small> : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </section>
     </RequireDiscord>
   );

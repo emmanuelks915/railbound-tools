@@ -1404,3 +1404,37 @@ label textarea {
   color: rgba(44, 31, 22, 0.62);
   font-weight: 700;
 }
+
+/* OC Registry v1 */
+
+.registry-page-v1 { display: grid; gap: 1rem; }
+.registry-hero-card { grid-column: 1 / -1; }
+.registry-search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.75rem; margin-top: 1rem; }
+.registry-layout { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 1rem; align-items: start; }
+.registry-list, .registry-profile { min-height: 520px; }
+.registry-card-scroll { max-height: 680px; overflow-y: auto; display: grid; gap: 0.75rem; padding-right: 0.25rem; }
+.registry-character-card { width: 100%; text-align: left; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.8rem; align-items: center; border: 1px solid rgba(61, 51, 43, 0.1); border-radius: 20px; padding: 0.85rem; background: rgba(255, 255, 255, 0.58); color: inherit; cursor: pointer; }
+.registry-character-card.active { border-color: rgba(47, 111, 115, 0.45); background: rgba(47, 111, 115, 0.1); }
+.registry-character-card img, .registry-portrait-placeholder { width: 58px; height: 58px; border-radius: 18px; object-fit: cover; display: grid; place-items: center; background: rgba(47, 111, 115, 0.14); font-size: 1.4rem; font-weight: 900; }
+.registry-character-card strong { display: block; font-size: 1rem; }
+.registry-character-card span, .registry-character-card small { display: block; color: rgba(44, 31, 22, 0.62); margin-top: 0.15rem; }
+.registry-profile-header { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1rem; align-items: center; margin-bottom: 1.25rem; }
+.registry-profile-header img, .registry-profile-placeholder { width: 96px; height: 96px; border-radius: 28px; object-fit: cover; display: grid; place-items: center; background: rgba(47, 111, 115, 0.14); font-size: 2rem; font-weight: 900; }
+.registry-profile-header h2 { margin: 0.1rem 0; }
+.registry-section { border-top: 1px solid rgba(61, 51, 43, 0.1); padding-top: 1rem; margin-top: 1rem; }
+.registry-section h3 { margin-top: 0; }
+.registry-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.65rem; }
+.registry-stat { border-radius: 16px; padding: 0.85rem; background: rgba(255, 255, 255, 0.62); border: 1px solid rgba(61, 51, 43, 0.08); }
+.registry-stat span { display: block; font-size: 0.78rem; font-weight: 900; color: rgba(44, 31, 22, 0.58); }
+.registry-stat strong { display: block; margin-top: 0.25rem; font-size: 1.25rem; }
+.registry-chip-list { display: flex; flex-wrap: wrap; gap: 0.55rem; }
+.registry-chip { display: inline-flex; align-items: center; gap: 0.45rem; border-radius: 999px; padding: 0.6rem 0.8rem; background: rgba(47, 111, 115, 0.11); font-weight: 900; }
+.registry-chip small { color: rgba(44, 31, 22, 0.56); font-weight: 800; }
+.registry-inventory-list { display: grid; gap: 0.65rem; }
+.registry-inventory-item { display: flex; justify-content: space-between; gap: 1rem; border-radius: 16px; padding: 0.85rem; background: rgba(255, 255, 255, 0.62); border: 1px solid rgba(61, 51, 43, 0.08); }
+@media (max-width: 920px) {
+  .registry-layout { grid-template-columns: 1fr; }
+  .registry-list, .registry-profile { min-height: auto; }
+  .registry-card-scroll { max-height: 420px; }
+  .registry-search-row { grid-template-columns: 1fr; }
+}
