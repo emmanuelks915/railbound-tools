@@ -21,7 +21,7 @@ type CoreStats = {
   mana: number;
 };
 
-type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "staff" | "combat" | "registry" | "register";
+type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "staff" | "combat" | "registry" | "register" | "manage_oc";
 
 const STAT_LABELS: Record<keyof CoreStats, string> = {
   strength: "Strength",
@@ -116,6 +116,7 @@ function App() {
 
     ["planner", Calculator, "XP Planner"],
     ["oc", UserRound, "OC"],
+    ["manage_oc", UserRound, "Manage OC"],
     ["skills", Sparkles, "Skills"],
     ["inventory", Package, "Inventory"],
     ["shops", Store, "Shops"],
@@ -205,7 +206,8 @@ function App() {
       )}
       {tab === "activity" && <ActivityDashboard discordId={discordId} />}
       {tab === "planner" && <Planner discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
-      {tab === "oc" && <OCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "oc" && <OCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} jump={setTab} />}
+      {tab === "manage_oc" && <ManageOCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "inventory" && <InventoryDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "shops" && <ShopDashboard discordId={discordId} />}
       {tab === "skills" && <SkillsDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
@@ -933,7 +935,102 @@ function OCManagementCard({ discordId, characterId }: { discordId: string; chara
   );
 }
 
-function OCDashboard({ discordId, selectedCharacterId, setSelectedCharacterId }: { discordId: string; selectedCharacterId: string; setSelectedCharacterId: (id: string) => void }) {
+function ManageOCDashboard({
+  discordId,
+  selectedCharacterId,
+  setSelectedCharacterId,
+}: {
+  discordId: string;
+  selectedCharacterId: string;
+  setSelectedCharacterId: (id: string) => void;
+}) {
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [message, setMessage] = useState("");
+
+  async function loadCharacters() {
+    if (!discordId) return;
+
+    setMessage("");
+
+    try {
+      const data = await apiFetch(`/api/characters?discord_id=${discordId}`, {}, discordId);
+      const rows = Array.isArray(data) ? data : data.characters || data.data || [];
+      setCharacters(rows);
+
+      if (!selectedCharacterId && rows.length > 0) {
+        setSelectedCharacterId(String(rows[0].character_id || rows[0].id));
+      }
+    } catch (error: any) {
+      setMessage(error.message || "Could not load your OCs.");
+    }
+  }
+
+  useEffect(() => {
+    loadCharacters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId]);
+
+  const selected = characters.find(
+    (character) => String(character.character_id || character.id) === String(selectedCharacterId)
+  );
+
+  return (
+    <RequireDiscord discordId={discordId}>
+      <section className="manage-oc-page">
+        <div className="card manage-oc-hero">
+          <div>
+            <span className="activity-type-label">Character Controls</span>
+            <h2>Manage OC</h2>
+            <p className="muted-text">
+              Edit public profile details, sheet links, portraits, and visibility controls without cluttering the main OC dashboard.
+            </p>
+          </div>
+          <button className="ghost" onClick={loadCharacters}>
+            <RefreshCw size={16} /> Refresh OCs
+          </button>
+        </div>
+
+        <div className="card manage-oc-picker-card">
+          <label>
+            <span>Choose OC</span>
+            <select
+              value={selectedCharacterId}
+              onChange={(event) => setSelectedCharacterId(event.target.value)}
+            >
+              <option value="">Select an OC</option>
+              {characters.map((character) => {
+                const id = String(character.character_id || character.id || "");
+                return (
+                  <option value={id} key={id}>
+                    {character.name || "Unnamed OC"}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+
+          {selected ? (
+            <p className="muted-text">
+              Managing <strong>{selected.name}</strong>. Changes here update the OC record and public-facing profile fields.
+            </p>
+          ) : null}
+
+          {message ? <p className="message">{message}</p> : null}
+        </div>
+
+        {selectedCharacterId ? (
+          <OCManagementCard discordId={discordId} characterId={selectedCharacterId} />
+        ) : (
+          <div className="card">
+            <p className="muted-text">Pick an OC above to open management tools.</p>
+          </div>
+        )}
+      </section>
+    </RequireDiscord>
+  );
+}
+
+function OCDashboard({ discordId, selectedCharacterId, setSelectedCharacterId, jump }: { discordId: string; selectedCharacterId: string; setSelectedCharacterId: (id: string) => void; jump?: (tab: Tab) => void }) {
   const [summary, setSummary] = useState<any>(null);
   const [ownedSkills, setOwnedSkills] = useState<any[]>([]);
   const [skillRequests, setSkillRequests] = useState<any[]>([]);
@@ -1005,9 +1102,18 @@ function OCDashboard({ discordId, selectedCharacterId, setSelectedCharacterId }:
 
   return (
     <RequireDiscord discordId={discordId}>
+      {jump ? (
+        <div className="card oc-manage-jump-card">
+          <div>
+            <span className="activity-type-label">Need to edit?</span>
+            <h3>Manage this OC</h3>
+            <p className="muted-text">Open the dedicated management tab to edit profile details, archive, restore, or clean up test OCs.</p>
+          </div>
+          <button onClick={() => jump("manage_oc")}>Edit / Manage This OC</button>
+        </div>
+      ) : null}
       <OCMoneyCard discordId={discordId} characterId={selectedCharacterId} />
-      <OCManagementCard discordId={discordId} characterId={selectedCharacterId} />
-      <section className="grid oc-dashboard-grid">
+<section className="grid oc-dashboard-grid">
         <div className="card">
           <div className="card-title-row">
             <h2>OC Dashboard</h2>

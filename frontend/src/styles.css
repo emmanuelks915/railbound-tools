@@ -2060,3 +2060,56 @@ label textarea {
     grid-template-columns: 1fr;
   }
 }
+
+/* Manage OC separate tab */
+
+.manage-oc-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.manage-oc-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.manage-oc-picker-card {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.manage-oc-picker-card label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.manage-oc-picker-card label span {
+  color: rgba(44, 31, 22, 0.58);
+  font-size: 0.75rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.oc-manage-jump-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  border-color: rgba(47, 111, 115, 0.18);
+  background: rgba(47, 111, 115, 0.06);
+}
+
+.oc-manage-jump-card h3 {
+  margin: 0.15rem 0;
+}
+
+@media (max-width: 760px) {
+  .manage-oc-hero,
+  .oc-manage-jump-card {
+    display: grid;
+  }
+}
