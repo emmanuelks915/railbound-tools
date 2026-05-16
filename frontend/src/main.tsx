@@ -1806,10 +1806,43 @@ function OCRegistry({ discordId }: { discordId: string }) {
 
   function visibleStats(stats: any) {
     if (!stats) return [];
+
     const hidden = new Set(["guild_id", "character_id", "id", "created_at", "updated_at"]);
-    return Object.entries(stats)
-      .filter(([key, value]) => !hidden.has(key) && value !== null && value !== undefined && typeof value !== "object")
-      .slice(0, 20);
+    const preferredOrder = [
+      "strength",
+      "dexterity",
+      "stamina",
+      "magic_affinity",
+      "mana",
+      "hp",
+      "health",
+      "speed",
+      "dodge",
+      "blitz",
+      "carry_capacity",
+      "safe_output",
+      "fortitude",
+      "reaction_score",
+      "available_xp",
+      "spent_xp",
+      "total_xp",
+      "xp",
+    ];
+
+    const entries = Object.entries(stats).filter(
+      ([key, value]) => !hidden.has(key) && value !== null && value !== undefined && typeof value !== "object"
+    );
+
+    return entries.sort(([a], [b]) => {
+      const ai = preferredOrder.indexOf(a);
+      const bi = preferredOrder.indexOf(b);
+
+      if (ai === -1 && bi === -1) return a.localeCompare(b);
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+
+      return ai - bi;
+    });
   }
 
   return (
@@ -1872,7 +1905,11 @@ function OCRegistry({ discordId }: { discordId: string }) {
                       {character.title || character.species || "Registered OC"}
                       {character.faction ? ` • ${character.faction}` : ""}
                     </span>
-                    {character.owner_discord_id ? <small>Player: {character.owner_discord_id}</small> : null}
+                    {character.owner_display_name ? (
+                      <small>Player: {character.owner_display_name}</small>
+                    ) : character.owner_discord_id ? (
+                      <small>Player ID: {character.owner_discord_id}</small>
+                    ) : null}
                   </div>
                 </button>
               ))}
@@ -1898,7 +1935,11 @@ function OCRegistry({ discordId }: { discordId: string }) {
                       {[selected.title, selected.species, selected.origin, selected.faction].filter(Boolean).join(" • ") ||
                         "Public OC profile"}
                     </p>
-                    {selected.owner_discord_id ? <small>Player: {selected.owner_discord_id}</small> : null}
+                    {selected.owner_display_name ? (
+                      <small>Player: {selected.owner_display_name}</small>
+                    ) : selected.owner_discord_id ? (
+                      <small>Player ID: {selected.owner_discord_id}</small>
+                    ) : null}
                   </div>
                 </div>
 
