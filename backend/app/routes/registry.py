@@ -875,9 +875,6 @@ def list_registry_characters(
         if approval_status and approval_status not in {"approved", "active", "published", "registered"}:
             continue
 
-        if row.get("is_active") is False:
-            continue
-
         haystack = " ".join(
             str(value or "")
             for value in [

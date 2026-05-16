@@ -332,6 +332,7 @@ def create_character(payload: dict[str, Any] = Body(...), actor_discord_id: int 
         "guild_id": get_guild_id(),
         "user_id": int(actor_discord_id),
         "name": name,
+        "is_active": True,
     }
 
     if sheet_url:
