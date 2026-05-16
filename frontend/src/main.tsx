@@ -232,8 +232,8 @@ function RequireDiscord({ discordId, children }: { discordId: string; children: 
   if (!discordId) {
     return (
       <section className="card muted-card">
-        <h2>Testing login needed</h2>
-        <p>Paste your Discord ID in the top-right box for local testing. This will become Discord OAuth before public launch.</p>
+        <h2>Login required</h2>
+        <p>Please use Login with Discord to access Railbound Tools. Your account is used to load your characters, requests, staff access, and activity history.</p>
       </section>
     );
   }
