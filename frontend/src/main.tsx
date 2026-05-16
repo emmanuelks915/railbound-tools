@@ -563,6 +563,75 @@ function PreviewPanel({ preview }: { preview: any }) {
   );
 }
 
+function OCBalancesCard({ discordId, characterId }: { discordId: string; characterId: string }) {
+  const [data, setData] = useState<any>(null);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!discordId || !characterId) return;
+
+    setMessage("");
+
+    apiFetch(`/api/characters/${characterId}/balances`, {}, discordId)
+      .then(setData)
+      .catch((error) => {
+        setData(null);
+        setMessage(error.message || "Could not load balances.");
+      });
+  }, [discordId, characterId]);
+
+  if (!characterId) return null;
+
+  const xp = data?.xp || {};
+  const currencies = data?.currencies || [];
+
+  return (
+    <div className="card oc-balances-card">
+      <div className="card-title-row">
+        <div>
+          <h3>OC Balances</h3>
+          <p className="muted-text">Current XP and currency balances for the selected character.</p>
+        </div>
+        {xp.source ? <span className="pill">{xp.source}</span> : null}
+      </div>
+
+      {message ? <p className="message">{message}</p> : null}
+
+      <div className="oc-balances-grid">
+        <div className="oc-balance-tile">
+          <span>Available XP</span>
+          <strong>{xp.available_xp ?? xp.current_xp ?? "—"}</strong>
+        </div>
+        <div className="oc-balance-tile">
+          <span>Total XP</span>
+          <strong>{xp.total_xp ?? "—"}</strong>
+        </div>
+        <div className="oc-balance-tile">
+          <span>Spent XP</span>
+          <strong>{xp.spent_xp ?? "—"}</strong>
+        </div>
+
+        {currencies.length === 0 ? (
+          <div className="oc-balance-tile">
+            <span>Currency</span>
+            <strong>—</strong>
+          </div>
+        ) : null}
+
+        {currencies.map((currency: any, index: number) => (
+          <div className="oc-balance-tile" key={`${currency.currency_id || currency.name}-${index}`}>
+            <span>
+              {currency.emoji ? `${currency.emoji} ` : ""}
+              {currency.ticker || currency.name || "Currency"}
+            </span>
+            <strong>{currency.balance ?? 0}</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function OCDashboard({ discordId, selectedCharacterId, setSelectedCharacterId }: { discordId: string; selectedCharacterId: string; setSelectedCharacterId: (id: string) => void }) {
   const [summary, setSummary] = useState<any>(null);
   const [ownedSkills, setOwnedSkills] = useState<any[]>([]);
