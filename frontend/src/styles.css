@@ -1438,3 +1438,167 @@ label textarea {
   .registry-card-scroll { max-height: 420px; }
   .registry-search-row { grid-template-columns: 1fr; }
 }
+
+/* Citizen Registry v2 */
+
+.registry-page-v2 {
+  display: grid;
+  gap: 1rem;
+}
+
+.registry-layout-v2 {
+  grid-template-columns: minmax(320px, 440px) minmax(0, 1fr);
+}
+
+.citizen-registry-card {
+  width: 100%;
+  display: grid;
+  gap: 0.75rem;
+  text-align: left;
+  border: 1px solid rgba(61, 51, 43, 0.1);
+  border-radius: 20px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.62);
+  color: inherit;
+  cursor: pointer;
+}
+
+.citizen-registry-card.active {
+  border-color: rgba(47, 111, 115, 0.45);
+  background: rgba(47, 111, 115, 0.1);
+}
+
+.citizen-card-topline {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.citizen-card-topline strong {
+  display: block;
+  font-size: 1.02rem;
+}
+
+.citizen-card-topline span {
+  display: block;
+  margin-top: 0.15rem;
+  color: rgba(44, 31, 22, 0.62);
+  font-weight: 800;
+}
+
+.citizen-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(61, 51, 43, 0.08);
+  color: rgba(44, 31, 22, 0.62);
+  white-space: nowrap;
+}
+
+.citizen-status.active {
+  background: rgba(47, 111, 115, 0.14);
+  color: rgb(31, 92, 96);
+}
+
+.citizen-status.quiet {
+  background: rgba(173, 120, 48, 0.14);
+  color: rgb(117, 79, 28);
+}
+
+.citizen-status.inactive {
+  background: rgba(90, 83, 76, 0.12);
+  color: rgba(44, 31, 22, 0.62);
+}
+
+.citizen-card-fields {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+}
+
+.citizen-card-fields div {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.citizen-card-fields dt {
+  color: rgba(44, 31, 22, 0.55);
+  font-size: 0.75rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.citizen-card-fields dd {
+  margin: 0;
+  font-weight: 850;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.citizen-file-header {
+  align-items: start;
+}
+
+.citizen-file-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin-top: 0.55rem;
+}
+
+.citizen-file-meta small {
+  color: rgba(44, 31, 22, 0.62);
+  font-weight: 800;
+}
+
+.citizen-file-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.7rem;
+  margin-bottom: 1rem;
+}
+
+.citizen-file-grid div {
+  border-radius: 18px;
+  padding: 0.85rem;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(61, 51, 43, 0.08);
+}
+
+.citizen-file-grid span {
+  display: block;
+  color: rgba(44, 31, 22, 0.55);
+  font-size: 0.75rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.citizen-file-grid strong {
+  display: block;
+  margin-top: 0.25rem;
+}
+
+.citizen-file-grid small {
+  display: block;
+  margin-top: 0.2rem;
+  color: rgba(44, 31, 22, 0.58);
+  font-weight: 750;
+}
+
+@media (max-width: 920px) {
+  .registry-layout-v2 {
+    grid-template-columns: 1fr;
+  }
+}
