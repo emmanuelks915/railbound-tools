@@ -562,17 +562,23 @@ def _display_name_for_user(user: dict[str, Any] | None, fallback_id: str | None)
 
 
 def _public_stat_rows(sb, character_ids: list[str]) -> dict[str, dict[str, Any]]:
-    rows = _first_nonempty_source(
-        sb,
-        character_ids,
-        [
-            ("character_stats", "character_id"),
-            ("oc_stats", "character_id"),
-            ("stats", "character_id"),
-            ("derived_stats", "character_id"),
-            ("character_derived_stats", "character_id"),
-        ],
-    )
+    """Collect all public stats for each character.
+
+    Earlier versions used _first_nonempty_source(), which meant if character_stats
+    had Strength/Dexterity/Stamina, the registry stopped there and never checked
+    derived stat tables. This merges every known stat source so the public file can
+    show core stats plus derived stats.
+    """
+    sources = [
+        ("character_stats", "character_id"),
+        ("oc_stats", "character_id"),
+        ("stats", "character_id"),
+        ("derived_stats", "character_id"),
+        ("character_derived_stats", "character_id"),
+        ("oc_derived_stats", "character_id"),
+        ("character_stat_values", "character_id"),
+        ("stat_values", "character_id"),
+    ]
 
     stats: dict[str, dict[str, Any]] = {}
 
@@ -583,42 +589,74 @@ def _public_stat_rows(sb, character_ids: list[str]) -> dict[str, dict[str, Any]]
         "oc_id",
         "created_at",
         "updated_at",
+        "deleted_at",
+        "source",
+        "notes",
     }
 
-    for row in rows:
-        cid = str(row.get("character_id") or row.get("oc_id") or "")
-        if not cid:
-            continue
+    key_columns = [
+        "stat_key",
+        "key",
+        "name",
+        "stat_name",
+        "derived_key",
+        "derived_stat",
+        "label",
+    ]
 
-        bucket = stats.setdefault(cid, {})
+    value_columns = [
+        "stat_value",
+        "value",
+        "amount",
+        "score",
+        "total",
+        "computed_value",
+        "calculated_value",
+    ]
 
-        stat_key = (
-            row.get("stat_key")
-            or row.get("key")
-            or row.get("name")
-            or row.get("stat_name")
-        )
-        stat_value = (
-            row.get("stat_value")
-            if row.get("stat_value") is not None
-            else row.get("value")
-            if row.get("value") is not None
-            else row.get("amount")
-        )
+    for table, id_column in sources:
+        rows = _safe_select_for_ids(sb, table, id_column, character_ids)
 
-        if stat_key and stat_value is not None:
-            bucket[str(stat_key)] = stat_value
-            continue
-
-        for key, value in row.items():
-            if key in hidden_keys:
+        for row in rows:
+            cid = str(row.get("character_id") or row.get("oc_id") or row.get("id") or "")
+            if not cid:
                 continue
-            if value is None or isinstance(value, (dict, list)):
+
+            bucket = stats.setdefault(cid, {})
+
+            # Row-style tables:
+            # character_id | stat_key | stat_value
+            stat_key = None
+            for key_col in key_columns:
+                if row.get(key_col) not in (None, ""):
+                    stat_key = str(row.get(key_col))
+                    break
+
+            stat_value = None
+            for value_col in value_columns:
+                if row.get(value_col) is not None:
+                    stat_value = row.get(value_col)
+                    break
+
+            if stat_key and stat_value is not None:
+                bucket[stat_key] = stat_value
                 continue
-            bucket[key] = value
+
+            # Wide-row tables:
+            # character_id | strength | dexterity | stamina | safe_output...
+            for key, value in row.items():
+                if key in hidden_keys:
+                    continue
+                if value is None or isinstance(value, (dict, list)):
+                    continue
+
+                # Do not leak internal UUID-ish foreign keys as stats.
+                if key.endswith("_id"):
+                    continue
+
+                bucket[key] = value
 
     return stats
-
 
 def _skill_definitions(sb, skill_keys: list[str]) -> dict[str, dict[str, Any]]:
     if not skill_keys:
