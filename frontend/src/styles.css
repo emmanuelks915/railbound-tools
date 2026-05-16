@@ -1809,3 +1809,100 @@ label textarea {
   margin-top: 0.3rem;
   font-size: 1.4rem;
 }
+
+/* Dashboard OC Registration v1.1 polish */
+
+.oc-register-success {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  border-color: rgba(47, 123, 79, 0.22);
+  background: rgba(47, 123, 79, 0.08);
+}
+
+.trait-polish-toolbar {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0.85rem 0;
+}
+
+.trait-tier-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.trait-tier-filters button {
+  padding: 0.52rem 0.75rem;
+  border-radius: 999px;
+}
+
+.trait-tier-filters button.selected {
+  background: rgba(47, 111, 115, 0.18);
+  border-color: rgba(47, 111, 115, 0.45);
+}
+
+.trait-count-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  color: rgba(44, 31, 22, 0.6);
+  font-size: 0.82rem;
+  font-weight: 850;
+  margin-bottom: 0.55rem;
+}
+
+.trait-picker-grid.polished {
+  max-height: 600px;
+}
+
+.trait-picker-card small {
+  display: block;
+  color: rgba(44, 31, 22, 0.55);
+  font-weight: 750;
+}
+
+.selected-trait-list {
+  display: grid;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+}
+
+.selected-trait-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 18px;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(61, 51, 43, 0.08);
+}
+
+.selected-trait-row strong,
+.selected-trait-row span {
+  display: block;
+}
+
+.selected-trait-row span {
+  color: rgba(44, 31, 22, 0.6);
+  font-weight: 800;
+}
+
+.selected-trait-row em {
+  font-style: normal;
+  font-weight: 950;
+  color: rgb(31, 92, 96);
+}
+
+@media (max-width: 760px) {
+  .oc-register-success {
+    display: grid;
+  }
+
+  .trait-count-row,
+  .selected-trait-row {
+    align-items: flex-start;
+  }
+}

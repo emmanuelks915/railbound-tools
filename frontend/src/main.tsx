@@ -1847,6 +1847,384 @@ function SkillsDashboard({ discordId, selectedCharacterId, setSelectedCharacterI
 function OCRegistrationDashboard({ discordId, jump }: { discordId: string; jump: (tab: Tab) => void }) {
   const [options, setOptions] = useState<any>({ traits: [], max_starting_traits: 8 });
   const [message, setMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [validation, setValidation] = useState<any>(null);
+  const [traitSearch, setTraitSearch] = useState("");
+  const [traitTierFilter, setTraitTierFilter] = useState("all");
+  const [createdCharacterId, setCreatedCharacterId] = useState("");
+  const [form, setForm] = useState({
+    name: "",
+    sheet_url: "",
+    occupation: "",
+    affiliation: "",
+    blurb: "",
+    origin_trait_id: "",
+    trait_ids: [] as string[],
+  });
+
+  async function loadOptions() {
+    const data = await apiFetch("/api/oc-registration/options", {}, discordId);
+    setOptions(data);
+  }
+
+  useEffect(() => {
+    if (discordId) loadOptions().catch((error) => setMessage(error.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId]);
+
+  async function validate(nextForm = form) {
+    try {
+      const data = await apiFetch(
+        "/api/oc-registration/validate",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            origin_trait_id: nextForm.origin_trait_id,
+            trait_ids: nextForm.trait_ids,
+          }),
+        },
+        discordId
+      );
+      setValidation(data);
+      return data;
+    } catch (error: any) {
+      const data = { ok: false, error: error.message };
+      setValidation(data);
+      return data;
+    }
+  }
+
+  function updateForm(patch: Partial<typeof form>) {
+    const next = { ...form, ...patch };
+    setForm(next);
+    setSuccessMessage("");
+    setCreatedCharacterId("");
+    validate(next);
+  }
+
+  function toggleTrait(traitId: string) {
+    const exists = form.trait_ids.includes(traitId);
+    const nextTraitIds = exists
+      ? form.trait_ids.filter((id) => id !== traitId)
+      : [...form.trait_ids, traitId];
+
+    updateForm({ trait_ids: nextTraitIds });
+  }
+
+  async function submit() {
+    setSaving(true);
+    setMessage("");
+    setSuccessMessage("");
+
+    try {
+      const check = await validate();
+      if (check?.ok === false) {
+        setMessage(check.error || "Please fix the registration errors first.");
+        return;
+      }
+
+      const data = await apiFetch(
+        "/api/oc-registration/characters",
+        {
+          method: "POST",
+          body: JSON.stringify(form),
+        },
+        discordId
+      );
+
+      setCreatedCharacterId(data.character_id || "");
+      setSuccessMessage(data.message || "OC registered.");
+      setMessage("");
+
+      setForm({
+        name: "",
+        sheet_url: "",
+        occupation: "",
+        affiliation: "",
+        blurb: "",
+        origin_trait_id: "",
+        trait_ids: [],
+      });
+      setValidation(null);
+    } catch (error: any) {
+      setMessage(error.message || "Could not register OC.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function traitLabel(trait: any) {
+    const cost = Number(trait.cost || 0);
+    const sign = cost > 0 ? `+${cost}` : String(cost);
+    return `${trait.name || "Trait"} (${trait.tier || "?"}, ${sign})`;
+  }
+
+  function tierLabel(value: string) {
+    if (value === "all") return "All";
+    if (value === "keystone") return "Keystone";
+    return value.slice(0, 1).toUpperCase() + value.slice(1);
+  }
+
+  const traits = options.traits || [];
+  const originTraits = traits.filter((trait: any) => String(trait.tier || "").toLowerCase() === "origin");
+  const startingTraits = traits.filter((trait: any) => String(trait.tier || "").toLowerCase() !== "origin");
+
+  const selectedTraitObjects = [
+    ...traits.filter((trait: any) => trait.trait_id === form.origin_trait_id),
+    ...traits.filter((trait: any) => form.trait_ids.includes(trait.trait_id)),
+  ];
+
+  const query = traitSearch.trim().toLowerCase();
+
+  const filteredStartingTraits = startingTraits.filter((trait: any) => {
+    const tier = String(trait.tier || "").toLowerCase();
+    const haystack = [
+      trait.name,
+      trait.slug,
+      trait.tier,
+      trait.cost,
+      trait.exclusive_group,
+      JSON.stringify(trait.requirements_json || {}),
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    if (traitTierFilter !== "all" && tier !== traitTierFilter) return false;
+    if (query && !haystack.includes(query)) return false;
+
+    return true;
+  });
+
+  const summary = validation?.summary || {
+    positive: 0,
+    negative: 0,
+    overdraft_limit: 5,
+  };
+
+  const canSubmit = Boolean(form.name.trim()) && validation?.ok !== false && !saving;
+
+  return (
+    <RequireDiscord discordId={discordId}>
+      <section className="oc-register-page">
+        <div className="card oc-register-hero">
+          <div>
+            <span className="activity-type-label">Guided Intake</span>
+            <h2>Register a New OC</h2>
+            <p className="muted-text">
+              Register the character, connect their sheet, set public registry basics, and select starting traits.
+            </p>
+          </div>
+          <button className="ghost" onClick={loadOptions}>
+            <RefreshCw size={16} /> Refresh Options
+          </button>
+        </div>
+
+        {successMessage ? (
+          <div className="card oc-register-success">
+            <div>
+              <span className="activity-type-label">Registration Complete</span>
+              <h3>{successMessage}</h3>
+              <p className="muted-text">The OC has been created and should now appear in the Citizen Registry.</p>
+            </div>
+            <div className="auth-actions">
+              <button onClick={() => jump("registry")}>View Citizen Registry</button>
+              <button className="ghost" onClick={() => jump("oc")}>Go to OC Page</button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="oc-register-layout">
+          <div className="card">
+            <h3>1. Character Basics</h3>
+            <p className="muted-text">
+              Your full sheet still handles appearance, wardrobe, health, backstory, inventory, skills, relationships,
+              missions, events, and XP audit. This form makes the official OC record.
+            </p>
+
+            <div className="oc-register-form">
+              <label>
+                <span>Character Name</span>
+                <input
+                  value={form.name}
+                  onChange={(event) => updateForm({ name: event.target.value })}
+                  placeholder="Meris Philon"
+                />
+              </label>
+
+              <label>
+                <span>Character Sheet Link</span>
+                <input
+                  value={form.sheet_url}
+                  onChange={(event) => updateForm({ sheet_url: event.target.value })}
+                  placeholder="https://..."
+                />
+              </label>
+
+              <label>
+                <span>Occupation</span>
+                <input
+                  value={form.occupation}
+                  onChange={(event) => updateForm({ occupation: event.target.value })}
+                  placeholder="Engineer, medic, smuggler..."
+                />
+              </label>
+
+              <label>
+                <span>Affiliation</span>
+                <input
+                  value={form.affiliation}
+                  onChange={(event) => updateForm({ affiliation: event.target.value })}
+                  placeholder="Guild, crew, company, faction..."
+                />
+              </label>
+
+              <label className="oc-register-wide">
+                <span>Public Blurb</span>
+                <textarea
+                  value={form.blurb}
+                  onChange={(event) => updateForm({ blurb: event.target.value })}
+                  placeholder="A short public-facing description for the Citizen Registry."
+                  rows={4}
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="card">
+            <h3>2. Starting Traits</h3>
+            <p className="muted-text">
+              Choose one Origin trait, then select up to {options.max_starting_traits || 8} starting traits.
+            </p>
+
+            <label>
+              <span>Origin Trait</span>
+              <select
+                value={form.origin_trait_id}
+                onChange={(event) => updateForm({ origin_trait_id: event.target.value })}
+              >
+                <option value="">No Origin selected</option>
+                {originTraits.map((trait: any) => (
+                  <option value={trait.trait_id} key={trait.trait_id}>
+                    {traitLabel(trait)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="trait-polish-toolbar">
+              <input
+                value={traitSearch}
+                onChange={(event) => setTraitSearch(event.target.value)}
+                placeholder="Search traits..."
+              />
+
+              <div className="trait-tier-filters">
+                {["all", "minor", "reliable", "keystone", "negative"].map((tier) => (
+                  <button
+                    type="button"
+                    key={tier}
+                    className={traitTierFilter === tier ? "selected" : ""}
+                    onClick={() => setTraitTierFilter(tier)}
+                  >
+                    {tierLabel(tier)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="trait-count-row">
+              <span>{form.trait_ids.length}/{options.max_starting_traits || 8} starting traits selected</span>
+              <span>{filteredStartingTraits.length} visible</span>
+            </div>
+
+            <div className="trait-picker-grid polished">
+              {filteredStartingTraits.length === 0 ? (
+                <p className="muted-text">No traits match that filter.</p>
+              ) : null}
+
+              {filteredStartingTraits.map((trait: any) => {
+                const selected = form.trait_ids.includes(trait.trait_id);
+                const disabled = !selected && form.trait_ids.length >= (options.max_starting_traits || 8);
+
+                return (
+                  <button
+                    type="button"
+                    key={trait.trait_id}
+                    className={`trait-picker-card ${selected ? "selected" : ""}`}
+                    disabled={disabled}
+                    onClick={() => toggleTrait(trait.trait_id)}
+                  >
+                    <strong>{trait.name || "Trait"}</strong>
+                    <span>{trait.tier || "?"} • {Number(trait.cost || 0) >= 0 ? "+" : ""}{trait.cost || 0}</span>
+                    {trait.exclusive_group ? <small>Group: {trait.exclusive_group}</small> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="card oc-register-summary-card">
+            <h3>3. Review & Submit</h3>
+
+            <div className="summary">
+              <div>
+                <span>Positive</span>
+                <strong>{summary.positive}</strong>
+              </div>
+              <div>
+                <span>Negative</span>
+                <strong>{summary.negative}</strong>
+              </div>
+              <div>
+                <span>Limit</span>
+                <strong>{summary.overdraft_limit}</strong>
+              </div>
+            </div>
+
+            {validation?.error ? <p className="message">{validation.error}</p> : null}
+            {validation?.ok ? <p className="good-text">✅ Trait build is legal.</p> : null}
+
+            <h4>Selected Traits</h4>
+            <div className="selected-trait-list">
+              {selectedTraitObjects.length === 0 ? <p className="muted-text">No traits selected yet.</p> : null}
+
+              {selectedTraitObjects.map((trait: any) => {
+                const isOrigin = trait.trait_id === form.origin_trait_id;
+
+                return (
+                  <div className="selected-trait-row" key={trait.trait_id}>
+                    <div>
+                      <strong>{trait.name}</strong>
+                      <span>{trait.tier} • {Number(trait.cost || 0) >= 0 ? "+" : ""}{trait.cost || 0}</span>
+                    </div>
+                    {isOrigin ? (
+                      <em>Origin</em>
+                    ) : (
+                      <button type="button" className="ghost" onClick={() => toggleTrait(trait.trait_id)}>
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {message ? <p className="message">{message}</p> : null}
+
+            <button onClick={submit} disabled={!canSubmit}>
+              {saving ? "Registering..." : "Register OC"}
+            </button>
+          </div>
+        </div>
+      </section>
+    </RequireDiscord>
+  );
+}
+
+: { discordId: string; jump: (tab: Tab) => void }) {
+  const [options, setOptions] = useState<any>({ traits: [], max_starting_traits: 8 });
+  const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [validation, setValidation] = useState<any>(null);
   const [form, setForm] = useState({
