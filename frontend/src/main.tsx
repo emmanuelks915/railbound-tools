@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Calculator, Check, ClipboardList, Home, Package, RefreshCw, Save, Send, ShieldCheck, Sparkles, Store, UserRound, X, , Users } from "lucide-react";
+import { Calculator, Check, ClipboardList, Home, Package, RefreshCw, Save, Send, ShieldCheck, Sparkles, Store, UserRound, X, Users } from "lucide-react";
 import "./styles.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
