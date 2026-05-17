@@ -4952,13 +4952,15 @@ function StaffQueue({ discordId }: { discordId: string }) {
       const successMessage = data.message || "Resource grant complete.";
       setMessage(successMessage);
       setStaffConfirmation(successMessage);
-      setStaffConfirmation(data.message || "Resource grant complete.");
+      window.alert(successMessage);
       setResourceForm((current) => ({
         ...current,
         amount: current.grant_type === "xp" ? "600" : "",
         reason: "",
       }));
       await Promise.all([loadQueue(), loadStaffResourceOptions()]);
+      setMessage(successMessage);
+      setStaffConfirmation(successMessage);
     } catch (error: any) {
       setMessage(error?.message || "Could not grant resources.");
     }
