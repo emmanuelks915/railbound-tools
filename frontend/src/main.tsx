@@ -4,7 +4,7 @@ import { Calculator, Check, ClipboardList, Home, Package, RefreshCw, Save, Send,
 import "./styles.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-const ALLOW_DEV_LOGIN = import.meta.env.VITE_ALLOW_DEV_LOGIN === "true";
+const ALLOW_DEV_Welcome to Railbound Tools = import.meta.env.VITE_ALLOW_DEV_Welcome to Railbound Tools === "true";
 
 type Character = {
   character_id: string;
@@ -46,7 +46,7 @@ async function apiFetch(path: string, options: RequestInit = {}, discordId?: str
   const authToken = localStorage.getItem("railbound_auth_token");
   if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
 
-  if (ALLOW_DEV_LOGIN && discordId) headers.set("X-Discord-Id", discordId);
+  if (ALLOW_DEV_Welcome to Railbound Tools && discordId) headers.set("X-Discord-Id", discordId);
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -165,12 +165,12 @@ return (
               />
             ) : null}
 
-            <span>{authUser ? "Logged in with Discord" : "Login"}</span>
+            <span>{authUser ? "Logged in with Discord" : "Welcome to Railbound Tools"}</span>
 
             <strong>
               {authUser
                 ? authUser.global_name || authUser.username || authUser.discord_id || discordId
-                : "Use Discord OAuth"}
+                : "Sign in with Discord to access your characters, inventory, shops, and staff tools."}
             </strong>
 
             {authUser?.username ? (
@@ -182,8 +182,8 @@ return (
 
           <div className="auth-actions">
             {!authUser ? (
-              <button type="button" onClick={loginWithDiscord}>
-                Login with Discord
+              <button type="button" onClick={loginWithDiscord} className="discord-login-button">
+                Continue with Discord
               </button>
             ) : (
               <button type="button" className="ghost" onClick={logoutDiscord}>
@@ -192,7 +192,7 @@ return (
             )}
           </div>
 
-          {ALLOW_DEV_LOGIN ? (
+          {ALLOW_DEV_Welcome to Railbound Tools ? (
 <label className="auth-dev-login">
             <span>Dev fallback</span>
             <input
@@ -324,8 +324,8 @@ function RequireDiscord({ discordId, children }: { discordId: string; children: 
   if (!discordId) {
     return (
       <section className="card muted-card">
-        <h2>Login required</h2>
-        <p>Please use Login with Discord to access Railbound Tools. Your account is used to load your characters, requests, staff access, and activity history.</p>
+        <h2>Welcome to Railbound Tools required</h2>
+        <p>Please use Continue with Discord to access Railbound Tools. Your account is used to load your characters, requests, staff access, and activity history.</p>
       </section>
     );
   }
@@ -3948,12 +3948,12 @@ function OCRegistry({ discordId }: { discordId: string }) {
 function ProductionQADashboard({ discordId, jump }: { discordId: string; jump: (tab: Tab) => void }) {
   const checklistGroups = [
     {
-      title: "Access & Login",
+      title: "Access & Welcome to Railbound Tools",
       items: [
         "Open Railway frontend on desktop",
         "Open Railway frontend on mobile",
-        "Login with Discord",
-        "Confirm Dev Login is not visible publicly",
+        "Continue with Discord",
+        "Confirm Dev Welcome to Railbound Tools is not visible publicly",
         "Confirm user avatar/name loads after login",
       ],
     },
