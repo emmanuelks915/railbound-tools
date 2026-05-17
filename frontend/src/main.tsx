@@ -68,31 +68,9 @@ function App() {
   const [discordId, setDiscordId] = useState(() => localStorage.getItem("railbound_discord_id") || "");
   const [selectedCharacterId, setSelectedCharacterId] = useState(() => localStorage.getItem("railbound_character_id") || "");
 
-  // Strict Selected OC Guard v1:
-  // A selected OC is only valid if it exists inside the current logged-in user's loaded OC list.
-  const validCharacterIds = useMemo(() => {
-    return new Set(
-      (characters || []).map((character: any) =>
-        String(character.character_id || character.id || "")
-      ).filter(Boolean)
-    );
-  }, [characters]);
-
-  const safeSelectedCharacterId =
-    selectedCharacterId && validCharacterIds.has(String(selectedCharacterId))
-      ? selectedCharacterId
-      : "";
-
-  useEffect(() => {
-    if (selectedCharacterId && !safeSelectedCharacterId) {
-      setSelectedCharacterId("");
-    }
-  }, [selectedCharacterId, safeSelectedCharacterId]);
-
-
   // Kill Stale OC Ghost v1: never allow one Discord account to inherit another account's selected OC/data.
   const lastDiscordIdRef = useRef<string | null>(null);
-  const ocSessionKey = `${discordId || "logged-out"}:${safeSelectedCharacterId || "none"}`;
+  const ocSessionKey = `${discordId || "logged-out"}:${selectedCharacterId || "none"}`;
 
   useEffect(() => {
     const lastDiscordId = lastDiscordIdRef.current;
@@ -300,21 +278,21 @@ return (
       {tab === "home" && (
         <HomeDashboard
           discordId={discordId}
-          selectedCharacterId={safeSelectedCharacterId}
+          selectedCharacterId={selectedCharacterId}
           setSelectedCharacterId={setSelectedCharacterId}
           jump={setTab}
         />
       )}
       {tab === "activity" && <StaffOnly discordId={discordId}><ActivityDashboard key={`ActivityDashboard-${ocSessionKey}`} discordId={discordId} /></StaffOnly>}
       {tab === "qa" && <StaffOnly discordId={discordId}><ProductionQADashboard discordId={discordId} jump={setTab} /></StaffOnly>}
-      {tab === "planner" && <Planner discordId={discordId} selectedCharacterId={safeSelectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
-      {tab === "oc" && <OCDashboard key={`OCDashboard-${ocSessionKey}`} discordId={discordId} selectedCharacterId={safeSelectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} jump={setTab} />}
-      {tab === "manage_oc" && <ManageOCDashboard key={`ManageOCDashboard-${ocSessionKey}`} discordId={discordId} selectedCharacterId={safeSelectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
-      {tab === "inventory" && <InventoryDashboard key={`InventoryDashboard-${ocSessionKey}`} discordId={discordId} selectedCharacterId={safeSelectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
-      {tab === "shops" && <ShopDashboard discordId={discordId} selectedCharacterId={safeSelectedCharacterId} />}
+      {tab === "planner" && <Planner discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "oc" && <OCDashboard key={`OCDashboard-${ocSessionKey}`} discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} jump={setTab} />}
+      {tab === "manage_oc" && <ManageOCDashboard key={`ManageOCDashboard-${ocSessionKey}`} discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "inventory" && <InventoryDashboard key={`InventoryDashboard-${ocSessionKey}`} discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "shops" && <ShopDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} />}
       {tab === "shop_owner" && <ShopOwnerDashboard discordId={discordId} />}
-      {tab === "skills" && <SkillsDashboard key={`SkillsDashboard-${ocSessionKey}`} discordId={discordId} selectedCharacterId={safeSelectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
-      {tab === "rp" && <RpHubDashboard discordId={discordId} selectedCharacterId={safeSelectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "skills" && <SkillsDashboard key={`SkillsDashboard-${ocSessionKey}`} discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "rp" && <RpHubDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "register" && <OCRegistrationDashboard discordId={discordId} jump={setTab} />}
       {tab === "registry" && <OCRegistry discordId={discordId} />}
       {tab === "staff" && <StaffOnly discordId={discordId}><StaffQueue discordId={discordId} /></StaffOnly>}
@@ -1290,18 +1268,7 @@ function OCDashboard({ discordId, selectedCharacterId, setSelectedCharacterId, j
 
     // Kill Stale OC Ghost v1: blank OC dashboard guard
   if (!selectedCharacterId) {
-      // Strict Selected OC Guard v1: never render stale OC data when no valid OC is selected.
-  if (!selectedCharacterId) {
     return (
-      <section className="card">
-        <h2>OC Dashboard</h2>
-        <p className="muted-text">Select one of your OCs to view stats, XP, skills, and derived values.</p>
-      </section>
-    );
-  }
-
-
-return (
       <section className="card">
         <h2>OC Dashboard</h2>
         <p className="muted-text">Select one of your OCs to view stats, XP, skills, and derived values.</p>
@@ -1506,17 +1473,7 @@ function InventoryDashboard({
     return item.type || "Item";
   }
 
-    // Strict Selected OC Guard v1: blank InventoryDashboard
-  if (!selectedCharacterId) {
-    return (
-      <section className="card">
-        <h2>Inventory</h2>
-        <p className="muted-text">Select one of your OCs first.</p>
-      </section>
-    );
-  }
-
-return (
+  return (
     <RequireDiscord discordId={discordId}>
       <section className="inventory-page">
         <div className="card inventory-hero">
@@ -2787,17 +2744,7 @@ function SkillsDashboard({ discordId, selectedCharacterId, setSelectedCharacterI
       const needle = searchText.trim().toLowerCase();
       if (!needle) return true;
 
-        // Strict Selected OC Guard v1: blank SkillsDashboard
-  if (!selectedCharacterId) {
-    return (
-      <section className="card">
-        <h2>Skills</h2>
-        <p className="muted-text">Select one of your OCs first.</p>
-      </section>
-    );
-  }
-
-return (
+      return (
         String(skill.name || "").toLowerCase().includes(needle) ||
         String(skill.skill_key || "").toLowerCase().includes(needle) ||
         String(skill.tree || "").toLowerCase().includes(needle) ||
