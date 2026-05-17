@@ -3504,196 +3504,164 @@ function ProductionQADashboard({ discordId, jump }: { discordId: string; jump: (
 
 function ActivityDashboard({ discordId }: { discordId: string }) {
   const [events, setEvents] = useState<any[]>([]);
-  const [sources, setSources] = useState<Record<string, number>>({});
-  const [activityType, setActivityType] = useState("all");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [eventType, setEventType] = useState("all");
+  const [status, setStatus] = useState("all");
+  const [search, setSearch] = useState("");
 
-  async function loadActivity(type = activityType) {
+  async function loadActivity() {
+    if (!discordId) return;
+
+    setLoading(true);
     setMessage("");
 
-    const params = new URLSearchParams({
-      type,
-      limit: "100",
-    });
+    try {
+      const params = new URLSearchParams({ limit: "120" });
+      if (eventType !== "all") params.set("event_type", eventType);
+      if (status !== "all") params.set("status", status);
 
-    if (startDate) params.set("start_date", startDate);
-    if (endDate) params.set("end_date", endDate);
-
-    const data = await apiFetch(`/api/activity/recent?${params.toString()}`, {}, discordId);
-
-    setEvents(data.events || []);
-    setSources(data.sources || {});
+      const data = await apiFetch(`/api/activity-log?${params.toString()}`, {}, discordId);
+      setEvents(data.events || []);
+      if (data.message) setMessage(data.message);
+    } catch (error: any) {
+      setMessage(error.message || "Could not load activity.");
+      setEvents([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
-    if (discordId) loadActivity().catch((error) => setMessage(error.message));
+    loadActivity();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discordId, activityType, startDate, endDate]);
-
-  function setFilter(type: string) {
-    setActivityType(type);
-  }
-
-  function clearDates() {
-    setStartDate("");
-    setEndDate("");
-  }
-
-  function statusLabel(status: string | null | undefined) {
-    return String(status || "unknown").replaceAll("_", " ").toUpperCase();
-  }
-
-  function eventIcon(type: string) {
-    if (type === "skills") return "✨";
-    if (type === "stats") return "📈";
-    if (type === "shops") return "🛒";
-    if (type === "xp") return "⭐";
-    return "📝";
-  }
+  }, [discordId, eventType, status]);
 
   function formatDate(value: string | null | undefined) {
     if (!value) return "Unknown time";
-
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return String(value);
-
-    return parsed.toLocaleString();
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString();
   }
 
-  function actorText(event: any) {
-    const pieces = [];
+  function eventIcon(type: string) {
+    const normalized = String(type || "").toLowerCase();
 
-    if (event.actor_id) pieces.push(`Actor: ${event.actor_id}`);
-    if (event.staff_id) pieces.push(`Staff: ${event.staff_id}`);
-
-    return pieces.join(" • ");
+    if (normalized.includes("oc")) return <UserRound size={18} />;
+    if (normalized.includes("skill")) return <Sparkles size={18} />;
+    if (normalized.includes("stat")) return <Calculator size={18} />;
+    if (normalized.includes("xp")) return <Sparkles size={18} />;
+    if (normalized.includes("currency")) return <Package size={18} />;
+    return <ClipboardList size={18} />;
   }
+
+  function prettyText(value: string) {
+    return String(value || "info").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  function statusClass(value: string) {
+    const normalized = String(value || "").toLowerCase();
+    if (["approved", "complete", "completed", "created", "restored"].includes(normalized)) return "approved";
+    if (["denied", "deleted", "archived", "rejected"].includes(normalized)) return "denied";
+    if (["pending", "submitted", "open"].includes(normalized)) return "pending";
+    return "info";
+  }
+
+  const visibleEvents = events.filter((event) => {
+    const query = search.trim().toLowerCase();
+    if (!query) return true;
+
+    const haystack = [
+      event.label,
+      event.event_type,
+      event.status,
+      event.character_name,
+      event.character_id,
+      event.actor_id,
+      event.note,
+      event.source,
+    ].join(" ").toLowerCase();
+
+    return haystack.includes(query);
+  });
+
+  const eventTypes = Array.from(new Set(events.map((event) => event.event_type).filter(Boolean))).sort();
+  const statuses = Array.from(new Set(events.map((event) => event.status).filter(Boolean))).sort();
 
   return (
     <RequireDiscord discordId={discordId}>
-      <section className="activity-page-v1">
-        <div className="card activity-hero-card">
-          <div className="card-title-row">
-            <div>
-              <h2>Recent Activity</h2>
-              <p className="muted-text">
-                A staff paper trail for stat requests, skill purchases, shop listings, and XP changes.
-              </p>
-            </div>
-            <button className="ghost" onClick={() => loadActivity()}>
-              <RefreshCw size={16} /> Refresh
-            </button>
+      <section className="activity-log-page">
+        <div className="card activity-log-hero">
+          <div>
+            <span className="activity-type-label">Recent Activity</span>
+            <h2>Activity Log</h2>
+            <p className="muted-text">
+              Track OC registration, staff requests, XP/currency changes, and recent system activity in one place.
+            </p>
           </div>
-
-          {message && <p className="message">{message}</p>}
-
-          <div className="activity-filter-tabs">
-            {[
-              ["all", "All"],
-              ["skills", "Skills"],
-              ["stats", "Stats"],
-              ["shops", "Shops"],
-              ["xp", "XP"],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                className={activityType === value ? "active" : ""}
-                onClick={() => setFilter(value)}
-              >
-                {label}
-                <span>{value === "all" ? events.length : sources[value] ?? 0}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="activity-date-filters">
-            <label>
-              From
-              <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
-            </label>
-            <label>
-              To
-              <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
-            </label>
-            <button className="ghost" onClick={clearDates} disabled={!startDate && !endDate}>
-              Clear Dates
-            </button>
-          </div>
+          <button className="ghost" onClick={loadActivity} disabled={loading}>
+            <RefreshCw size={16} /> {loading ? "Loading..." : "Refresh"}
+          </button>
         </div>
 
-        <div className="activity-timeline">
-          {events.length === 0 ? (
-            <div className="card">
-              <p>No activity found for this filter.</p>
+        <div className="card activity-log-filters">
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search activity..."
+          />
+
+          <select value={eventType} onChange={(event) => setEventType(event.target.value)}>
+            <option value="all">All event types</option>
+            {eventTypes.map((type) => (
+              <option value={type} key={type}>
+                {prettyText(type)}
+              </option>
+            ))}
+          </select>
+
+          <select value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="all">All statuses</option>
+            {statuses.map((item) => (
+              <option value={item} key={item}>
+                {prettyText(item)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {message ? <p className="message">{message}</p> : null}
+
+        <div className="activity-log-list">
+          {visibleEvents.length === 0 ? (
+            <div className="card activity-empty-state">
+              <strong>No activity found.</strong>
+              <p className="muted-text">Try refreshing, clearing filters, or performing an action like registering an OC.</p>
             </div>
           ) : null}
 
-          {events.map((event, index) => (
-            <div className={`activity-card ${event.type}`} key={`${event.type}-${event.details?.request_id || event.details?.item_id || index}`}>
-              <div className="activity-marker">{eventIcon(event.type)}</div>
+          {visibleEvents.map((event, index) => (
+            <div className="card activity-log-row" key={`${event.source}-${event.created_at}-${index}`}>
+              <div className={`activity-log-icon ${statusClass(event.status)}`}>{eventIcon(event.event_type)}</div>
 
-              <div className="activity-content">
-                <div className="activity-card-header">
+              <div className="activity-log-main">
+                <div className="activity-log-title-row">
                   <div>
-                    <span className="activity-type-label">{String(event.type || "activity").toUpperCase()}</span>
-                    <h3>{event.title}</h3>
+                    <strong>{event.label || prettyText(event.event_type)}</strong>
+                    <span>{prettyText(event.event_type)} • {formatDate(event.created_at)}</span>
                   </div>
-                  <span className={`pill ${String(event.status || "").includes("approved") ? "good" : ""}`}>
-                    {statusLabel(event.status)}
-                  </span>
+                  <em className={`activity-status-pill ${statusClass(event.status)}`}>{prettyText(event.status)}</em>
                 </div>
 
-                <p className="activity-time">{formatDate(event.timestamp)}</p>
+                <div className="activity-log-meta">
+                  {event.character_name ? <span>OC: {event.character_name}</span> : null}
+                  {!event.character_name && event.character_id ? <span>OC ID: {event.character_id}</span> : null}
+                  {event.actor_id ? <span>Actor: {event.actor_id}</span> : null}
+                  {event.amount !== null && event.amount !== undefined ? <span>Amount: {String(event.amount)}</span> : null}
+                  {event.source ? <span>Source: {event.source}</span> : null}
+                </div>
 
-                {event.character?.name ? (
-                  <p>
-                    OC: <strong>{event.character.name}</strong>
-                  </p>
-                ) : null}
-
-                {event.details?.cost !== undefined && event.details?.cost !== null ? (
-                  <p>Cost: <strong>{event.details.cost} XP</strong></p>
-                ) : null}
-
-                {event.details?.amount !== undefined && event.details?.amount !== null ? (
-                  <p>Amount: <strong>{event.details.amount} XP</strong></p>
-                ) : null}
-
-                {event.details?.skill?.tree ? (
-                  <p>
-                    Tree: <strong>{event.details.skill.tree}</strong>
-                    {event.details.skill.tier !== undefined ? <> • Tier: <strong>{event.details.skill.tier}</strong></> : null}
-                  </p>
-                ) : null}
-
-                {event.details?.price !== undefined && event.details?.price !== null ? (
-                  <p>Price: <strong>{event.details.price}</strong></p>
-                ) : null}
-
-                {event.details?.reason ? (
-                  <div className="activity-note">
-                    <strong>Reason</strong>
-                    <p>{event.details.reason}</p>
-                  </div>
-                ) : null}
-
-                {event.details?.note ? (
-                  <div className="activity-note">
-                    <strong>Submitter Note</strong>
-                    <p>{event.details.note}</p>
-                  </div>
-                ) : null}
-
-                {event.details?.staff_note ? (
-                  <div className="activity-note staff">
-                    <strong>Staff Note</strong>
-                    <p>{event.details.staff_note}</p>
-                  </div>
-                ) : null}
-
-                {actorText(event) ? <small>{actorText(event)}</small> : null}
+                {event.note ? <p className="activity-log-note">{event.note}</p> : null}
               </div>
             </div>
           ))}
@@ -3702,6 +3670,8 @@ function ActivityDashboard({ discordId }: { discordId: string }) {
     </RequireDiscord>
   );
 }
+
+
 
 function RpHubDashboard({
   discordId,
