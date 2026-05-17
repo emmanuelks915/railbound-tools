@@ -1277,6 +1277,40 @@ return (
           )}
         </div>
 
+
+        <div className="card oc-traits-card">
+          <div className="card-title-row">
+            <div>
+              <h2>Traits</h2>
+              <p className="muted-text">Selected traits currently attached to this OC.</p>
+            </div>
+            <span className="pill">{(summary?.traits || []).length} traits</span>
+          </div>
+
+          {!summary ? <p>Select an OC to load traits.</p> : null}
+
+          {summary && (summary.traits || []).length === 0 ? (
+            <p>No traits found yet. Approved or staff-granted traits will appear here once attached to this OC.</p>
+          ) : null}
+
+          {summary && (summary.traits || []).length > 0 ? (
+            <div className="owned-skill-list">
+              {(summary.traits || []).map((trait: any, index: number) => (
+                <div className="owned-skill-row" key={`${trait.slug || trait.trait_id || trait.name}-${index}`}>
+                  <div>
+                    <strong>{trait.name || trait.slug || "Trait"}</strong>
+                    {trait.description ? <small>{trait.description}</small> : null}
+                  </div>
+                  <div className="owned-skill-meta">
+                    <span>{trait.tier || trait.category || "Trait"}</span>
+                    {trait.cost !== null && trait.cost !== undefined ? <span>{trait.cost} pts</span> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
         <div className="card oc-skills-card">
           <div className="card-title-row">
             <div>
@@ -4628,6 +4662,7 @@ function RpHubDashboard({
 function StaffQueue({ discordId }: { discordId: string }) {
   const [requests, setRequests] = useState<any[]>([]);
   const [message, setMessage] = useState("");
+  const [staffConfirmation, setStaffConfirmation] = useState("");
   const [status, setStatus] = useState("pending");
   const [requestType, setRequestType] = useState("all");
   const [search, setSearch] = useState("");
@@ -4658,6 +4693,7 @@ function StaffQueue({ discordId }: { discordId: string }) {
 
     setLoading(true);
     setMessage("");
+    setStaffConfirmation("");
 
     try {
       const params = new URLSearchParams({
@@ -4708,6 +4744,7 @@ function StaffQueue({ discordId }: { discordId: string }) {
       );
 
       setMessage(data.message || "Request approved.");
+      setStaffConfirmation(data.message || "Request approved.");
       await loadQueue();
     } catch (error: any) {
       setMessage(error.message || "Could not approve request.");
@@ -4737,6 +4774,7 @@ function StaffQueue({ discordId }: { discordId: string }) {
       );
 
       setMessage(data.message || "Request denied.");
+      setStaffConfirmation(data.message || "Request denied.");
       await loadQueue();
     } catch (error: any) {
       setMessage(error.message || "Could not deny request.");
@@ -4840,6 +4878,7 @@ function StaffQueue({ discordId }: { discordId: string }) {
       );
 
       setMessage(data.message || "Skill override granted.");
+      setStaffConfirmation(data.message || "Skill override granted.");
       window.alert(data.message || "Skill override granted.");
       setOverrideForm((current) => ({ ...current, skill_key: "", reason: "" }));
       await Promise.all([loadQueue(), loadSkillOverrideOptions()]);
@@ -4903,6 +4942,7 @@ function StaffQueue({ discordId }: { discordId: string }) {
       );
 
       setMessage(data.message || "Resource grant complete.");
+      setStaffConfirmation(data.message || "Resource grant complete.");
       window.alert(data.message || "Resource grant complete.");
       setResourceForm((current) => ({
         ...current,
@@ -4973,6 +5013,12 @@ function StaffQueue({ discordId }: { discordId: string }) {
         </div>
 
         {message ? <p className="message">{message}</p> : null}
+        {staffConfirmation ? (
+          <div className="card staff-confirmation-card">
+            <strong>Done</strong>
+            <p>{staffConfirmation}</p>
+          </div>
+        ) : null}
 
         <div className="request-card-list">
           {visibleRequests.length === 0 ? (
