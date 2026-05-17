@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from app.permissions import is_staff
-from app.security import actor_from_header
+from app.security import actor_from_header, require_staff
 from app.services import get_guild_id, sb_data
 from app.supabase_client import get_supabase
 
