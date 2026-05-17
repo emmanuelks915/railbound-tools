@@ -1226,367 +1226,223 @@ function InventoryDashboard({
   selectedCharacterId: string;
   setSelectedCharacterId: (id: string) => void;
 }) {
-  const [entries, setEntries] = useState<any[]>([]);
-  const [loadouts, setLoadouts] = useState<any[]>([]);
-  const [activeLoadout, setActiveLoadout] = useState<string | null>(null);
-  const [newLoadoutName, setNewLoadoutName] = useState("");
-  const [builderItems, setBuilderItems] = useState<Record<string, number>>({});
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [data, setData] = useState<any>({ items: [], currencies: [], types: [] });
+  const [search, setSearch] = useState("");
+  const [itemType, setItemType] = useState("all");
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  async function load() {
-    if (!selectedCharacterId) return;
+  async function loadCharacters() {
+    if (!discordId) return;
 
+    try {
+      const result = await apiFetch(`/api/characters?discord_id=${discordId}`, {}, discordId);
+      const rows = Array.isArray(result) ? result : result.characters || result.data || [];
+      setCharacters(rows);
+
+      if (!selectedCharacterId && rows.length > 0) {
+        setSelectedCharacterId(String(rows[0].character_id || rows[0].id));
+      }
+    } catch (error: any) {
+      setMessage(error.message || "Could not load your OCs.");
+    }
+  }
+
+  async function loadInventory() {
+    if (!discordId || !selectedCharacterId) return;
+
+    setLoading(true);
     setMessage("");
 
-    const inv = await apiFetch(
-      `/api/characters/${selectedCharacterId}/inventory`,
-      {},
-      discordId
-    );
-    const inventoryEntries = inv.entries || [];
-    setEntries(inventoryEntries);
+    try {
+      const params = new URLSearchParams();
+      if (search.trim()) params.set("search", search.trim());
+      if (itemType !== "all") params.set("item_type", itemType);
 
-    const lo = await apiFetch(
-      `/api/characters/${selectedCharacterId}/loadouts`,
-      {},
-      discordId
-    );
-    setLoadouts(lo.loadouts || []);
-    setActiveLoadout(lo.active_loadout_name || null);
+      const suffix = params.toString() ? `?${params.toString()}` : "";
+      const result = await apiFetch(`/api/inventory/characters/${selectedCharacterId}${suffix}`, {}, discordId);
+      setData(result);
+    } catch (error: any) {
+      setData({ items: [], currencies: [], types: [] });
+      setMessage(error.message || "Could not load inventory.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
-    if (selectedCharacterId && discordId) {
-      load().catch((error) => setMessage(error.message));
-    }
+    loadCharacters();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCharacterId, discordId]);
+  }, [discordId]);
 
-  function getItemId(entry: any) {
-    return String(entry.item_id || "");
+  useEffect(() => {
+    loadInventory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId, selectedCharacterId, itemType]);
+
+  const selected = characters.find(
+    (character) => String(character.character_id || character.id) === String(selectedCharacterId)
+  );
+
+  const items = data.items || [];
+  const currencies = data.currencies || [];
+  const types = Array.from(new Set([...(data.types || []), ...items.map((item: any) => item.type || "Item")])).sort();
+
+  function submitSearch(event: React.FormEvent) {
+    event.preventDefault();
+    loadInventory();
   }
 
-  function getItemName(itemId: string) {
-    const entry = entries.find((e) => String(e.item_id) === String(itemId));
-    return entry?.item?.name || "Unknown Item";
-  }
-
-  function getItemWu(itemId: string) {
-    const entry = entries.find((e) => String(e.item_id) === String(itemId));
-    return Number(entry?.item?.wu || 0);
-  }
-
-  function maxQtyForItem(itemId: string) {
-    const entry = entries.find((e) => String(e.item_id) === String(itemId));
-    return Number(entry?.qty || 0);
-  }
-
-  function setBuilderQty(itemId: string, rawQty: number) {
-    const maxQty = maxQtyForItem(itemId);
-    const qty = Math.max(0, Math.min(Number(rawQty || 0), maxQty));
-
-    setBuilderItems((current) => {
-      const next = { ...current };
-
-      if (qty <= 0) {
-        delete next[itemId];
-      } else {
-        next[itemId] = qty;
-      }
-
-      return next;
-    });
-  }
-
-  function fillFromCurrentInventory() {
-    const next: Record<string, number> = {};
-
-    for (const entry of entries) {
-      const itemId = getItemId(entry);
-      const qty = Number(entry.qty || 0);
-
-      if (itemId && qty > 0) {
-        next[itemId] = qty;
-      }
-    }
-
-    setBuilderItems(next);
-    setMessage("Builder filled from current inventory.");
-  }
-
-  function clearBuilder() {
-    setBuilderItems({});
-    setMessage("Builder cleared.");
-  }
-
-  function editExistingLoadout(loadout: any) {
-    setNewLoadoutName(loadout.loadout_name || "");
-    setBuilderItems(loadout.items || {});
-    setMessage(`Loaded "${loadout.loadout_name}" into the builder.`);
-  }
-
-  const selectedItemCount = Object.keys(builderItems).length;
-
-  const totalWu = Object.entries(builderItems).reduce((total, [itemId, qty]) => {
-    return total + getItemWu(itemId) * Number(qty || 0);
-  }, 0);
-
-  async function saveBuilderLoadout() {
-    if (!selectedCharacterId) return;
-
-    const name = newLoadoutName.trim();
-
-    if (!name) {
-      setMessage("Name your loadout first.");
-      return;
-    }
-
-    if (Object.keys(builderItems).length === 0) {
-      setMessage("Add at least one item to the loadout.");
-      return;
-    }
-
-    await apiFetch(
-      `/api/characters/${selectedCharacterId}/loadouts`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          items: builderItems,
-        }),
-      },
-      discordId
-    );
-
-    setMessage(`Saved loadout "${name}".`);
-    await load();
-  }
-
-  async function saveSnapshot() {
-    if (!selectedCharacterId) return;
-
-    const name = newLoadoutName.trim();
-
-    if (!name) {
-      setMessage("Name your loadout first.");
-      return;
-    }
-
-    await apiFetch(
-      `/api/characters/${selectedCharacterId}/loadouts`,
-      {
-        method: "POST",
-        body: JSON.stringify({ name }),
-      },
-      discordId
-    );
-
-    setMessage("Loadout saved from current inventory.");
-    await load();
-  }
-
-  async function setActive(name: string | null) {
-    await apiFetch(
-      `/api/characters/${selectedCharacterId}/active-loadout`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({ name }),
-      },
-      discordId
-    );
-
-    setMessage(name ? `Active loadout set to ${name}.` : "Active loadout cleared.");
-    await load();
+  function itemBadge(item: any) {
+    if (item.is_equipped) return "Equipped";
+    if (item.is_locked) return "Locked";
+    return item.type || "Item";
   }
 
   return (
     <RequireDiscord discordId={discordId}>
-      <section className="grid">
-        <div className="card">
-          <div className="card-title-row">
+      <section className="inventory-page">
+        <div className="card inventory-hero">
+          <div>
+            <span className="activity-type-label">Character Goods</span>
             <h2>Inventory</h2>
-            <button className="ghost" onClick={load}>
-              <RefreshCw size={16} /> Refresh
-            </button>
+            <p className="muted-text">
+              Review an OC’s items, quantities, categories, sources, and currency balances.
+            </p>
           </div>
+          <button className="ghost" onClick={loadInventory} disabled={loading}>
+            <RefreshCw size={16} /> {loading ? "Loading..." : "Refresh"}
+          </button>
+        </div>
 
-          <CharacterSelect
-            discordId={discordId}
-            selectedCharacterId={selectedCharacterId}
-            setSelectedCharacterId={setSelectedCharacterId}
-          />
+        <div className="card inventory-controls">
+          <label>
+            <span>Choose OC</span>
+            <select
+              value={selectedCharacterId}
+              onChange={(event) => setSelectedCharacterId(event.target.value)}
+            >
+              <option value="">Select an OC</option>
+              {characters.map((character) => {
+                const id = String(character.character_id || character.id || "");
+                return (
+                  <option value={id} key={id}>
+                    {character.name || "Unnamed OC"}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
 
-          {message && <p className="message">{message}</p>}
+          <form onSubmit={submitSearch} className="inventory-search-form">
+            <label>
+              <span>Search</span>
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search items, source, notes..."
+              />
+            </label>
+            <button type="submit">Search</button>
+          </form>
 
-          <div className="item-list">
-            {entries.length === 0 ? <p>Inventory is empty or no OC selected.</p> : null}
+          <label>
+            <span>Category</span>
+            <select value={itemType} onChange={(event) => setItemType(event.target.value)}>
+              <option value="all">All categories</option>
+              {types.map((type: any) => (
+                <option value={type} key={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
-            {entries.map((entry) => {
-              const itemId = getItemId(entry);
-              const selectedQty = builderItems[itemId] || 0;
+        {message ? <p className="message">{message}</p> : null}
 
-              return (
-                <div className="item-card" key={itemId}>
-                  <div className="card-title-row">
-                    <div>
-                      <h3>
-                        {entry.item?.name || "Unknown Item"} x{entry.qty}
-                      </h3>
-                      <p>
-                        Class: {entry.item?.item_class || "—"} • WU:{" "}
-                        {entry.item?.wu ?? "—"}
-                      </p>
-                    </div>
-
-                    <label style={{ maxWidth: 140 }}>
-                      Loadout Qty
-                      <input
-                        type="number"
-                        min={0}
-                        max={Number(entry.qty || 0)}
-                        value={selectedQty}
-                        onChange={(event) =>
-                          setBuilderQty(itemId, Number(event.target.value || 0))
-                        }
-                      />
-                    </label>
-                  </div>
-
-                  {entry.item?.sheet_url ? (
-                    <a href={entry.item.sheet_url} target="_blank" rel="noreferrer">
-                      Open sheet
-                    </a>
-                  ) : null}
-                </div>
-              );
-            })}
+        <div className="inventory-summary-grid">
+          <div className="card inventory-summary-card">
+            <span>Selected OC</span>
+            <strong>{selected?.name || data.character?.name || "—"}</strong>
+          </div>
+          <div className="card inventory-summary-card">
+            <span>Unique Items</span>
+            <strong>{data.total_items ?? items.length}</strong>
+          </div>
+          <div className="card inventory-summary-card">
+            <span>Total Quantity</span>
+            <strong>{data.total_quantity ?? items.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0)}</strong>
           </div>
         </div>
 
-        <div className="card">
-          <h2>Loadout Builder</h2>
-          <p className="muted-text">
-            Pick item quantities from inventory, name the loadout, then save it.
-          </p>
-
-          <label>
-            Loadout Name
-            <input
-              value={newLoadoutName}
-              onChange={(event) => setNewLoadoutName(event.target.value)}
-              placeholder="Forest Run"
-            />
-          </label>
-
-          <div className="summary">
+        <div className="card inventory-wallet-card">
+          <div className="card-title-row">
             <div>
-              <span>Item Types</span>
-              <strong>{selectedItemCount}</strong>
-            </div>
-            <div>
-              <span>Total WU</span>
-              <strong>{totalWu}</strong>
-            </div>
-            <div>
-              <span>Active</span>
-              <strong>{activeLoadout || "—"}</strong>
+              <h3>Currency Balances</h3>
+              <p className="muted-text">Quick money preview for this OC.</p>
             </div>
           </div>
 
-          <div className="actions">
-            <button className="ghost" onClick={fillFromCurrentInventory}>
-              Fill Current Inventory
-            </button>
-            <button className="ghost" onClick={clearBuilder}>
-              <X size={16} /> Clear
-            </button>
-          </div>
-
-          <div className="item-list">
-            {Object.keys(builderItems).length === 0 ? (
-              <p>No items selected for this loadout yet.</p>
+          <div className="inventory-currency-grid">
+            {currencies.length === 0 ? (
+              <div className="inventory-empty-inline">
+                <strong>No currency found.</strong>
+                <span>Wallet balances will show here once this OC has money.</span>
+              </div>
             ) : null}
 
-            {Object.entries(builderItems).map(([itemId, qty]) => (
-              <div className="request-card" key={itemId}>
-                <div>
-                  <h3>{getItemName(itemId)}</h3>
-                  <p>
-                    Qty: {qty} • WU: {getItemWu(itemId) * Number(qty || 0)}
-                  </p>
-                </div>
-
-                <button className="danger" onClick={() => setBuilderQty(itemId, 0)}>
-                  Remove
-                </button>
+            {currencies.map((currency: any, index: number) => (
+              <div className="inventory-currency-tile" key={`${currency.currency_id || currency.name}-${index}`}>
+                <span>
+                  {currency.emoji ? `${currency.emoji} ` : ""}
+                  {currency.ticker || currency.name || "Currency"}
+                </span>
+                <strong>{currency.balance ?? 0}</strong>
+                {currency.name && currency.ticker ? <small>{currency.name}</small> : null}
               </div>
             ))}
           </div>
-
-          <div className="actions">
-            <button onClick={saveBuilderLoadout}>
-              <Save size={16} /> Save Built Loadout
-            </button>
-            <button className="ghost" onClick={saveSnapshot}>
-              Save Full Inventory Snapshot
-            </button>
-          </div>
         </div>
 
-        <div className="card">
-          <h2>Saved Loadouts</h2>
-          <p className="muted-text">
-            Edit saved loadouts, mark one active, or clear the active loadout.
-          </p>
+        <div className="inventory-item-grid">
+          {items.length === 0 ? (
+            <div className="card inventory-empty-state">
+              <strong>No items found.</strong>
+              <p className="muted-text">
+                This OC does not have inventory rows yet, or your search/filter did not match anything.
+              </p>
+            </div>
+          ) : null}
 
-          <div className="item-list">
-            {loadouts.length === 0 ? <p>No saved loadouts.</p> : null}
-
-            {loadouts.map((lo) => {
-              const itemCount = Object.keys(lo.items || {}).length;
-
-              return (
-                <div className="request-card" key={lo.loadout_name}>
-                  <div>
-                    <h3>
-                      {activeLoadout === lo.loadout_name ? "⭐ " : ""}
-                      {lo.loadout_name}
-                    </h3>
-                    <p>{itemCount} item types</p>
-
-                    {lo.items ? (
-                      <small>
-                        {Object.entries(lo.items)
-                          .slice(0, 4)
-                          .map(([itemId, qty]) => `${getItemName(itemId)} x${qty}`)
-                          .join(" • ")}
-                        {Object.keys(lo.items).length > 4 ? " • ..." : ""}
-                      </small>
-                    ) : null}
-                  </div>
-
-                  <div className="actions">
-                    <button className="ghost" onClick={() => editExistingLoadout(lo)}>
-                      Edit
-                    </button>
-                    <button className="ghost" onClick={() => setActive(lo.loadout_name)}>
-                      Set Active
-                    </button>
-                    {activeLoadout === lo.loadout_name ? (
-                      <button className="danger" onClick={() => setActive(null)}>
-                        Clear
-                      </button>
-                    ) : null}
-                  </div>
+          {items.map((item: any, index: number) => (
+            <div className="card inventory-item-card" key={`${item.inventory_id || item.name}-${index}`}>
+              <div className="inventory-item-top">
+                <div>
+                  <span className="activity-type-label">{itemBadge(item)}</span>
+                  <h3>{item.name || "Unnamed Item"}</h3>
                 </div>
-              );
-            })}
-          </div>
+                <strong className="inventory-quantity">×{item.quantity ?? 1}</strong>
+              </div>
+
+              {item.description ? <p className="muted-text">{item.description}</p> : null}
+
+              <div className="inventory-item-meta">
+                <span>Type: {item.type || "Item"}</span>
+                {item.source ? <span>Source: {item.source}</span> : null}
+                {item.is_locked ? <span>Locked</span> : null}
+                {item.is_equipped ? <span>Equipped</span> : null}
+              </div>
+            </div>
+          ))}
         </div>
       </section>
     </RequireDiscord>
   );
 }
+
+
 
 function ShopDashboard({ discordId }
 

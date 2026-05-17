@@ -1,141 +1,275 @@
 from __future__ import annotations
 
-from uuid import UUID
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.models import ActiveLoadoutRequest, LoadoutSaveRequest
-from app.permissions import require_character_access
+from app.permissions import is_staff
 from app.security import actor_from_header
 from app.services import get_guild_id, sb_data
 from app.supabase_client import get_supabase
 
-router = APIRouter(prefix="/api", tags=["inventory"])
+router = APIRouter(prefix="/api/inventory", tags=["inventory"])
 
 
-@router.get("/items")
-def list_item_catalog(active_only: bool = True, actor_discord_id: int | None = Depends(actor_from_header)):
-    # Any signed-in user can browse the item catalog; staff-only edit is handled elsewhere.
+def _as_list(value: Any) -> list[dict[str, Any]]:
+    rows = sb_data(value) or []
+    return rows if isinstance(rows, list) else []
+
+
+def _safe_rows(builder) -> list[dict[str, Any]]:
+    try:
+        return _as_list(builder.execute())
+    except Exception:
+        return []
+
+
+def _load_character(sb, character_id: str) -> dict[str, Any] | None:
+    for column in ("character_id", "id"):
+        rows = _safe_rows(
+            sb.table("characters")
+            .select("*")
+            .eq("guild_id", get_guild_id())
+            .eq(column, character_id)
+            .limit(1)
+        )
+        if rows:
+            return rows[0]
+
+        rows = _safe_rows(
+            sb.table("characters")
+            .select("*")
+            .eq(column, character_id)
+            .limit(1)
+        )
+        if rows:
+            return rows[0]
+
+    return None
+
+
+def _owner_id(character: dict[str, Any]) -> str | None:
+    value = (
+        character.get("user_id")
+        or character.get("discord_id")
+        or character.get("owner_discord_id")
+        or character.get("player_discord_id")
+    )
+    return str(value) if value is not None else None
+
+
+def _can_view(character: dict[str, Any], actor_discord_id: int | None) -> bool:
     if actor_discord_id is None:
-        raise HTTPException(status_code=401, detail="Missing X-Discord-Id header.")
-    sb = get_supabase()
-    q = sb.table("items").select("*").eq("guild_id", get_guild_id()).order("name", desc=False).limit(500)
-    if active_only:
-        q = q.eq("is_active", True)
-    return {"items": sb_data(q.execute()) or []}
+        return False
+
+    owner_id = _owner_id(character)
+    if owner_id is not None and str(owner_id) == str(actor_discord_id):
+        return True
+
+    return is_staff(int(actor_discord_id))
 
 
-@router.get("/characters/{character_id}/inventory")
-def character_inventory(character_id: UUID, actor_discord_id: int | None = Depends(actor_from_header)):
-    sb = get_supabase()
-    require_character_access(sb, character_id, actor_discord_id)
-    gid = get_guild_id()
+def _number(value: Any, default: int | float = 0) -> int | float:
+    if value is None or value == "":
+        return default
 
-    entries_res = (
-        sb.table("inventory_entries")
-        .select("item_id,qty,updated_at")
-        .eq("guild_id", gid)
-        .eq("character_id", str(character_id))
-        .order("updated_at", desc=True)
-        .limit(500)
-        .execute()
-    )
-    entries = sb_data(entries_res) or []
-    item_ids = [str(e["item_id"]) for e in entries if e.get("item_id")]
+    try:
+        amount = float(value)
+        return int(amount) if amount.is_integer() else round(amount, 2)
+    except Exception:
+        return default
 
-    items_by_id = {}
-    if item_ids:
-        item_res = (
-            sb.table("items")
-            .select("item_id,name,item_class,wu,sheet_url,notes,is_active")
-            .eq("guild_id", gid)
-            .in_("item_id", item_ids)
-            .execute()
+
+def _item_name(row: dict[str, Any]) -> str:
+    for key in ("item_name", "name", "title", "label", "shop_item_name"):
+        if row.get(key):
+            return str(row.get(key))
+    return "Unnamed Item"
+
+
+def _item_type(row: dict[str, Any]) -> str:
+    for key in ("item_type", "type", "category", "rarity", "slot"):
+        if row.get(key):
+            return str(row.get(key))
+    return "Item"
+
+
+def _quantity(row: dict[str, Any]) -> int | float:
+    for key in ("quantity", "qty", "amount", "count", "stack"):
+        if row.get(key) is not None:
+            return _number(row.get(key), 1)
+    return 1
+
+
+def _normalize_item(row: dict[str, Any], source: str) -> dict[str, Any]:
+    return {
+        "inventory_id": str(row.get("inventory_id") or row.get("id") or row.get("item_id") or ""),
+        "item_id": str(row.get("item_id") or row.get("shop_item_id") or ""),
+        "name": _item_name(row),
+        "type": _item_type(row),
+        "quantity": _quantity(row),
+        "description": row.get("description") or row.get("details") or row.get("notes") or row.get("note"),
+        "source": row.get("source") or row.get("origin") or source,
+        "is_locked": bool(row.get("is_locked") or row.get("locked") or row.get("bound")),
+        "is_equipped": bool(row.get("is_equipped") or row.get("equipped")),
+        "is_public": row.get("is_public"),
+        "metadata": row.get("metadata") or row.get("details_json") or row,
+        "raw": row,
+    }
+
+
+def _inventory_rows(sb, character_id: str) -> list[dict[str, Any]]:
+    candidates = [
+        ("character_inventory", "character_id"),
+        ("oc_inventory", "character_id"),
+        ("inventory", "character_id"),
+        ("items_owned", "character_id"),
+        ("character_items", "character_id"),
+    ]
+
+    all_items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    for table, column in candidates:
+        rows = _safe_rows(
+            sb.table(table)
+            .select("*")
+            .eq("guild_id", get_guild_id())
+            .eq(column, character_id)
+            .limit(500)
         )
-        for row in sb_data(item_res) or []:
-            items_by_id[str(row["item_id"])] = row
 
-    out = []
-    for entry in entries:
-        iid = str(entry.get("item_id") or "")
-        out.append({**entry, "item": items_by_id.get(iid)})
+        if not rows:
+            rows = _safe_rows(
+                sb.table(table)
+                .select("*")
+                .eq(column, character_id)
+                .limit(500)
+            )
 
-    return {"entries": out}
+        for row in rows:
+            item = _normalize_item(row, table)
+            key = item["inventory_id"] or f"{table}:{item['name']}:{item['type']}:{item['quantity']}"
+            if key in seen:
+                continue
+            seen.add(key)
+            all_items.append(item)
+
+    return all_items
 
 
-@router.get("/characters/{character_id}/loadouts")
-def list_loadouts(character_id: UUID, actor_discord_id: int | None = Depends(actor_from_header)):
-    sb = get_supabase()
-    require_character_access(sb, character_id, actor_discord_id)
-    gid = get_guild_id()
-
-    char_res = (
-        sb.table("characters")
-        .select("active_loadout_name")
-        .eq("character_id", str(character_id))
-        .limit(1)
-        .execute()
-    )
-    char_rows = sb_data(char_res) or []
-    active = char_rows[0].get("active_loadout_name") if char_rows else None
-
-    res = (
-        sb.table("inventory_loadouts")
+def _currency_rows(sb, character_id: str) -> list[dict[str, Any]]:
+    rows = _safe_rows(
+        sb.table("wallets")
         .select("*")
-        .eq("guild_id", gid)
-        .eq("character_id", str(character_id))
-        .order("updated_at", desc=True)
-        .limit(100)
-        .execute()
+        .eq("guild_id", get_guild_id())
+        .eq("character_id", character_id)
+        .limit(250)
     )
-    return {"active_loadout_name": active, "loadouts": sb_data(res) or []}
 
-
-@router.post("/characters/{character_id}/loadouts")
-def save_loadout(character_id: UUID, payload: LoadoutSaveRequest, actor_discord_id: int | None = Depends(actor_from_header)):
-    sb = get_supabase()
-    require_character_access(sb, character_id, actor_discord_id)
-    gid = get_guild_id()
-
-    name = payload.name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Loadout name is required.")
-
-    items_map = payload.items
-    if items_map is None:
-        inv = (
-            sb.table("inventory_entries")
-            .select("item_id,qty")
-            .eq("guild_id", gid)
-            .eq("character_id", str(character_id))
-            .execute()
+    if not rows:
+        rows = _safe_rows(
+            sb.table("wallets")
+            .select("*")
+            .eq("character_id", character_id)
+            .limit(250)
         )
-        entries = sb_data(inv) or []
-        items_map = {str(e["item_id"]): int(e.get("qty") or 0) for e in entries if int(e.get("qty") or 0) > 0}
-    else:
-        items_map = {str(k): int(v) for k, v in items_map.items() if int(v) > 0}
 
-    existing = (
-        sb.table("inventory_loadouts")
-        .select("loadout_name")
-        .eq("guild_id", gid)
-        .eq("character_id", str(character_id))
-        .eq("loadout_name", name)
-        .limit(1)
-        .execute()
-    )
-    if sb_data(existing):
-        sb.table("inventory_loadouts").update({"items": items_map}).eq("guild_id", gid).eq("character_id", str(character_id)).eq("loadout_name", name).execute()
-    else:
-        sb.table("inventory_loadouts").insert({"guild_id": gid, "character_id": str(character_id), "loadout_name": name, "items": items_map}).execute()
+    if not rows:
+        rows = _safe_rows(
+            sb.table("character_wallets")
+            .select("*")
+            .eq("character_id", character_id)
+            .limit(250)
+        )
 
-    return {"ok": True, "loadout_name": name, "item_count": len(items_map)}
+    currency_ids = [str(row.get("currency_id")) for row in rows if row.get("currency_id")]
+    currencies: dict[str, dict[str, Any]] = {}
+
+    if currency_ids:
+        currency_rows = _safe_rows(
+            sb.table("currencies")
+            .select("*")
+            .eq("guild_id", get_guild_id())
+            .in_("currency_id", currency_ids)
+            .limit(250)
+        )
+
+        if not currency_rows:
+            currency_rows = _safe_rows(
+                sb.table("currencies")
+                .select("*")
+                .in_("currency_id", currency_ids)
+                .limit(250)
+            )
+
+        for row in currency_rows:
+            cid = str(row.get("currency_id") or row.get("id") or "")
+            if cid:
+                currencies[cid] = row
+
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        currency_id = str(row.get("currency_id") or "")
+        currency = currencies.get(currency_id, {})
+        out.append(
+            {
+                "currency_id": currency_id or None,
+                "name": currency.get("name") or row.get("currency") or row.get("currency_name") or "Currency",
+                "ticker": currency.get("ticker") or currency.get("code") or row.get("ticker"),
+                "emoji": currency.get("emoji") or row.get("emoji"),
+                "balance": _number(row.get("balance") if row.get("balance") is not None else row.get("amount")),
+            }
+        )
+
+    return out
 
 
-@router.patch("/characters/{character_id}/active-loadout")
-def set_active_loadout(character_id: UUID, payload: ActiveLoadoutRequest, actor_discord_id: int | None = Depends(actor_from_header)):
+@router.get("/characters/{character_id}")
+def get_character_inventory(
+    character_id: str,
+    actor_discord_id: int | None = Depends(actor_from_header),
+    search: str | None = Query(None),
+    item_type: str | None = Query(None),
+):
     sb = get_supabase()
-    require_character_access(sb, character_id, actor_discord_id)
-    name = payload.name.strip() if payload.name else None
-    sb.table("characters").update({"active_loadout_name": name}).eq("character_id", str(character_id)).execute()
-    return {"ok": True, "active_loadout_name": name}
+    character = _load_character(sb, character_id)
+
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found.")
+
+    if not _can_view(character, actor_discord_id):
+        raise HTTPException(status_code=403, detail="You can only view your own inventory.")
+
+    items = _inventory_rows(sb, character_id)
+    currencies = _currency_rows(sb, character_id)
+
+    if search:
+        q = search.lower().strip()
+        items = [
+            item for item in items
+            if q in " ".join([
+                item.get("name") or "",
+                item.get("type") or "",
+                item.get("description") or "",
+                item.get("source") or "",
+            ]).lower()
+        ]
+
+    if item_type and item_type != "all":
+        items = [item for item in items if str(item.get("type") or "").lower() == item_type.lower()]
+
+    types = sorted({str(item.get("type") or "Item") for item in items})
+
+    return {
+        "character": {
+            "character_id": character.get("character_id") or character.get("id") or character_id,
+            "name": character.get("name") or "Unnamed OC",
+            "owner_discord_id": _owner_id(character),
+        },
+        "items": items,
+        "currencies": currencies,
+        "types": types,
+        "total_items": len(items),
+        "total_quantity": sum(_number(item.get("quantity"), 0) for item in items),
+    }
