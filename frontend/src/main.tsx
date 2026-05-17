@@ -4683,6 +4683,15 @@ function StaffQueue({ discordId }: { discordId: string }) {
     currency_id: "",
     reason: "Starting OC setup grant.",
   });
+  const [traitBenefitTraits, setTraitBenefitTraits] = useState<any[]>([]);
+  const [traitBenefitSkills, setTraitBenefitSkills] = useState<any[]>([]);
+  const [traitBenefitCharacters, setTraitBenefitCharacters] = useState<any[]>([]);
+  const [traitBenefitForm, setTraitBenefitForm] = useState({
+    character_id: "",
+    trait_slug: "",
+    skill_key: "",
+    reason: "",
+  });
   const [loading, setLoading] = useState(false);
   const [workingKey, setWorkingKey] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -4954,6 +4963,84 @@ function StaffQueue({ discordId }: { discordId: string }) {
       setMessage(error?.message || "Could not grant resources.");
     }
   }
+
+
+  useEffect(() => {
+    loadTraitBenefitOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function loadTraitBenefitOptions() {
+    try {
+      const data = await apiFetch("/api/staff/trait-benefits/options", {}, discordId);
+      setTraitBenefitCharacters(data.characters || []);
+      setTraitBenefitTraits(data.traits || []);
+      setTraitBenefitSkills(data.skills || []);
+    } catch (error: any) {
+      console.warn("Could not load trait benefit options", error);
+    }
+  }
+
+  const selectedTraitBenefit = traitBenefitTraits.find((trait: any) =>
+    String(trait.slug || "") === String(traitBenefitForm.trait_slug || "")
+  );
+
+  const traitAllowedSkillKeys = selectedTraitBenefit?.grant_config?.skill_keys || [];
+  const traitFilteredSkills = traitAllowedSkillKeys.length > 0
+    ? traitBenefitSkills.filter((skill: any) => traitAllowedSkillKeys.includes(skill.skill_key))
+    : traitBenefitSkills;
+
+  async function applyTraitBenefit() {
+    setMessage("");
+    setStaffConfirmation("");
+
+    if (!traitBenefitForm.character_id) {
+      setMessage("Choose an OC before applying a trait benefit.");
+      return;
+    }
+
+    if (!traitBenefitForm.trait_slug) {
+      setMessage("Choose a trait or origin first.");
+      return;
+    }
+
+    if (!traitBenefitForm.skill_key) {
+      setMessage("Choose the free skill to grant.");
+      return;
+    }
+
+    try {
+      const traitName = selectedTraitBenefit?.name || traitBenefitForm.trait_slug;
+      const selectedSkill = traitBenefitSkills.find((skill: any) => skill.skill_key === traitBenefitForm.skill_key);
+      const reason = traitBenefitForm.reason.trim()
+        || `Granted ${selectedSkill?.name || traitBenefitForm.skill_key} from ${traitName} trait benefit.`;
+
+      const data = await apiFetch(
+        "/api/staff/trait-benefits/apply",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            ...traitBenefitForm,
+            reason,
+          }),
+        },
+        discordId
+      );
+
+      setMessage(data.message || "Trait benefit applied.");
+      setStaffConfirmation(data.message || "Trait benefit applied.");
+      setTraitBenefitForm((current) => ({
+        ...current,
+        skill_key: "",
+        reason: "",
+      }));
+
+      await Promise.all([loadQueue(), loadTraitBenefitOptions(), loadSkillOverrideOptions()]);
+    } catch (error: any) {
+      setMessage(error?.message || "Could not apply trait benefit.");
+    }
+  }
+
 
   return (
     <RequireDiscord discordId={discordId}>

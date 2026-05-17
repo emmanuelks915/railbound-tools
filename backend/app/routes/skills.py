@@ -642,4 +642,279 @@ def grant_staff_skill_override(
         "character": character,
         "skill": skill,
     }
+# --- Staff Trait Benefit Resolver v1 ---
 
+def _trait_grant_config(trait: dict[str, Any]) -> dict[str, Any]:
+    effects = trait.get("effects_json") or {}
+    if not isinstance(effects, dict):
+        effects = {}
+
+    grants = (
+        effects.get("grants")
+        or effects.get("grant")
+        or effects.get("benefit")
+        or effects.get("benefits")
+        or {}
+    )
+
+    if isinstance(grants, list):
+        grants = {"type": "skill_choice", "skills": grants}
+    if not isinstance(grants, dict):
+        grants = {}
+
+    raw_skills = (
+        grants.get("skills")
+        or grants.get("skill_keys")
+        or grants.get("choices")
+        or grants.get("allowed_skills")
+        or grants.get("eligible_skills")
+        or []
+    )
+
+    if isinstance(raw_skills, str):
+        raw_skills = [raw_skills]
+    if not isinstance(raw_skills, list):
+        raw_skills = []
+
+    skill_keys: list[str] = []
+    for item in raw_skills:
+        if isinstance(item, str):
+            key = item
+        elif isinstance(item, dict):
+            key = item.get("skill_key") or item.get("key") or item.get("skill")
+        else:
+            key = None
+
+        if key and str(key) not in skill_keys:
+            skill_keys.append(str(key))
+
+    return {
+        "type": grants.get("type") or ("skill_choice" if skill_keys else "manual_skill_choice"),
+        "count": int(grants.get("count") or 1),
+        "skill_keys": skill_keys,
+        "reason_label": grants.get("reason_label") or "Trait Benefit",
+        "raw": grants,
+    }
+
+
+@router.get("/staff/trait-benefits/options")
+def staff_trait_benefit_options(actor_discord_id: int | None = Depends(actor_from_header)):
+    require_staff(actor_discord_id)
+
+    sb = get_supabase()
+    gid = get_guild_id()
+
+    characters = sb_data(
+        sb.table("characters")
+        .select("character_id,name,user_id,is_active")
+        .eq("guild_id", gid)
+        .eq("is_active", True)
+        .order("name", desc=False)
+        .limit(1000)
+        .execute()
+    ) or []
+
+    traits = sb_data(
+        sb.table("traits")
+        .select("trait_id,slug,name,tier,cost,category,description,effects_json,is_active")
+        .eq("guild_id", gid)
+        .eq("is_active", True)
+        .order("tier", desc=False)
+        .order("name", desc=False)
+        .limit(1000)
+        .execute()
+    ) or []
+
+    skills = sb_data(
+        sb.table("skill_definitions")
+        .select("skill_key,name,tree,tier,cost,is_active")
+        .eq("guild_id", gid)
+        .eq("is_active", True)
+        .order("tree", desc=False)
+        .order("tier", desc=False)
+        .order("name", desc=False)
+        .limit(2000)
+        .execute()
+    ) or []
+
+    trait_options = []
+    for trait in traits:
+        trait_options.append({
+            **trait,
+            "grant_config": _trait_grant_config(trait),
+        })
+
+    return {"characters": characters, "traits": trait_options, "skills": skills}
+
+
+@router.post("/staff/trait-benefits/apply")
+def apply_staff_trait_benefit(
+    payload: dict[str, Any] = Body(default={}),
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    staff_id = actor_discord_id
+    require_staff(staff_id)
+
+    character_id = str(payload.get("character_id") or "").strip()
+    trait_slug = str(payload.get("trait_slug") or payload.get("slug") or "").strip()
+    trait_id = str(payload.get("trait_id") or "").strip()
+    skill_key = str(payload.get("skill_key") or "").strip()
+    reason = str(payload.get("reason") or "").strip()
+
+    if not character_id:
+        raise HTTPException(status_code=400, detail="Choose an OC first.")
+    if not trait_slug and not trait_id:
+        raise HTTPException(status_code=400, detail="Choose a trait/origin first.")
+    if not skill_key:
+        raise HTTPException(status_code=400, detail="Choose the free skill to grant.")
+
+    sb = get_supabase()
+    gid = get_guild_id()
+
+    character_rows = sb_data(
+        sb.table("characters")
+        .select("character_id,name,user_id,guild_id,is_active")
+        .eq("guild_id", gid)
+        .eq("character_id", character_id)
+        .limit(1)
+        .execute()
+    ) or []
+    if not character_rows:
+        raise HTTPException(status_code=404, detail="Character not found.")
+
+    character = character_rows[0]
+
+    trait_query = (
+        sb.table("traits")
+        .select("trait_id,slug,name,tier,cost,category,description,effects_json,is_active")
+        .eq("guild_id", gid)
+        .limit(1)
+    )
+    if trait_id:
+        trait_query = trait_query.eq("trait_id", trait_id)
+    else:
+        trait_query = trait_query.eq("slug", trait_slug)
+
+    trait_rows = sb_data(trait_query.execute()) or []
+    if not trait_rows:
+        raise HTTPException(status_code=404, detail="Trait/origin not found.")
+
+    trait = trait_rows[0]
+    grant_config = _trait_grant_config(trait)
+    allowed_skill_keys = grant_config.get("skill_keys") or []
+
+    if allowed_skill_keys and skill_key not in allowed_skill_keys:
+        raise HTTPException(status_code=400, detail="That skill is not listed as an eligible benefit for this trait.")
+
+    skill_rows = sb_data(
+        sb.table("skill_definitions")
+        .select("skill_key,name,tree,tier,cost,is_active")
+        .eq("guild_id", gid)
+        .eq("skill_key", skill_key)
+        .limit(1)
+        .execute()
+    ) or []
+    if not skill_rows:
+        raise HTTPException(status_code=404, detail="Skill not found.")
+
+    skill = skill_rows[0]
+    if skill.get("is_active") is False:
+        raise HTTPException(status_code=400, detail="Cannot grant an inactive skill.")
+
+    existing_rows = sb_data(
+        sb.table("oc_skills")
+        .select("skill_key")
+        .eq("guild_id", gid)
+        .eq("character_id", character_id)
+        .eq("skill_key", skill_key)
+        .limit(1)
+        .execute()
+    ) or []
+
+    if existing_rows:
+        return {
+            "ok": True,
+            "already_owned": True,
+            "message": f"{character.get('name') or 'This OC'} already owns {skill.get('name') or skill_key}.",
+            "character": character,
+            "trait": trait,
+            "skill": skill,
+        }
+
+    note = reason or f"Granted from {trait.get('name') or trait.get('slug') or 'trait'} trait benefit."
+
+    grant_rows = sb_data(
+        sb.table("oc_skills")
+        .insert({
+            "guild_id": gid,
+            "character_id": character_id,
+            "skill_key": skill_key,
+            "acquired_via": "xp",
+            "xp_cost_paid": 0,
+            "actor_discord_id": int(staff_id),
+            "notes": note,
+        })
+        .execute()
+    ) or []
+
+    grant = grant_rows[0] if grant_rows else {
+        "guild_id": gid,
+        "character_id": character_id,
+        "skill_key": skill_key,
+        "acquired_via": "xp",
+        "xp_cost_paid": 0,
+        "actor_discord_id": int(staff_id),
+        "notes": note,
+    }
+
+    try:
+        sb.table("activity_log").insert({
+            "guild_id": gid,
+            "event_type": "trait_benefit_granted",
+            "label": f"Trait benefit granted: {skill.get('name') or skill_key}",
+            "status": "approved",
+            "actor_discord_id": int(staff_id),
+            "character_id": character_id,
+            "character_name": character.get("name"),
+            "amount": 0,
+            "note": note,
+            "source": "staff_trait_benefit",
+            "details": {
+                "trait_id": trait.get("trait_id"),
+                "trait_slug": trait.get("slug"),
+                "trait_name": trait.get("name"),
+                "skill_key": skill_key,
+                "skill_name": skill.get("name"),
+                "xp_cost_paid": 0,
+            },
+        }).execute()
+    except Exception:
+        pass
+
+    try:
+        send_staff_activity_webhook(
+            title="Trait Benefit Granted",
+            description=note,
+            event_type="trait_benefit_granted",
+            status="approved",
+            actor_id=staff_id,
+            character_id=character_id,
+            character_name=character.get("name"),
+            details={
+                "trait": trait.get("name") or trait.get("slug"),
+                "skill": skill.get("name") or skill_key,
+                "xp_cost_paid": 0,
+            },
+        )
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "already_owned": False,
+        "message": f"Granted {skill.get('name') or skill_key} to {character.get('name') or 'OC'} from {trait.get('name') or 'trait'} benefit.",
+        "grant": grant,
+        "character": character,
+        "trait": trait,
+        "skill": skill,
+    }
