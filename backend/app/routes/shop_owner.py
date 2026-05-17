@@ -584,3 +584,361 @@ def toggle_shop_item(
     )
 
     return {"item": _normalize_item(updated), "message": "Item activated." if next_active else "Item deactivated."}
+
+
+def _order_id(row: dict[str, Any]) -> str:
+    return str(row.get("order_id") or row.get("id") or "")
+
+
+def _load_order(sb, order_id: str) -> tuple[dict[str, Any], str]:
+    for column in ("order_id", "id"):
+        rows = _safe_rows(
+            sb.table("shop_orders")
+            .select("*")
+            .eq("guild_id", get_guild_id())
+            .eq(column, order_id)
+            .limit(1)
+        )
+
+        if not rows:
+            rows = _safe_rows(
+                sb.table("shop_orders")
+                .select("*")
+                .eq(column, order_id)
+                .limit(1)
+            )
+
+        if rows:
+            return rows[0], column
+
+    raise HTTPException(status_code=404, detail="Order not found.")
+
+
+def _load_shop_for_order(sb, order: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    item_id = str(order.get("item_id") or order.get("shop_item_id") or "")
+    if not item_id:
+        raise HTTPException(status_code=400, detail="Order is missing item_id.")
+
+    item, _ = _load_item(sb, item_id)
+    shop_id = str(item.get("shop_id") or item.get("store_id") or "")
+    shop, _ = _load_shop(sb, shop_id)
+    return shop, item
+
+
+def _normalize_order(row: dict[str, Any], items_by_id: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    item_id = str(row.get("item_id") or row.get("shop_item_id") or "")
+    item = items_by_id.get(item_id, {})
+
+    return {
+        "order_id": _order_id(row),
+        "item_id": item_id,
+        "item_name": item.get("name") or item.get("item_name") or row.get("item_name") or "Unknown Item",
+        "shop_id": str(item.get("shop_id") or item.get("store_id") or row.get("shop_id") or ""),
+        "quantity": int(_number(row.get("quantity") or row.get("qty"), 1)),
+        "status": str(row.get("status") or "pending").lower(),
+        "user_id": str(row.get("user_id") or row.get("discord_id") or row.get("buyer_discord_id") or ""),
+        "character_id": str(row.get("character_id") or row.get("oc_id") or "") if row.get("character_id") or row.get("oc_id") else None,
+        "note": row.get("note") or row.get("notes") or row.get("reason"),
+        "staff_note": row.get("staff_note") or row.get("denial_reason") or row.get("review_note"),
+        "created_at": row.get("created_at") or row.get("timestamp"),
+        "approved_by": row.get("approved_by") or row.get("reviewed_by"),
+        "fulfilled_by": row.get("fulfilled_by"),
+        "raw": row,
+    }
+
+
+def _items_by_id(sb, item_ids: set[str]) -> dict[str, dict[str, Any]]:
+    if not item_ids:
+        return {}
+
+    rows: list[dict[str, Any]] = []
+    for column in ("item_id", "shop_item_id", "id"):
+        rows = _safe_rows(
+            sb.table("shop_items")
+            .select("*")
+            .eq("guild_id", get_guild_id())
+            .in_(column, list(item_ids))
+            .limit(500)
+        )
+        if rows:
+            break
+
+        rows = _safe_rows(
+            sb.table("shop_items")
+            .select("*")
+            .in_(column, list(item_ids))
+            .limit(500)
+        )
+        if rows:
+            break
+
+    out: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        for key in ("item_id", "shop_item_id", "id"):
+            if row.get(key):
+                out[str(row.get(key))] = row
+    return out
+
+
+@router.get("/shops/{shop_id}/orders")
+def get_shop_orders(
+    shop_id: str,
+    status: str = "pending",
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    actor = _require_login(actor_discord_id)
+    sb = get_supabase()
+    shop, _ = _load_shop(sb, shop_id)
+
+    if not _can_manage_shop(shop, actor):
+        raise HTTPException(status_code=403, detail="You can only view orders for your own shop.")
+
+    item_rows = _load_items_for_shop(sb, shop_id)
+    item_ids = {
+        str(row.get("item_id") or row.get("shop_item_id") or row.get("id"))
+        for row in item_rows
+        if row.get("item_id") or row.get("shop_item_id") or row.get("id")
+    }
+    items_by_id = _items_by_id(sb, item_ids)
+
+    rows: list[dict[str, Any]] = []
+    for column in ("item_id", "shop_item_id"):
+        for item_id in item_ids:
+            found = _safe_rows(
+                sb.table("shop_orders")
+                .select("*")
+                .eq("guild_id", get_guild_id())
+                .eq(column, item_id)
+                .limit(500)
+            )
+            if not found:
+                found = _safe_rows(
+                    sb.table("shop_orders")
+                    .select("*")
+                    .eq(column, item_id)
+                    .limit(500)
+                )
+            rows.extend(found)
+
+        if rows:
+            break
+
+    seen: set[str] = set()
+    orders: list[dict[str, Any]] = []
+    for row in rows:
+        oid = _order_id(row) or f"{row.get('item_id')}:{row.get('user_id')}:{row.get('created_at')}"
+        if oid in seen:
+            continue
+        seen.add(oid)
+        normalized = _normalize_order(row, items_by_id)
+        if status != "all" and normalized["status"] != status.lower():
+            continue
+        orders.append(normalized)
+
+    orders.sort(key=lambda row: str(row.get("created_at") or ""), reverse=True)
+    return {"orders": orders, "shop": _normalize_shop(shop)}
+
+
+def _update_order_status(sb, order_id: str, status: str, actor: int, note: str | None = None) -> dict[str, Any]:
+    order, id_column = _load_order(sb, order_id)
+
+    update_payload: dict[str, Any] = {"status": status, "reviewed_by": str(actor)}
+    if status == "approved":
+        update_payload["approved_by"] = str(actor)
+    if status == "denied":
+        update_payload["denial_reason"] = note
+        update_payload["staff_note"] = note
+    if status == "fulfilled":
+        update_payload["fulfilled_by"] = str(actor)
+
+    rows = _as_list(sb.table("shop_orders").update(update_payload).eq(id_column, order_id).execute())
+    return rows[0] if rows else {**order, **update_payload}
+
+
+@router.post("/orders/{order_id}/approve")
+def approve_shop_order(
+    order_id: str,
+    payload: dict[str, Any] = Body(default={}),
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    actor = _require_login(actor_discord_id)
+    sb = get_supabase()
+    order, _ = _load_order(sb, order_id)
+    shop, item = _load_shop_for_order(sb, order)
+
+    if not _can_manage_shop(shop, actor):
+        raise HTTPException(status_code=403, detail="You can only approve orders for your own shop.")
+
+    updated = _update_order_status(sb, order_id, "approved", actor, payload.get("note") or payload.get("staff_note"))
+
+    log_activity(
+        event_type="shop_order_approved",
+        label=f"Shop order approved: {item.get('name') or item.get('item_name') or 'Item'}",
+        status="approved",
+        actor_discord_id=actor,
+        character_id=order.get("character_id") or order.get("oc_id"),
+        note=payload.get("note") or payload.get("staff_note"),
+        source="shop_owner_orders",
+        details={"order_id": order_id, "shop_id": _shop_id(shop), "item_id": order.get("item_id")},
+        webhook_title="✅ Shop Order Approved",
+    )
+
+    return {"order": updated, "message": "Order approved."}
+
+
+@router.post("/orders/{order_id}/deny")
+def deny_shop_order(
+    order_id: str,
+    payload: dict[str, Any] = Body(default={}),
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    actor = _require_login(actor_discord_id)
+    reason = str(payload.get("reason") or payload.get("staff_note") or "").strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="A denial reason is required.")
+
+    sb = get_supabase()
+    order, _ = _load_order(sb, order_id)
+    shop, item = _load_shop_for_order(sb, order)
+
+    if not _can_manage_shop(shop, actor):
+        raise HTTPException(status_code=403, detail="You can only deny orders for your own shop.")
+
+    updated = _update_order_status(sb, order_id, "denied", actor, reason)
+
+    log_activity(
+        event_type="shop_order_denied",
+        label=f"Shop order denied: {item.get('name') or item.get('item_name') or 'Item'}",
+        status="denied",
+        actor_discord_id=actor,
+        character_id=order.get("character_id") or order.get("oc_id"),
+        note=reason,
+        source="shop_owner_orders",
+        details={"order_id": order_id, "shop_id": _shop_id(shop), "item_id": order.get("item_id")},
+        webhook_title="❌ Shop Order Denied",
+        webhook_description=reason,
+    )
+
+    return {"order": updated, "message": "Order denied."}
+
+
+def _insert_inventory_item(sb, order: dict[str, Any], item: dict[str, Any], quantity: int) -> dict[str, Any] | None:
+    character_id = order.get("character_id") or order.get("oc_id")
+    if not character_id:
+        return None
+
+    item_name = item.get("name") or item.get("item_name") or "Shop Item"
+    item_uuid = str(item.get("item_id") or item.get("shop_item_id") or item.get("id") or "")
+
+    payloads = [
+        {
+            "guild_id": get_guild_id(),
+            "character_id": str(character_id),
+            "item_id": item_uuid,
+            "item_name": item_name,
+            "name": item_name,
+            "quantity": quantity,
+            "source": "market",
+        },
+        {
+            "guild_id": get_guild_id(),
+            "character_id": str(character_id),
+            "item_name": item_name,
+            "quantity": quantity,
+            "source": "market",
+        },
+        {
+            "character_id": str(character_id),
+            "item_name": item_name,
+            "quantity": quantity,
+            "source": "market",
+        },
+    ]
+
+    for table in ("character_inventory", "oc_inventory", "inventory"):
+        for payload in payloads:
+            try:
+                rows = _as_list(sb.table(table).insert(payload).execute())
+                if rows:
+                    return rows[0]
+            except Exception:
+                continue
+
+    return None
+
+
+def _decrease_stock(sb, item: dict[str, Any], quantity: int) -> dict[str, Any]:
+    current_stock = item.get("stock") if item.get("stock") is not None else item.get("quantity")
+    if current_stock is None:
+        return item
+
+    new_stock = max(0, int(_number(current_stock, 0)) - quantity)
+
+    for column in ("item_id", "shop_item_id", "id"):
+        if not item.get(column):
+            continue
+
+        try:
+            rows = _as_list(sb.table("shop_items").update({"stock": new_stock}).eq(column, str(item.get(column))).execute())
+            if rows:
+                return rows[0]
+        except Exception:
+            try:
+                rows = _as_list(sb.table("shop_items").update({"quantity": new_stock}).eq(column, str(item.get(column))).execute())
+                if rows:
+                    return rows[0]
+            except Exception:
+                continue
+
+    return {**item, "stock": new_stock}
+
+
+@router.post("/orders/{order_id}/fulfill")
+def fulfill_shop_order(
+    order_id: str,
+    payload: dict[str, Any] = Body(default={}),
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    actor = _require_login(actor_discord_id)
+    sb = get_supabase()
+    order, _ = _load_order(sb, order_id)
+    shop, item = _load_shop_for_order(sb, order)
+
+    if not _can_manage_shop(shop, actor):
+        raise HTTPException(status_code=403, detail="You can only fulfill orders for your own shop.")
+
+    quantity = int(_number(order.get("quantity") or order.get("qty"), 1))
+    stock = item.get("stock") if item.get("stock") is not None else item.get("quantity")
+
+    if stock is not None and int(_number(stock, 0)) < quantity:
+        raise HTTPException(status_code=400, detail="Not enough stock to fulfill this order.")
+
+    updated_item = _decrease_stock(sb, item, quantity)
+    inventory_row = _insert_inventory_item(sb, order, item, quantity)
+    updated_order = _update_order_status(sb, order_id, "fulfilled", actor, payload.get("note") or payload.get("staff_note"))
+
+    log_activity(
+        event_type="shop_order_fulfilled",
+        label=f"Shop order fulfilled: {item.get('name') or item.get('item_name') or 'Item'}",
+        status="fulfilled",
+        actor_discord_id=actor,
+        character_id=order.get("character_id") or order.get("oc_id"),
+        amount=quantity,
+        note=payload.get("note") or payload.get("staff_note"),
+        source="shop_owner_orders",
+        details={
+            "order_id": order_id,
+            "shop_id": _shop_id(shop),
+            "item_id": order.get("item_id") or order.get("shop_item_id"),
+            "inventory_inserted": bool(inventory_row),
+        },
+        webhook_title="📦 Shop Order Fulfilled",
+        webhook_description=f"{item.get('name') or item.get('item_name') or 'Item'} ×{quantity}",
+    )
+
+    return {
+        "order": updated_order,
+        "item": updated_item,
+        "inventory_row": inventory_row,
+        "message": "Order fulfilled and inventory updated." if inventory_row else "Order fulfilled. Inventory insert was skipped because no OC was attached or no compatible inventory table was found.",
+    }

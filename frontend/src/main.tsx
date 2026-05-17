@@ -1550,6 +1550,11 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
   const [editingItemId, setEditingItemId] = useState("");
   const [editingItem, setEditingItem] = useState<any>(null);
 
+  const [orders, setOrders] = useState<any[]>([]);
+  const [orderStatus, setOrderStatus] = useState("pending");
+  const [orderNotes, setOrderNotes] = useState<Record<string, string>>({});
+  const [workingOrderId, setWorkingOrderId] = useState("");
+
   async function loadMyShops() {
     if (!discordId) return;
 
@@ -1568,6 +1573,49 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
       setShops([]);
     }
   }
+
+
+  async function loadOrders(shopId = selectedShopId) {
+    if (!discordId || !shopId) return;
+
+    try {
+      const data = await apiFetch(`/api/shop-owner/shops/${shopId}/orders?status=${orderStatus}`, {}, discordId);
+      setOrders(data.orders || []);
+    } catch {
+      setOrders([]);
+    }
+  }
+
+  async function actOnOrder(order: any, action: "approve" | "deny" | "fulfill") {
+    const orderId = order.order_id;
+    const note = orderNotes[orderId] || "";
+
+    if (action === "deny" && !note.trim()) {
+      setMessage("A denial reason is required.");
+      return;
+    }
+
+    setWorkingOrderId(orderId);
+    setMessage("");
+
+    try {
+      const body = JSON.stringify(action === "deny" ? { reason: note } : { note });
+      const data = await apiFetch(
+        `/api/shop-owner/orders/${orderId}/${action}`,
+        { method: "POST", body },
+        discordId
+      );
+
+      setMessage(data.message || "Order updated.");
+      await loadOrders(selectedShopId);
+      await loadShop(selectedShopId);
+    } catch (error: any) {
+      setMessage(error.message || "Could not update order.");
+    } finally {
+      setWorkingOrderId("");
+    }
+  }
+
 
   async function loadShop(shopId = selectedShopId) {
     if (!discordId || !shopId) return;
@@ -2039,6 +2087,89 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
             </div>
 
             <aside className="shop-owner-side">
+
+              <div className="card shop-owner-orders-card">
+                <div className="card-title-row">
+                  <div>
+                    <h3>Shop Orders</h3>
+                    <p className="muted-text">Approve, deny, or fulfill item requests for this shop.</p>
+                  </div>
+                  <span className="pill">{orders.length}</span>
+                </div>
+
+                <div className="shop-order-filter-row">
+                  <select value={orderStatus} onChange={(event) => setOrderStatus(event.target.value)}>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="fulfilled">Fulfilled</option>
+                    <option value="denied">Denied</option>
+                    <option value="all">All</option>
+                  </select>
+                  <button className="ghost" onClick={() => loadOrders()} disabled={!selectedShopId}>
+                    <RefreshCw size={16} /> Refresh Orders
+                  </button>
+                </div>
+
+                <div className="shop-owner-order-list">
+                  {orders.length === 0 ? (
+                    <p className="muted-text">No orders found for this status.</p>
+                  ) : null}
+
+                  {orders.map((order: any) => {
+                    const pending = order.status === "pending";
+                    const approved = order.status === "approved";
+                    const working = workingOrderId === order.order_id;
+
+                    return (
+                      <div className="shop-owner-order-row" key={order.order_id}>
+                        <div className="shop-owner-order-top">
+                          <div>
+                            <strong>{order.item_name || "Unknown Item"}</strong>
+                            <span>Qty {order.quantity || 1} • {order.status}</span>
+                            <small>Buyer: {order.user_id ? `<@${order.user_id}>` : "—"} {order.character_id ? `• OC: ${order.character_id}` : ""}</small>
+                          </div>
+                          <em className={`request-status-pill ${order.status}`}>{order.status}</em>
+                        </div>
+
+                        {order.note ? <p className="muted-text">Buyer note: {order.note}</p> : null}
+                        {order.staff_note ? <p className="muted-text">Staff note: {order.staff_note}</p> : null}
+
+                        {(pending || approved) ? (
+                          <div className="shop-owner-order-actions">
+                            <input
+                              value={orderNotes[order.order_id] || ""}
+                              onChange={(event) =>
+                                setOrderNotes((current) => ({ ...current, [order.order_id]: event.target.value }))
+                              }
+                              placeholder="Optional note, required for denial..."
+                            />
+
+                            <div className="auth-actions">
+                              {pending ? (
+                                <>
+                                  <button onClick={() => actOnOrder(order, "approve")} disabled={working}>
+                                    <Check size={16} /> Approve
+                                  </button>
+                                  <button className="danger-button" onClick={() => actOnOrder(order, "deny")} disabled={working}>
+                                    <X size={16} /> Deny
+                                  </button>
+                                </>
+                              ) : null}
+
+                              {pending || approved ? (
+                                <button onClick={() => actOnOrder(order, "fulfill")} disabled={working}>
+                                  <Package size={16} /> Fulfill
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="card shop-owner-items-card">
                 <div className="card-title-row">
                   <div>

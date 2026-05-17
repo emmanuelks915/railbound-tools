@@ -4031,3 +4031,80 @@ table {
   display: block;
   margin-bottom: 0.2rem;
 }
+
+/* Shop Orders Fulfillment v1 */
+
+.shop-owner-orders-card {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.shop-order-filter-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.shop-owner-order-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.shop-owner-order-row {
+  display: grid;
+  gap: 0.6rem;
+  border-radius: 18px;
+  padding: 0.85rem;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(61, 51, 43, 0.08);
+}
+
+.shop-owner-order-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.shop-owner-order-top strong,
+.shop-owner-order-top span,
+.shop-owner-order-top small {
+  display: block;
+}
+
+.shop-owner-order-top span,
+.shop-owner-order-top small {
+  color: rgba(44, 31, 22, 0.62);
+  font-weight: 800;
+  margin-top: 0.15rem;
+}
+
+.shop-owner-order-actions {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.shop-owner-order-actions .auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.shop-owner-order-actions .auth-actions button {
+  flex: 1 1 110px;
+}
+
+.request-status-pill.fulfilled {
+  background: rgba(47, 111, 115, 0.12);
+  color: rgb(31, 92, 96);
+}
+
+@media (max-width: 620px) {
+  .shop-order-filter-row,
+  .shop-owner-order-top,
+  .shop-owner-order-actions .auth-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}
