@@ -18,9 +18,15 @@ def me(actor_discord_id: int | None = Depends(actor_from_header)):
     gid = get_guild_id()
     staff = is_staff(actor_discord_id)
 
-    chars_q = sb.table("characters").select("character_id,name,user_id,active_loadout_name").order("name", desc=False).limit(500)
-    if not staff:
-        chars_q = chars_q.eq("user_id", str(actor_discord_id))
+    # Player-facing dashboard should only load the logged-in user's own OCs.
+    # Staff-wide character browsing belongs in Registry/Staff tools.
+    chars_q = (
+        sb.table("characters")
+        .select("character_id,name,user_id,active_loadout_name")
+        .eq("user_id", str(actor_discord_id))
+        .order("name", desc=False)
+        .limit(500)
+    )
     characters = sb_data(chars_q.execute()) or []
 
     if staff:

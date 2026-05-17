@@ -68,6 +68,18 @@ function App() {
   const [discordId, setDiscordId] = useState(() => localStorage.getItem("railbound_discord_id") || "");
   const [selectedCharacterId, setSelectedCharacterId] = useState(() => localStorage.getItem("railbound_character_id") || "");
   useEffect(() => {
+    // Root Cause OC Ghost Fix v1: clear stored selected OC when Discord account changes.
+    const previousDiscordId = localStorage.getItem("railbound_last_discord_id") || "";
+
+    if (previousDiscordId && previousDiscordId !== discordId) {
+      localStorage.removeItem("railbound_character_id");
+      setSelectedCharacterId("");
+    }
+
+    if (discordId) {
+      localStorage.setItem("railbound_last_discord_id", discordId);
+    }
+
     localStorage.setItem("railbound_discord_id", discordId);
   }, [discordId]);
 
@@ -344,11 +356,22 @@ function CharacterSelect({
 
   async function loadCharacters() {
     setMessage("");
-    const suffix = discordId ? `?discord_id=${encodeURIComponent(discordId)}` : "";
-    const data = await apiFetch(`/api/characters${suffix}`, {}, discordId);
-    setCharacters(data.characters || []);
-    if (!selectedCharacterId && data.characters?.[0]?.character_id) {
-      setSelectedCharacterId(data.characters[0].character_id);
+    const data = await apiFetch("/api/characters/mine", {}, discordId);
+    const rows = Array.isArray(data) ? data : data.characters || data.data || [];
+
+    setCharacters(rows);
+
+    const selectedIsValid = rows.some((character: any) =>
+      String(character.character_id || character.id || "") === String(selectedCharacterId || "")
+    );
+
+    if (selectedCharacterId && !selectedIsValid) {
+      setSelectedCharacterId("");
+      return;
+    }
+
+    if (!selectedCharacterId && rows[0]?.character_id && shouldAutoSelectOc()) {
+      setSelectedCharacterId(rows[0].character_id);
     }
   }
 
@@ -390,10 +413,21 @@ function HomeDashboard({
   async function load() {
     setMessage("");
     const d = await apiFetch("/api/dashboard/me", {}, discordId);
-    setData(d);
-    if (!selectedCharacterId && d.characters?.[0]?.character_id) {
-      setSelectedCharacterId(d.characters[0].character_id);
+    const rows = d.characters || [];
+
+    const selectedIsValid = rows.some((character: any) =>
+      String(character.character_id || character.id || "") === String(selectedCharacterId || "")
+    );
+
+    if (selectedCharacterId && !selectedIsValid) {
+      setSelectedCharacterId("");
     }
+
+    if (!selectedCharacterId && rows?.[0]?.character_id && shouldAutoSelectOc()) {
+      setSelectedCharacterId(rows[0].character_id);
+    }
+
+    setData(d);
   }
 
   useEffect(() => {
