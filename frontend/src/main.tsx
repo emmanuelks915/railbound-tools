@@ -1365,6 +1365,14 @@ function InventoryDashboard({
   const [characters, setCharacters] = useState<any[]>([]);
   const [data, setData] = useState<any>({ items: [], currencies: [], types: [] });
   const [search, setSearch] = useState("");
+  const [overrideCharacters, setOverrideCharacters] = useState<any[]>([]);
+  const [overrideSkills, setOverrideSkills] = useState<any[]>([]);
+  const [overrideForm, setOverrideForm] = useState({
+    character_id: "",
+    skill_key: "",
+    source_trait: "Origin Trait",
+    reason: "",
+  });
   const [itemType, setItemType] = useState("all");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -4778,9 +4786,141 @@ function StaffQueue({ discordId }: { discordId: string }) {
     denied: requests.filter((request) => request.status === "denied").length,
   };
 
+
+  useEffect(() => {
+    loadSkillOverrideOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function loadSkillOverrideOptions() {
+    try {
+      const data = await apiFetch("/api/staff/skill-overrides/options", {}, discordId);
+      setOverrideCharacters(data.characters || []);
+      setOverrideSkills(data.skills || []);
+    } catch (error: any) {
+      console.warn("Could not load staff skill override options", error);
+    }
+  }
+
+  async function grantSkillOverride() {
+    setMessage("");
+
+    if (!overrideForm.character_id) {
+      setMessage("Choose an OC before granting a skill override.");
+      return;
+    }
+
+    if (!overrideForm.skill_key) {
+      setMessage("Choose a skill before granting a skill override.");
+      return;
+    }
+
+    if (!overrideForm.reason.trim()) {
+      setMessage("Add a staff override reason before granting the skill.");
+      return;
+    }
+
+    try {
+      const data = await apiFetch(
+        "/api/staff/skill-overrides/grant",
+        {
+          method: "POST",
+          body: JSON.stringify(overrideForm),
+        },
+        discordId
+      );
+
+      setMessage(data.message || "Skill override granted.");
+      setOverrideForm((current) => ({ ...current, skill_key: "", reason: "" }));
+      await Promise.all([loadQueue(), loadSkillOverrideOptions()]);
+    } catch (error: any) {
+      setMessage(error?.message || "Could not grant skill override.");
+    }
+  }
+
   return (
     <RequireDiscord discordId={discordId}>
       <section className="request-workflow-page">
+
+        <div className="card staff-skill-override-card">
+          <div className="card-title-row">
+            <div>
+              <span className="activity-type-label">Staff Override</span>
+              <h3>Grant Skill Override</h3>
+              <p className="muted-text">
+                Use this for Origin traits, Magic Background, Mana Circuits, or other staff-approved exceptions that bypass normal skill requirements.
+              </p>
+            </div>
+            <button className="ghost" onClick={loadSkillOverrideOptions}>
+              <RefreshCw size={16} /> Refresh Options
+            </button>
+          </div>
+
+          <div className="request-actions-panel staff-skill-override-form">
+            <label>
+              <span>OC</span>
+              <select
+                value={overrideForm.character_id}
+                onChange={(event) =>
+                  setOverrideForm((current) => ({ ...current, character_id: event.target.value }))
+                }
+              >
+                <option value="">Select an OC</option>
+                {overrideCharacters.map((character: any) => (
+                  <option key={character.character_id} value={character.character_id}>
+                    {character.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Skill</span>
+              <select
+                value={overrideForm.skill_key}
+                onChange={(event) =>
+                  setOverrideForm((current) => ({ ...current, skill_key: event.target.value }))
+                }
+              >
+                <option value="">Select a skill</option>
+                {overrideSkills.map((skill: any) => (
+                  <option key={skill.skill_key} value={skill.skill_key}>
+                    {skill.name || skill.skill_key}{skill.tree ? ` / ${skill.tree}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Source / Trait</span>
+              <input
+                value={overrideForm.source_trait}
+                onChange={(event) =>
+                  setOverrideForm((current) => ({ ...current, source_trait: event.target.value }))
+                }
+                placeholder="Origin Trait, Magic Background, Mana Circuits..."
+              />
+            </label>
+
+            <label>
+              <span>Staff Reason</span>
+              <textarea
+                rows={3}
+                value={overrideForm.reason}
+                onChange={(event) =>
+                  setOverrideForm((current) => ({ ...current, reason: event.target.value }))
+                }
+                placeholder="Example: Origin Trait grants one free Knowledge skill and bypasses normal purchase requirements."
+              />
+            </label>
+
+            <div className="actions">
+              <button onClick={grantSkillOverride}>
+                <ShieldCheck size={16} /> Grant Skill Override
+              </button>
+            </div>
+          </div>
+        </div>
         <div className="card request-workflow-hero">
           <div>
             <span className="activity-type-label">Staff Operations</span>

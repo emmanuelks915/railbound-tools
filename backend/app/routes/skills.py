@@ -3,7 +3,7 @@ from typing import Any
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
 from app.models import SkillPurchaseRequest, StaffActionRequest
 from app.permissions import require_character_access, is_staff
@@ -457,3 +457,189 @@ def deny_skill_request(request_id: UUID, payload: StaffActionRequest, actor_disc
         )
 
     return {"result": result}
+
+
+# --- Staff Direct Skill Override Grant v1 ---
+
+@router.get("/staff/skill-overrides/options")
+def staff_skill_override_options(actor_discord_id: int | None = Depends(actor_from_header)):
+    # Return OC + skill options for the staff direct skill override form.
+    require_staff(actor_discord_id)
+
+    sb = get_supabase()
+    gid = get_guild_id()
+
+    characters = sb_data(
+        sb.table("characters")
+        .select("character_id,name,user_id,is_active")
+        .eq("guild_id", gid)
+        .eq("is_active", True)
+        .order("name", desc=False)
+        .limit(1000)
+        .execute()
+    ) or []
+
+    skills = sb_data(
+        sb.table("skill_definitions")
+        .select("skill_key,name,tree,cost,is_active")
+        .eq("guild_id", gid)
+        .eq("is_active", True)
+        .order("tree", desc=False)
+        .order("name", desc=False)
+        .limit(1000)
+        .execute()
+    ) or []
+
+    return {"characters": characters, "skills": skills}
+
+
+@router.post("/staff/skill-overrides/grant")
+def grant_staff_skill_override(
+    payload: dict[str, Any] = Body(default={}),
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    # Directly grant a skill to an OC as a staff override.
+    staff_id = actor_discord_id
+    require_staff(staff_id)
+
+    character_id = str(payload.get("character_id") or "").strip()
+    skill_key = str(payload.get("skill_key") or "").strip()
+    reason = str(payload.get("reason") or payload.get("override_reason") or payload.get("staff_note") or "").strip()
+    source_trait = str(payload.get("source_trait") or "Staff override").strip()
+
+    if not character_id:
+        raise HTTPException(status_code=400, detail="character_id is required.")
+    if not skill_key:
+        raise HTTPException(status_code=400, detail="skill_key is required.")
+    if not reason:
+        raise HTTPException(status_code=400, detail="A staff override reason is required.")
+
+    sb = get_supabase()
+    gid = get_guild_id()
+
+    character_rows = sb_data(
+        sb.table("characters")
+        .select("character_id,name,user_id,guild_id,is_active")
+        .eq("guild_id", gid)
+        .eq("character_id", character_id)
+        .limit(1)
+        .execute()
+    ) or []
+    if not character_rows:
+        raise HTTPException(status_code=404, detail="Character not found.")
+
+    character = character_rows[0]
+
+    skill_rows = sb_data(
+        sb.table("skill_definitions")
+        .select("skill_key,name,tree,cost,is_active")
+        .eq("guild_id", gid)
+        .eq("skill_key", skill_key)
+        .limit(1)
+        .execute()
+    ) or []
+    if not skill_rows:
+        raise HTTPException(status_code=404, detail="Skill not found.")
+
+    skill = skill_rows[0]
+    if skill.get("is_active") is False:
+        raise HTTPException(status_code=400, detail="Cannot grant an inactive skill.")
+
+    existing_rows = sb_data(
+        sb.table("oc_skills")
+        .select("skill_key")
+        .eq("guild_id", gid)
+        .eq("character_id", character_id)
+        .eq("skill_key", skill_key)
+        .limit(1)
+        .execute()
+    ) or []
+
+    if existing_rows:
+        return {
+            "ok": True,
+            "already_owned": True,
+            "message": "This OC already owns that skill.",
+            "character": character,
+            "skill": skill,
+        }
+
+    note = f"Staff override grant via {source_trait}. Reason: {reason}"
+
+    grant_rows = sb_data(
+        sb.table("oc_skills")
+        .insert({
+            "guild_id": gid,
+            "character_id": character_id,
+            "skill_key": skill_key,
+            "acquired_via": "staff_override",
+            "xp_cost_paid": 0,
+            "actor_discord_id": int(staff_id),
+            "notes": note,
+        })
+        .execute()
+    ) or []
+
+    grant = grant_rows[0] if grant_rows else {
+        "guild_id": gid,
+        "character_id": character_id,
+        "skill_key": skill_key,
+        "acquired_via": "staff_override",
+        "xp_cost_paid": 0,
+        "actor_discord_id": int(staff_id),
+        "notes": note,
+    }
+
+    try:
+        sb.table("activity_log").insert({
+            "guild_id": gid,
+            "event_type": "skill_override_granted",
+            "label": f"Skill override granted: {skill.get('name') or skill_key}",
+            "status": "approved",
+            "actor_discord_id": int(staff_id),
+            "character_id": character_id,
+            "character_name": character.get("name"),
+            "amount": 0,
+            "note": note,
+            "source": "staff_skill_override",
+            "details": {
+                "skill_key": skill_key,
+                "skill_name": skill.get("name"),
+                "source_trait": source_trait,
+                "override_reason": reason,
+                "bypassed_requirements": True,
+                "xp_cost_paid": 0,
+            },
+        }).execute()
+    except Exception:
+        pass
+
+    try:
+        send_staff_activity_webhook(
+            title="Skill Override Granted",
+            description=note,
+            event_type="skill_override_granted",
+            status="approved",
+            actor_id=staff_id,
+            character_id=character_id,
+            character_name=character.get("name"),
+            details={
+                "skill_key": skill_key,
+                "skill_name": skill.get("name"),
+                "source_trait": source_trait,
+                "bypassed_requirements": True,
+                "xp_cost_paid": 0,
+            },
+        )
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "already_owned": False,
+        "message": f"Granted {skill.get('name') or skill_key} to {character.get('name') or 'OC'} as a staff override.",
+        "grant": grant,
+        "character": character,
+        "skill": skill,
+    }
+
