@@ -114,18 +114,19 @@ function App() {
   const tabs = [
     ["home", Home, "Dashboard"],
 
-    ["planner", Calculator, "XP Planner"],
     ["oc", UserRound, "OC"],
-    ["manage_oc", UserRound, "Manage OC"],
-    ["skills", Sparkles, "Skills"],
-    ["inventory", Package, "Inventory"],
-    ["shops", Store, "Shops"],
-    ["shop_owner", Store, "Manage Shop"],
-    ["rp", ClipboardList, "RP Hub"],
     ["register", UserRound, "Register OC"],
     ["registry", Users, "OC Registry"],
-    ["staff", ShieldCheck, "Staff"],
+    ["manage_oc", UserRound, "Manage OC"],
+
+    ["planner", Calculator, "XP Planner"],
+    ["skills", Sparkles, "Skills"],
+    ["inventory", Package, "Inventory"],
+    ["rp", ClipboardList, "RP Hub"],
+    ["shops", Store, "Shops"],
+    ["shop_owner", Store, "Manage Shop"],
     ["activity", ClipboardList, "Activity"],
+    ["staff", ShieldCheck, "Staff"],
     ["qa", ClipboardList, "QA Checklist"],
     ["combat", ClipboardList, "Derived Stats"],
   ] as const;

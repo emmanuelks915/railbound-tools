@@ -4108,3 +4108,23 @@ table {
     grid-template-columns: 1fr;
   }
 }
+
+/* Nav Order Polish v1 */
+
+.nav-tabs,
+.tabs,
+.tab-row,
+.quick-nav,
+.app-tabs {
+  align-items: center;
+}
+
+@media (max-width: 760px) {
+  .nav-tabs,
+  .tabs,
+  .tab-row,
+  .quick-nav,
+  .app-tabs {
+    gap: 0.45rem;
+  }
+}
