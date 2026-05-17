@@ -2660,3 +2660,214 @@ table {
     font-size: 1.25rem;
   }
 }
+
+/* Dashboard mobile fix */
+@media (max-width: 760px) {
+  .dashboard-grid,
+  .dashboard-home-grid,
+  .dashboard-main-grid,
+  .dashboard-top-grid,
+  .dashboard-content-grid,
+  .dashboard-two-col,
+  .dashboard-panels,
+  .quick-actions-grid,
+  .summary {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+
+  .dashboard-grid > *,
+  .dashboard-home-grid > *,
+  .dashboard-main-grid > *,
+  .dashboard-top-grid > *,
+  .dashboard-content-grid > *,
+  .dashboard-two-col > *,
+  .dashboard-panels > * {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .dashboard-card,
+  .quick-actions-card,
+  .summary-card,
+  .home-card,
+  .card {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    position: relative !important;
+    left: auto !important;
+    right: auto !important;
+    transform: none !important;
+    margin: 0 !important;
+  }
+
+  .quick-actions-grid button,
+  .quick-actions-card button,
+  .quick-actions-card a {
+    width: 100% !important;
+  }
+
+  .summary {
+    grid-template-columns: 1fr !important;
+  }
+
+  .summary .stat-card,
+  .summary .summary-card,
+  .summary > * {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+
+/* Dashboard Mobile Overlap Fix v2
+   This specifically fixes the home/dashboard cards overlapping on phones.
+   It overrides desktop grid/card positioning only inside the dashboard/home area.
+*/
+
+@media (max-width: 820px) {
+  .home-page,
+  .dashboard-page,
+  .home-dashboard,
+  .dashboard-home,
+  .overview-page,
+  .home,
+  .dashboard {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+  }
+
+  .home-page *,
+  .dashboard-page *,
+  .home-dashboard *,
+  .dashboard-home *,
+  .overview-page * {
+    max-width: 100% !important;
+  }
+
+  .home-page > *,
+  .dashboard-page > *,
+  .home-dashboard > *,
+  .dashboard-home > *,
+  .overview-page > *,
+  .dashboard-section,
+  .home-section,
+  .dashboard-row,
+  .home-row,
+  .dashboard-grid,
+  .home-grid,
+  .quick-actions,
+  .quick-actions-card,
+  .pending-card,
+  .stat-request-card,
+  .skill-request-card {
+    position: static !important;
+    inset: auto !important;
+    left: auto !important;
+    right: auto !important;
+    top: auto !important;
+    bottom: auto !important;
+    float: none !important;
+    clear: both !important;
+    transform: none !important;
+    translate: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .dashboard-grid,
+  .home-grid,
+  .dashboard-row,
+  .home-row,
+  .quick-actions-grid,
+  .home-actions-grid,
+  .stats-grid,
+  .summary-grid,
+  .overview-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+    align-items: stretch !important;
+  }
+
+  .quick-actions,
+  .quick-actions-card,
+  .pending-card,
+  .dashboard-card,
+  .home-card,
+  .stat-request-card,
+  .skill-request-card,
+  .card {
+    margin-bottom: 1rem !important;
+    z-index: auto !important;
+  }
+
+  .quick-actions-card {
+    order: 10;
+  }
+
+  .pending-card,
+  .stat-request-card,
+  .skill-request-card {
+    order: 20;
+  }
+
+  .quick-actions-card .auth-actions,
+  .quick-actions-card .quick-actions-grid,
+  .quick-actions,
+  .quick-actions-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem !important;
+    width: 100% !important;
+  }
+
+  .quick-actions-card button,
+  .quick-actions-card a,
+  .quick-actions button,
+  .quick-actions a {
+    width: 100% !important;
+    justify-content: flex-start !important;
+    min-height: 54px !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .home-page,
+  .dashboard-page,
+  .home-dashboard,
+  .dashboard-home,
+  .overview-page {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .home-page h1,
+  .dashboard-page h1,
+  .home-dashboard h1,
+  .dashboard-home h1,
+  .overview-page h1 {
+    font-size: 2rem !important;
+    line-height: 1.05 !important;
+    word-break: normal !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .quick-actions-card,
+  .pending-card,
+  .dashboard-card,
+  .home-card,
+  .stat-request-card,
+  .skill-request-card,
+  .card {
+    border-radius: 20px !important;
+  }
+}
