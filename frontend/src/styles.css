@@ -4302,3 +4302,31 @@ table {
 .discord-auth-card p {
   display: none !important;
 }
+
+/* Remove Login Box v1 */
+
+.login-button-only-card,
+.hero-login-card,
+.login-panel,
+.auth-panel,
+.discord-auth-card,
+.login-card,
+.auth-card {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  min-height: auto !important;
+  width: auto !important;
+}
+
+.login-button-only-card button,
+.hero-login-card button,
+.login-panel button,
+.auth-panel button,
+.discord-auth-card button,
+.login-card button,
+.auth-card button,
+.discord-login-button {
+  box-shadow: 0 10px 22px rgba(47, 111, 115, 0.18) !important;
+}
