@@ -4840,6 +4840,7 @@ function StaffQueue({ discordId }: { discordId: string }) {
       );
 
       setMessage(data.message || "Skill override granted.");
+      window.alert(data.message || "Skill override granted.");
       setOverrideForm((current) => ({ ...current, skill_key: "", reason: "" }));
       await Promise.all([loadQueue(), loadSkillOverrideOptions()]);
     } catch (error: any) {
@@ -4902,6 +4903,7 @@ function StaffQueue({ discordId }: { discordId: string }) {
       );
 
       setMessage(data.message || "Resource grant complete.");
+      window.alert(data.message || "Resource grant complete.");
       setResourceForm((current) => ({
         ...current,
         amount: current.grant_type === "xp" ? "600" : "",
