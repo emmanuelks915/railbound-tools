@@ -1365,6 +1365,15 @@ function InventoryDashboard({
   const [characters, setCharacters] = useState<any[]>([]);
   const [data, setData] = useState<any>({ items: [], currencies: [], types: [] });
   const [search, setSearch] = useState("");
+  const [resourceCharacters, setResourceCharacters] = useState<any[]>([]);
+  const [resourceCurrencies, setResourceCurrencies] = useState<any[]>([]);
+  const [resourceForm, setResourceForm] = useState({
+    character_id: "",
+    grant_type: "xp",
+    amount: "600",
+    currency_id: "",
+    reason: "Starting OC setup grant.",
+  });
   const [overrideCharacters, setOverrideCharacters] = useState<any[]>([]);
   const [overrideSkills, setOverrideSkills] = useState<any[]>([]);
   const [overrideForm, setOverrideForm] = useState({
@@ -4838,9 +4847,176 @@ function StaffQueue({ discordId }: { discordId: string }) {
     }
   }
 
+
+  useEffect(() => {
+    loadStaffResourceOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function loadStaffResourceOptions() {
+    try {
+      const data = await apiFetch("/api/staff/resource-grants/options", {}, discordId);
+      setResourceCharacters(data.characters || []);
+      setResourceCurrencies(data.currencies || []);
+      const primaryCurrency = data.primary_currency;
+      if (primaryCurrency?.currency_id) {
+        setResourceForm((current) => ({
+          ...current,
+          currency_id: current.currency_id || primaryCurrency.currency_id,
+        }));
+      }
+    } catch (error: any) {
+      console.warn("Could not load staff resource grant options", error);
+    }
+  }
+
+  async function grantStaffResource() {
+    setMessage("");
+
+    if (!resourceForm.character_id) {
+      setMessage("Choose an OC before granting resources.");
+      return;
+    }
+
+    if (!resourceForm.amount || Number(resourceForm.amount) <= 0) {
+      setMessage("Enter a positive amount.");
+      return;
+    }
+
+    if (!resourceForm.reason.trim()) {
+      setMessage("Add a staff reason before granting resources.");
+      return;
+    }
+
+    try {
+      const data = await apiFetch(
+        "/api/staff/resource-grants/grant",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            ...resourceForm,
+            amount: Number(resourceForm.amount),
+          }),
+        },
+        discordId
+      );
+
+      setMessage(data.message || "Resource grant complete.");
+      setResourceForm((current) => ({
+        ...current,
+        amount: current.grant_type === "xp" ? "600" : "",
+        reason: "",
+      }));
+      await Promise.all([loadQueue(), loadStaffResourceOptions()]);
+    } catch (error: any) {
+      setMessage(error?.message || "Could not grant resources.");
+    }
+  }
+
   return (
     <RequireDiscord discordId={discordId}>
       <section className="request-workflow-page">
+
+        <div className="card staff-resource-grant-card">
+          <div className="card-title-row">
+            <div>
+              <span className="activity-type-label">Staff Resources</span>
+              <h3>Grant OC Resources</h3>
+              <p className="muted-text">
+                Use this for starting XP, event awards, corrections, or staff-approved currency grants. New OCs should start with 600 XP unless staff says otherwise.
+              </p>
+            </div>
+            <button className="ghost" onClick={loadStaffResourceOptions}>
+              <RefreshCw size={16} /> Refresh Options
+            </button>
+          </div>
+
+          <div className="request-actions-panel staff-resource-grant-form">
+            <label>
+              <span>OC</span>
+              <select
+                value={resourceForm.character_id}
+                onChange={(event) =>
+                  setResourceForm((current) => ({ ...current, character_id: event.target.value }))
+                }
+              >
+                <option value="">Select an OC</option>
+                {resourceCharacters.map((character: any) => (
+                  <option key={character.character_id} value={character.character_id}>
+                    {character.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Grant Type</span>
+              <select
+                value={resourceForm.grant_type}
+                onChange={(event) =>
+                  setResourceForm((current) => ({
+                    ...current,
+                    grant_type: event.target.value,
+                    amount: event.target.value === "xp" ? "600" : current.amount,
+                  }))
+                }
+              >
+                <option value="xp">XP</option>
+                <option value="currency">Currency</option>
+              </select>
+            </label>
+
+            {resourceForm.grant_type === "currency" ? (
+              <label>
+                <span>Currency</span>
+                <select
+                  value={resourceForm.currency_id}
+                  onChange={(event) =>
+                    setResourceForm((current) => ({ ...current, currency_id: event.target.value }))
+                  }
+                >
+                  <option value="">Primary currency</option>
+                  {resourceCurrencies.map((currency: any) => (
+                    <option key={currency.currency_id} value={currency.currency_id}>
+                      {currency.emoji ? `${currency.emoji} ` : ""}{currency.name} ({currency.ticker})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
+            <label>
+              <span>Amount</span>
+              <input
+                type="number"
+                min="1"
+                value={resourceForm.amount}
+                onChange={(event) =>
+                  setResourceForm((current) => ({ ...current, amount: event.target.value }))
+                }
+                placeholder={resourceForm.grant_type === "xp" ? "600" : "Amount"}
+              />
+            </label>
+
+            <label>
+              <span>Staff Reason</span>
+              <textarea
+                rows={3}
+                value={resourceForm.reason}
+                onChange={(event) =>
+                  setResourceForm((current) => ({ ...current, reason: event.target.value }))
+                }
+                placeholder="Example: Starting OC setup grant, event reward, correction, or approved staff adjustment."
+              />
+            </label>
+
+            <div className="actions">
+              <button onClick={grantStaffResource}>
+                <ShieldCheck size={16} /> Grant Resources
+              </button>
+            </div>
+          </div>
+        </div>
 
         <div className="card staff-skill-override-card">
           <div className="card-title-row">

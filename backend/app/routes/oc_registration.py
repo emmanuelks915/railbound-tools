@@ -259,6 +259,74 @@ def get_registration_options(actor_discord_id: int | None = Depends(actor_from_h
     }
 
 
+# --- Starting XP v1 ---
+
+STARTING_OC_XP = 600
+
+
+def _try_create_starting_xp(sb, character_id: str, actor_discord_id: int | None = None) -> None:
+    gid = get_guild_id()
+
+    try:
+        existing = _as_list(
+            sb.table("oc_xp_wallets")
+            .select("*")
+            .eq("guild_id", gid)
+            .eq("character_id", character_id)
+            .limit(1)
+            .execute()
+        )
+
+        if existing:
+            return
+
+        sb.table("oc_xp_wallets").insert(
+            {
+                "guild_id": gid,
+                "character_id": character_id,
+                "available_xp": STARTING_OC_XP,
+                "total_earned_xp": STARTING_OC_XP,
+                "total_spent_xp": 0,
+            }
+        ).execute()
+
+        sb.table("oc_xp_transactions").insert(
+            {
+                "guild_id": gid,
+                "character_id": character_id,
+                "direction": "earn",
+                "amount": STARTING_OC_XP,
+                "source": "starting_xp",
+                "reference_type": None,
+                "reference_key": "starting_oc_xp",
+                "reason": "Starting OC XP grant.",
+                "actor_discord_id": actor_discord_id,
+                "metadata": {"starting_xp": True, "amount": STARTING_OC_XP},
+            }
+        ).execute()
+
+        try:
+            sb.table("activity_log").insert(
+                {
+                    "guild_id": gid,
+                    "event_type": "starting_xp_granted",
+                    "label": "Starting XP granted",
+                    "status": "approved",
+                    "actor_discord_id": actor_discord_id,
+                    "character_id": character_id,
+                    "amount": STARTING_OC_XP,
+                    "note": "Automatic starting XP granted on OC registration.",
+                    "source": "oc_registration",
+                    "details": {"starting_xp": True, "amount": STARTING_OC_XP},
+                }
+            ).execute()
+        except Exception:
+            pass
+
+    except Exception:
+        return
+
+
 @router.post("/validate")
 def validate_registration(payload: dict[str, Any] = Body(...), actor_discord_id: int | None = Depends(actor_from_header)):
     if actor_discord_id is None:

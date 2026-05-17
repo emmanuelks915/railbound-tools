@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from app.permissions import is_staff
 from app.security import actor_from_header
@@ -236,3 +236,268 @@ def get_character_balances(
         "xp": _xp_from_wallet_tables(sb, character_id, _xp_from_character(character)),
         "currencies": _currency_balances(sb, character_id),
     }
+
+
+# --- Staff Resource Grants v1 ---
+
+@router.get("/staff/resource-grants/options")
+def staff_resource_grant_options(actor_discord_id: int | None = Depends(actor_from_header)):
+    require_staff(actor_discord_id)
+
+    sb = get_supabase()
+    gid = get_guild_id()
+
+    characters = _as_list(
+        sb.table("characters")
+        .select("character_id,name,user_id,is_active")
+        .eq("guild_id", gid)
+        .eq("is_active", True)
+        .order("name", desc=False)
+        .limit(1000)
+        .execute()
+    )
+
+    currencies = _as_list(
+        sb.table("currencies")
+        .select("currency_id,name,ticker,emoji,is_primary,is_enabled")
+        .eq("guild_id", gid)
+        .eq("is_enabled", True)
+        .order("is_primary", desc=True)
+        .order("name", desc=False)
+        .limit(100)
+        .execute()
+    )
+
+    primary_currency = next((row for row in currencies if row.get("is_primary")), currencies[0] if currencies else None)
+
+    return {
+        "characters": characters,
+        "currencies": currencies,
+        "primary_currency": primary_currency,
+        "default_starting_xp": 600,
+    }
+
+
+def _load_resource_character(sb, character_id: str) -> dict[str, Any]:
+    rows = _as_list(
+        sb.table("characters")
+        .select("character_id,name,user_id,guild_id,is_active")
+        .eq("guild_id", get_guild_id())
+        .eq("character_id", character_id)
+        .limit(1)
+        .execute()
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Character not found.")
+    return rows[0]
+
+
+def _primary_currency(sb) -> dict[str, Any]:
+    gid = get_guild_id()
+    rows = _as_list(
+        sb.table("currencies")
+        .select("*")
+        .eq("guild_id", gid)
+        .eq("is_primary", True)
+        .eq("is_enabled", True)
+        .limit(1)
+        .execute()
+    )
+    if not rows:
+        rows = _as_list(
+            sb.table("currencies")
+            .select("*")
+            .eq("guild_id", gid)
+            .eq("is_enabled", True)
+            .limit(1)
+            .execute()
+        )
+    if not rows:
+        raise HTTPException(status_code=400, detail="No enabled currency found.")
+    return rows[0]
+
+
+def _grant_xp_to_oc(sb, character: dict[str, Any], amount: int, staff_id: int, reason: str) -> dict[str, Any]:
+    gid = get_guild_id()
+    character_id = str(character.get("character_id"))
+
+    wallet_rows = _as_list(
+        sb.table("oc_xp_wallets")
+        .select("*")
+        .eq("guild_id", gid)
+        .eq("character_id", character_id)
+        .limit(1)
+        .execute()
+    )
+
+    if wallet_rows:
+        wallet = wallet_rows[0]
+        new_available = int(wallet.get("available_xp") or 0) + amount
+        new_total = int(wallet.get("total_earned_xp") or 0) + amount
+        updated = _as_list(
+            sb.table("oc_xp_wallets")
+            .update({"available_xp": new_available, "total_earned_xp": new_total})
+            .eq("guild_id", gid)
+            .eq("character_id", character_id)
+            .execute()
+        )
+        wallet = updated[0] if updated else {**wallet, "available_xp": new_available, "total_earned_xp": new_total}
+    else:
+        inserted = _as_list(
+            sb.table("oc_xp_wallets")
+            .insert({"guild_id": gid, "character_id": character_id, "available_xp": amount, "total_earned_xp": amount, "total_spent_xp": 0})
+            .execute()
+        )
+        wallet = inserted[0] if inserted else {"guild_id": gid, "character_id": character_id, "available_xp": amount, "total_earned_xp": amount, "total_spent_xp": 0}
+
+    tx_rows = _as_list(
+        sb.table("oc_xp_transactions")
+        .insert({
+            "guild_id": gid,
+            "character_id": character_id,
+            "direction": "earn",
+            "amount": amount,
+            "source": "staff_grant",
+            "reference_type": None,
+            "reference_key": "staff_resource_grant",
+            "reason": reason,
+            "actor_discord_id": staff_id,
+            "metadata": {"resource_type": "xp", "staff_grant": True},
+        })
+        .execute()
+    )
+
+    return {"wallet": wallet, "transaction": tx_rows[0] if tx_rows else None}
+
+
+def _grant_currency_to_oc(sb, character: dict[str, Any], amount: int, staff_id: int, reason: str, currency_id: str | None) -> dict[str, Any]:
+    gid = get_guild_id()
+    character_id = str(character.get("character_id"))
+
+    currency = None
+    if currency_id:
+        rows = _as_list(
+            sb.table("currencies")
+            .select("*")
+            .eq("guild_id", gid)
+            .eq("currency_id", currency_id)
+            .limit(1)
+            .execute()
+        )
+        currency = rows[0] if rows else None
+
+    currency = currency or _primary_currency(sb)
+    cid = str(currency.get("currency_id") or currency.get("id") or "")
+
+    if not cid:
+        raise HTTPException(status_code=400, detail="Currency ID could not be determined.")
+
+    wallet_rows = _as_list(
+        sb.table("wallets")
+        .select("*")
+        .eq("character_id", character_id)
+        .eq("currency_id", cid)
+        .limit(1)
+        .execute()
+    )
+
+    if wallet_rows:
+        wallet = wallet_rows[0]
+        new_balance = int(wallet.get("balance") or 0) + amount
+        updated = _as_list(
+            sb.table("wallets")
+            .update({"balance": new_balance})
+            .eq("character_id", character_id)
+            .eq("currency_id", cid)
+            .execute()
+        )
+        wallet = updated[0] if updated else {**wallet, "balance": new_balance}
+    else:
+        inserted = _as_list(
+            sb.table("wallets")
+            .insert({"character_id": character_id, "currency_id": cid, "currency": currency.get("ticker") or currency.get("name"), "balance": amount})
+            .execute()
+        )
+        wallet = inserted[0] if inserted else {"character_id": character_id, "currency_id": cid, "currency": currency.get("ticker") or currency.get("name"), "balance": amount}
+
+    tx_rows = _as_list(
+        sb.table("transactions")
+        .insert({
+            "guild_id": gid,
+            "currency_id": cid,
+            "from_character_id": None,
+            "to_character_id": character_id,
+            "amount": amount,
+            "tx_type": "MINT",
+            "reason": reason,
+            "actor_discord_id": staff_id,
+        })
+        .execute()
+    )
+
+    return {"wallet": wallet, "transaction": tx_rows[0] if tx_rows else None, "currency": currency}
+
+
+@router.post("/staff/resource-grants/grant")
+def staff_resource_grant(payload: dict[str, Any] = Body(default={}), actor_discord_id: int | None = Depends(actor_from_header)):
+    staff_id = int(actor_discord_id) if actor_discord_id is not None else None
+    require_staff(staff_id)
+
+    character_id = str(payload.get("character_id") or "").strip()
+    grant_type = str(payload.get("grant_type") or payload.get("resource_type") or "").strip().lower()
+    reason = str(payload.get("reason") or payload.get("staff_note") or "").strip()
+    currency_id = str(payload.get("currency_id") or "").strip() or None
+
+    try:
+        amount = int(payload.get("amount") or 0)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Amount must be a whole number.")
+
+    if not character_id:
+        raise HTTPException(status_code=400, detail="Choose an OC.")
+    if grant_type not in {"xp", "currency"}:
+        raise HTTPException(status_code=400, detail="Grant type must be xp or currency.")
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than 0.")
+    if not reason:
+        raise HTTPException(status_code=400, detail="A staff reason is required.")
+
+    sb = get_supabase()
+    character = _load_resource_character(sb, character_id)
+
+    if grant_type == "xp":
+        result = _grant_xp_to_oc(sb, character, amount, int(staff_id), reason)
+        label = "XP granted"
+        event_type = "xp_granted"
+    else:
+        result = _grant_currency_to_oc(sb, character, amount, int(staff_id), reason, currency_id)
+        currency = result.get("currency") or {}
+        label = f"{currency.get('ticker') or currency.get('name') or 'Currency'} granted"
+        event_type = "currency_granted"
+
+    try:
+        sb.table("activity_log").insert({
+            "guild_id": get_guild_id(),
+            "event_type": event_type,
+            "label": label,
+            "status": "approved",
+            "actor_discord_id": int(staff_id),
+            "character_id": character_id,
+            "character_name": character.get("name"),
+            "amount": amount,
+            "note": reason,
+            "source": "staff_resource_grant",
+            "details": {"grant_type": grant_type, "amount": amount, "currency_id": currency_id, "staff_grant": True},
+        }).execute()
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "message": f"Granted {amount} {'XP' if grant_type == 'xp' else 'currency'} to {character.get('name') or 'OC'}.",
+        "character": character,
+        "grant_type": grant_type,
+        "amount": amount,
+        "result": result,
+    }
+
