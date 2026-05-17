@@ -13,3 +13,11 @@ build/
 
 .DS_Store
 Thumbs.db
+
+*.bak
+*.bak.*
+*_patch/
+patch_*.py
+fix_*.py
+delete_test_oc_safe_template.sql
+007_activity_log.sql

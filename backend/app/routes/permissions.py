@@ -21,6 +21,7 @@ PLAYER_TABS = [
     "registry",
     "skills",
     "shops",
+    "shop_owner",
     "rp",
 ]
 
