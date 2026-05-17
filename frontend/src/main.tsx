@@ -1365,14 +1365,6 @@ function InventoryDashboard({
   const [characters, setCharacters] = useState<any[]>([]);
   const [data, setData] = useState<any>({ items: [], currencies: [], types: [] });
   const [search, setSearch] = useState("");
-  const [overrideCharacters, setOverrideCharacters] = useState<any[]>([]);
-  const [overrideSkills, setOverrideSkills] = useState<any[]>([]);
-  const [overrideForm, setOverrideForm] = useState({
-    character_id: "",
-    skill_key: "",
-    source_trait: "Origin Trait",
-    reason: "",
-  });
   const [itemType, setItemType] = useState("all");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -4639,6 +4631,14 @@ function StaffQueue({ discordId }: { discordId: string }) {
   const [status, setStatus] = useState("pending");
   const [requestType, setRequestType] = useState("all");
   const [search, setSearch] = useState("");
+  const [overrideCharacters, setOverrideCharacters] = useState<any[]>([]);
+  const [overrideSkills, setOverrideSkills] = useState<any[]>([]);
+  const [overrideForm, setOverrideForm] = useState({
+    character_id: "",
+    skill_key: "",
+    source_trait: "Origin Trait",
+    reason: "",
+  });
   const [resourceCharacters, setResourceCharacters] = useState<any[]>([]);
   const [resourceCurrencies, setResourceCurrencies] = useState<any[]>([]);
   const [resourceForm, setResourceForm] = useState({
