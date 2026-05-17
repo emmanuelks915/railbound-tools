@@ -201,7 +201,6 @@ def _load_request(sb, request_type: str, request_id: str) -> tuple[str, str, dic
     raise HTTPException(status_code=404, detail="Request not found.")
 
 
-@router.get("/queue")
 # --- Request Queue OC Name Enrichment v1 ---
 
 def _enrich_request_oc_names(sb, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -264,6 +263,7 @@ def _enrich_request_oc_names(sb, items: list[dict[str, Any]]) -> list[dict[str, 
 
     return items
 
+@router.get("/queue")
 def get_request_queue(
     actor_discord_id: int | None = Depends(actor_from_header),
     status: str = Query("pending"),
