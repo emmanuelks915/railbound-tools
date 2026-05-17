@@ -4,7 +4,7 @@ import { Calculator, Check, ClipboardList, Home, Package, RefreshCw, Save, Send,
 import "./styles.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-const ALLOW_DEV_Welcome to Railbound Tools = import.meta.env.VITE_ALLOW_DEV_Welcome to Railbound Tools === "true";
+const ALLOW_DEV_LOGIN = import.meta.env.VITE_ALLOW_DEV_LOGIN === "true";
 
 type Character = {
   character_id: string;
@@ -46,7 +46,7 @@ async function apiFetch(path: string, options: RequestInit = {}, discordId?: str
   const authToken = localStorage.getItem("railbound_auth_token");
   if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
 
-  if (ALLOW_DEV_Welcome to Railbound Tools && discordId) headers.set("X-Discord-Id", discordId);
+  if (ALLOW_DEV_LOGIN && discordId) headers.set("X-Discord-Id", discordId);
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -192,7 +192,7 @@ return (
             )}
           </div>
 
-          {ALLOW_DEV_Welcome to Railbound Tools ? (
+          {ALLOW_DEV_LOGIN ? (
 <label className="auth-dev-login">
             <span>Dev fallback</span>
             <input
