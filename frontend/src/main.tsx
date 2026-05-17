@@ -4702,8 +4702,6 @@ function StaffQueue({ discordId }: { discordId: string }) {
 
     setLoading(true);
     setMessage("");
-    setStaffConfirmation("");
-
     try {
       const params = new URLSearchParams({
         status,
@@ -4921,6 +4919,7 @@ function StaffQueue({ discordId }: { discordId: string }) {
 
   async function grantStaffResource() {
     setMessage("");
+    setStaffConfirmation("");
 
     if (!resourceForm.character_id) {
       setMessage("Choose an OC before granting resources.");
@@ -4950,9 +4949,10 @@ function StaffQueue({ discordId }: { discordId: string }) {
         discordId
       );
 
-      setMessage(data.message || "Resource grant complete.");
+      const successMessage = data.message || "Resource grant complete.";
+      setMessage(successMessage);
+      setStaffConfirmation(successMessage);
       setStaffConfirmation(data.message || "Resource grant complete.");
-      window.alert(data.message || "Resource grant complete.");
       setResourceForm((current) => ({
         ...current,
         amount: current.grant_type === "xp" ? "600" : "",
@@ -5027,8 +5027,7 @@ function StaffQueue({ discordId }: { discordId: string }) {
         discordId
       );
 
-      setMessage(data.message || "Trait benefit applied.");
-      setStaffConfirmation(data.message || "Trait benefit applied.");
+      const successMessage = data.message || "Trait benefit applied.";
       setTraitBenefitForm((current) => ({
         ...current,
         skill_key: "",
@@ -5036,6 +5035,8 @@ function StaffQueue({ discordId }: { discordId: string }) {
       }));
 
       await Promise.all([loadQueue(), loadTraitBenefitOptions(), loadSkillOverrideOptions()]);
+      setMessage(successMessage);
+      setStaffConfirmation(successMessage);
     } catch (error: any) {
       setMessage(error?.message || "Could not apply trait benefit.");
     }
