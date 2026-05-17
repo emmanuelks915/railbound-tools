@@ -2989,6 +2989,7 @@ function OCRegistrationDashboard({ discordId, jump }: { discordId: string; jump:
   const [traitSearch, setTraitSearch] = useState("");
   const [traitTierFilter, setTraitTierFilter] = useState("all");
   const [createdCharacterId, setCreatedCharacterId] = useState("");
+  const [registrationSkills, setRegistrationSkills] = useState<any[]>([]);
   const [form, setForm] = useState({
     name: "",
     sheet_url: "",
@@ -2997,11 +2998,19 @@ function OCRegistrationDashboard({ discordId, jump }: { discordId: string; jump:
     blurb: "",
     origin_trait_id: "",
     trait_ids: [] as string[],
+    benefit_skill_key: "",
   });
 
   async function loadOptions() {
     const data = await apiFetch("/api/oc-registration/options", {}, discordId);
     setOptions(data);
+
+    try {
+      const skillData = await apiFetch("/api/skills", {}, discordId);
+      setRegistrationSkills(skillData.skills || []);
+    } catch {
+      setRegistrationSkills([]);
+    }
   }
 
   useEffect(() => {
@@ -3060,17 +3069,49 @@ function OCRegistrationDashboard({ discordId, jump }: { discordId: string; jump:
         return;
       }
 
+      const registrationPayload = {
+        name: form.name,
+        sheet_url: form.sheet_url,
+        occupation: form.occupation,
+        affiliation: form.affiliation,
+        blurb: form.blurb,
+        origin_trait_id: form.origin_trait_id,
+        trait_ids: form.trait_ids,
+      };
+
       const data = await apiFetch(
         "/api/oc-registration/characters",
         {
           method: "POST",
-          body: JSON.stringify(form),
+          body: JSON.stringify(registrationPayload),
         },
         discordId
       );
 
-      setCreatedCharacterId(data.character_id || "");
-      setSuccessMessage(data.message || "OC registered.");
+      const newCharacterId = data.character_id || data.character?.character_id || "";
+      let extraMessage = "";
+
+      if (newCharacterId && form.benefit_skill_key) {
+        const chosenSkill = registrationSkills.find((skill: any) => skill.skill_key === form.benefit_skill_key);
+        const chosenOrigin = traits.find((trait: any) => trait.trait_id === form.origin_trait_id);
+        await apiFetch(
+          "/api/skill-requests",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              character_id: newCharacterId,
+              skill_key: form.benefit_skill_key,
+              requested_by_discord_id: Number(discordId),
+              submitter_note: `Trait benefit request from ${chosenOrigin?.name || "selected Origin trait"}: ${chosenSkill?.name || form.benefit_skill_key}. Staff should approve as a free 0 XP trait benefit if valid.`,
+            }),
+          },
+          discordId
+        );
+        extraMessage = " Trait benefit skill request submitted for staff review.";
+      }
+
+      setCreatedCharacterId(newCharacterId);
+      setSuccessMessage((data.message || "OC registered.") + extraMessage);
       setMessage("");
 
       setForm({
@@ -3081,6 +3122,7 @@ function OCRegistrationDashboard({ discordId, jump }: { discordId: string; jump:
         blurb: "",
         origin_trait_id: "",
         trait_ids: [],
+        benefit_skill_key: "",
       });
       setValidation(null);
     } catch (error: any) {
@@ -3143,6 +3185,28 @@ function OCRegistrationDashboard({ discordId, jump }: { discordId: string; jump:
 
     return true;
   });
+
+  const selectedOriginTrait = traits.find((trait: any) => trait.trait_id === form.origin_trait_id);
+
+  function traitGrantConfig(trait: any) {
+    const effects = trait?.effects_json || {};
+    const grants = effects.grants || effects.grant || effects.benefit || effects.benefits || {};
+    const rawSkills = grants.skills || grants.skill_keys || grants.choices || grants.allowed_skills || grants.eligible_skills || [];
+
+    if (Array.isArray(rawSkills)) {
+      return rawSkills
+        .map((item: any) => (typeof item === "string" ? item : item?.skill_key || item?.key || item?.skill || ""))
+        .filter(Boolean);
+    }
+
+    if (typeof rawSkills === "string") return [rawSkills];
+    return [];
+  }
+
+  const benefitSkillKeys = traitGrantConfig(selectedOriginTrait);
+  const eligibleBenefitSkills = benefitSkillKeys.length > 0
+    ? registrationSkills.filter((skill: any) => benefitSkillKeys.includes(skill.skill_key))
+    : registrationSkills;
 
   const summary = validation?.summary || {
     positive: 0,
@@ -3249,7 +3313,7 @@ function OCRegistrationDashboard({ discordId, jump }: { discordId: string; jump:
               <span>Origin Trait</span>
               <select
                 value={form.origin_trait_id}
-                onChange={(event) => updateForm({ origin_trait_id: event.target.value })}
+                onChange={(event) => updateForm({ origin_trait_id: event.target.value, benefit_skill_key: "" })}
               >
                 <option value="">No Origin selected</option>
                 {originTraits.map((trait: any) => (
@@ -3259,6 +3323,49 @@ function OCRegistrationDashboard({ discordId, jump }: { discordId: string; jump:
                 ))}
               </select>
             </label>
+
+
+            <div className="trait-benefit-request-card">
+              <h4>Origin / Trait Free Skill Request</h4>
+              <p className="muted-text">
+                If your Origin or trait grants a free skill choice, select it here. Keystone will submit it for staff review after registration.
+              </p>
+
+              {selectedOriginTrait ? (
+                <div className="request-note-block">
+                  <span>Selected Origin</span>
+                  <p>{selectedOriginTrait.name || "Origin Trait"}</p>
+                </div>
+              ) : null}
+
+              <label>
+                <span>Free Skill Choice</span>
+                <select
+                  value={form.benefit_skill_key}
+                  onChange={(event) => updateForm({ benefit_skill_key: event.target.value })}
+                  disabled={!form.origin_trait_id}
+                >
+                  <option value="">No free skill request</option>
+                  {eligibleBenefitSkills.map((skill: any) => (
+                    <option key={skill.skill_key} value={skill.skill_key}>
+                      {skill.name || skill.skill_key}{skill.tree ? ` / ${skill.tree}` : ""}{skill.cost !== undefined ? ` / ${skill.cost} XP normally` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {selectedOriginTrait && benefitSkillKeys.length === 0 ? (
+                <p className="muted-text">
+                  This trait does not have encoded skill options yet, so the list shows all active skills for beta. Staff will verify the choice before approving it as free.
+                </p>
+              ) : null}
+
+              {form.benefit_skill_key ? (
+                <p className="good-text">
+                  This will create a pending trait benefit request after the OC is registered.
+                </p>
+              ) : null}
+            </div>
 
             <div className="trait-polish-toolbar">
               <input
@@ -5319,6 +5426,109 @@ function StaffQueue({ discordId }: { discordId: string }) {
         </div>
 
         
+
+
+        <div className="card staff-trait-benefit-card">
+          <div className="card-title-row">
+            <div>
+              <span className="activity-type-label">Trait / Origin Resolver</span>
+              <h3>Apply Trait Benefit</h3>
+              <p className="muted-text">
+                Use this when an Origin or starting trait grants a free skill choice. Keystone grants it for 0 XP and logs the trait reason.
+              </p>
+            </div>
+            <button className="ghost" onClick={loadTraitBenefitOptions}>
+              <RefreshCw size={16} /> Refresh Options
+            </button>
+          </div>
+
+          <div className="request-actions-panel staff-trait-benefit-form">
+            <label>
+              <span>OC</span>
+              <select
+                value={traitBenefitForm.character_id}
+                onChange={(event) =>
+                  setTraitBenefitForm((current) => ({ ...current, character_id: event.target.value }))
+                }
+              >
+                <option value="">Select an OC</option>
+                {traitBenefitCharacters.map((character: any) => (
+                  <option key={character.character_id} value={character.character_id}>
+                    {character.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Trait / Origin</span>
+              <select
+                value={traitBenefitForm.trait_slug}
+                onChange={(event) =>
+                  setTraitBenefitForm((current) => ({
+                    ...current,
+                    trait_slug: event.target.value,
+                    skill_key: "",
+                    reason: "",
+                  }))
+                }
+              >
+                <option value="">Select a trait</option>
+                {traitBenefitTraits.map((trait: any) => (
+                  <option key={trait.slug || trait.trait_id} value={trait.slug}>
+                    {trait.name}{trait.tier ? ` / ${trait.tier}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Free Skill</span>
+              <select
+                value={traitBenefitForm.skill_key}
+                onChange={(event) =>
+                  setTraitBenefitForm((current) => ({ ...current, skill_key: event.target.value }))
+                }
+              >
+                <option value="">Select a skill</option>
+                {traitFilteredSkills.map((skill: any) => (
+                  <option key={skill.skill_key} value={skill.skill_key}>
+                    {skill.name || skill.skill_key}{skill.tree ? ` / ${skill.tree}` : ""}{skill.cost !== undefined ? ` / ${skill.cost} XP normally` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Staff Note</span>
+              <textarea
+                rows={3}
+                value={traitBenefitForm.reason}
+                onChange={(event) =>
+                  setTraitBenefitForm((current) => ({ ...current, reason: event.target.value }))
+                }
+                placeholder="Optional. If blank, Keystone uses the trait + skill as the reason."
+              />
+            </label>
+
+            {selectedTraitBenefit ? (
+              <div className="request-note-block">
+                <span>Detected Benefit Rules</span>
+                <p>
+                  {traitAllowedSkillKeys.length > 0
+                    ? `${traitAllowedSkillKeys.length} encoded eligible skill option(s).`
+                    : "No encoded skill list yet, so staff may manually choose the valid beta benefit."}
+                </p>
+              </div>
+            ) : null}
+
+            <div className="actions">
+              <button onClick={applyTraitBenefit}>
+                <ShieldCheck size={16} /> Apply Trait Benefit
+              </button>
+            </div>
+          </div>
+        </div>
 
 <div className="card staff-skill-override-card">
           <div className="card-title-row">
