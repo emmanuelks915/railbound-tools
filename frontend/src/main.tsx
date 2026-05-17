@@ -170,7 +170,7 @@ return (
             <strong>
               {authUser
                 ? authUser.global_name || authUser.username || authUser.discord_id || discordId
-                : "Sign in with Discord to access your characters, inventory, shops, and staff tools."}
+                : ""}
             </strong>
 
             {authUser?.username ? (

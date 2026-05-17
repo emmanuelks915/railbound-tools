@@ -4292,3 +4292,13 @@ table {
 .login-button-only-card span:not(button span) {
   display: none !important;
 }
+
+/* Remove Login Helper Text */
+.login-button-only-card p,
+.login-button-only-card .muted-text,
+.hero-login-card p,
+.login-panel p,
+.auth-panel p,
+.discord-auth-card p {
+  display: none !important;
+}
