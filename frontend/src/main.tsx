@@ -218,7 +218,7 @@ return (
       {tab === "oc" && <OCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} jump={setTab} />}
       {tab === "manage_oc" && <ManageOCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "inventory" && <InventoryDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
-      {tab === "shops" && <ShopDashboard discordId={discordId} />}
+      {tab === "shops" && <ShopDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} />}
       {tab === "skills" && <SkillsDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "rp" && <RpHubDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "register" && <OCRegistrationDashboard discordId={discordId} jump={setTab} />}
@@ -1513,317 +1513,321 @@ function InventoryDashboard({
 
 
 
-function ShopDashboard({ discordId }
-
-) {
-  const [shops, setShops] = useState<any[]>([]);
-  const [shopId, setShopId] = useState("");
-  const [shop, setShop] = useState<any>(null);
-  const [items, setItems] = useState<any[]>([]);
+function ShopDashboard({ discordId, selectedCharacterId }: { discordId: string; selectedCharacterId?: string }) {
+  const [data, setData] = useState<any>({ shops: [], items: [], categories: [], summary: {} });
+  const [orders, setOrders] = useState<any[]>([]);
   const [message, setMessage] = useState("");
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [createOpen, setCreateOpen] = useState(true);
-  const [listingForm, setListingForm] = useState({
-    name: "",
-    description: "",
-    image_url: "",
-    price: "0",
-    stock: "",
-    item_type: "item",
-    item_class: "",
-    recipe_link: "",
-    special_effects: "",
-    usage_information: "",
-    stat_limits: "",
-  });
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("all");
+  const [shopId, setShopId] = useState("all");
+  const [orderStatus, setOrderStatus] = useState("pending");
+  const [loading, setLoading] = useState(false);
+  const [quantityByItem, setQuantityByItem] = useState<Record<string, number>>({});
+  const [noteByItem, setNoteByItem] = useState<Record<string, string>>({});
 
-  function updateListingForm(key: string, value: string) {
-    setListingForm((current) => ({ ...current, [key]: value }));
-  }
+  async function loadMarket() {
+    if (!discordId) return;
 
-  function resetListingForm() {
-    setListingForm({
-      name: "",
-      description: "",
-      image_url: "",
-      price: "0",
-      stock: "",
-      item_type: "item",
-      item_class: "",
-      recipe_link: "",
-      special_effects: "",
-      usage_information: "",
-      stat_limits: "",
-    });
-  }
-
-  async function loadShops() {
+    setLoading(true);
     setMessage("");
-    const data = await apiFetch("/api/shops/mine", {}, discordId);
-    setShops(data.shops || []);
-    if (!shopId && data.shops?.[0]?.company_id) setShopId(data.shops[0].company_id);
-  }
-
-  async function loadShop(id = shopId) {
-    if (!id) return;
-    setMessage("");
-    const detail = await apiFetch(`/api/shops/${id}`, {}, discordId);
-    setShop(detail.shop);
-    const itemData = await apiFetch(`/api/shops/${id}/items`, {}, discordId);
-    setItems(itemData.items || []);
-  }
-
-  useEffect(() => { if (discordId) loadShops().catch((error) => setMessage(error.message)); /* eslint-disable-next-line */ }, [discordId]);
-  useEffect(() => { if (discordId && shopId) loadShop(shopId).catch((error) => setMessage(error.message)); /* eslint-disable-next-line */ }, [shopId, discordId]);
-
-  async function saveShop() {
-    if (!shop) return;
-    await apiFetch(`/api/shops/${shop.company_id}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        name: shop.name,
-        description: shop.shop_description,
-        banner_url: shop.shop_banner_url,
-        logo_url: shop.shop_logo_url,
-      }),
-    }, discordId);
-    setMessage("Shop storefront saved.");
-    await loadShop(shop.company_id);
-  }
-
-  async function uploadListingImage(file: File | null) {
-    if (!file) return;
-
-    if (!shopId) {
-      setMessage("Select a shop before uploading an image.");
-      return;
-    }
-
-    setUploadingImage(true);
-    setMessage("Uploading image...");
-
-    const formData = new FormData();
-    formData.append("file", file);
 
     try {
-      const headers = new Headers();
-      if (ALLOW_DEV_LOGIN && discordId) headers.set("X-Discord-Id", discordId);
-
-      const response = await fetch(`${API_BASE}/api/shops/${shopId}/images`, {
-        method: "POST",
-        headers,
-        body: formData,
+      const params = new URLSearchParams({
+        category,
+        shop_id: shopId,
       });
+      if (search.trim()) params.set("search", search.trim());
 
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.detail || "Image upload failed.");
-      }
-
-      updateListingForm("image_url", data.url || "");
-      setMessage("Image uploaded and attached to the listing.");
+      const result = await apiFetch(`/api/market/overview?${params.toString()}`, {}, discordId);
+      setData(result);
     } catch (error: any) {
-      setMessage(error.message || "Image upload failed.");
+      setMessage(error.message || "Could not load market.");
+      setData({ shops: [], items: [], categories: [], summary: {} });
     } finally {
-      setUploadingImage(false);
+      setLoading(false);
     }
   }
 
-  async function createListing() {
-    if (!shopId) {
-      setMessage("Select a shop first.");
-      return;
+  async function loadOrders() {
+    if (!discordId) return;
+
+    try {
+      const result = await apiFetch(`/api/market/orders?status=${orderStatus}`, {}, discordId);
+      setOrders(result.orders || []);
+    } catch {
+      setOrders([]);
     }
-
-    if (!listingForm.name.trim()) {
-      setMessage("Listing name is required.");
-      return;
-    }
-
-    const price = Number(listingForm.price || 0);
-    if (Number.isNaN(price) || price < 0) {
-      setMessage("Price must be 0 or higher.");
-      return;
-    }
-
-    const stockText = listingForm.stock.trim();
-    const stock = stockText === "" ? null : Number(stockText);
-    if (stock !== null && (Number.isNaN(stock) || stock < 0)) {
-      setMessage("Stock must be blank, 0, or higher.");
-      return;
-    }
-
-    await apiFetch(`/api/shops/${shopId}/items`, {
-      method: "POST",
-      body: JSON.stringify({
-        name: listingForm.name.trim(),
-        description: listingForm.description.trim(),
-        image_url: listingForm.image_url.trim() || null,
-        price,
-        stock,
-        item_type: listingForm.item_type.trim() || "item",
-        item_class: listingForm.item_class.trim() || null,
-        recipe_link: listingForm.recipe_link.trim() || null,
-        special_effects: listingForm.special_effects.trim() || null,
-        usage_information: listingForm.usage_information.trim() || null,
-        stat_limits: listingForm.stat_limits.trim() || null,
-      }),
-    }, discordId);
-
-    setMessage("Listing submitted for staff review.");
-    resetListingForm();
-    await loadShop(shopId);
   }
 
-  async function patchItem(itemId: string, patch: Record<string, unknown>) {
-    await apiFetch(`/api/shops/items/${itemId}`, { method: "PATCH", body: JSON.stringify(patch) }, discordId);
-    setMessage("Listing updated.");
-    await loadShop();
+  useEffect(() => {
+    loadMarket();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId, category, shopId]);
+
+  useEffect(() => {
+    loadOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId, orderStatus]);
+
+  function submitSearch(event: React.FormEvent) {
+    event.preventDefault();
+    loadMarket();
   }
 
-  function listingStatus(item: any) {
-    const raw = String(item.review_status || (item.is_active ? "active" : "draft"));
-    return raw.replaceAll("_", " ").toUpperCase();
+  function priceLabel(item: any) {
+    const currency = item.currency_emoji || item.currency_ticker || item.currency_name || "";
+    return `${item.price ?? 0}${currency ? ` ${currency}` : ""}`;
   }
+
+  function stockLabel(item: any) {
+    if (item.stock === null || item.stock === undefined) return "Stock: ∞";
+    if (Number(item.stock) <= 0) return "Out of stock";
+    return `Stock: ${item.stock}`;
+  }
+
+  async function requestItem(item: any) {
+    const itemId = item.item_id;
+    const quantity = quantityByItem[itemId] || 1;
+
+    setMessage("");
+
+    try {
+      const result = await apiFetch(
+        `/api/market/items/${itemId}/request`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            quantity,
+            character_id: selectedCharacterId || null,
+            note: noteByItem[itemId] || "",
+          }),
+        },
+        discordId
+      );
+
+      setMessage(result.message || "Request submitted.");
+      await loadOrders();
+    } catch (error: any) {
+      setMessage(error.message || "Could not request item.");
+    }
+  }
+
+  const shops = data.shops || [];
+  const items = data.items || [];
+  const categories = data.categories || [];
+  const summary = data.summary || {};
 
   return (
     <RequireDiscord discordId={discordId}>
-      <section className="grid shop-grid">
-        <div className="card">
-          <div className="card-title-row">
-            <h2>Shop Dashboard</h2>
-            <button className="ghost" onClick={loadShops}><RefreshCw size={16} /> Refresh</button>
+      <section className="market-page">
+        <div className="card market-hero">
+          <div>
+            <span className="activity-type-label">Market District</span>
+            <h2>Shops & Market</h2>
+            <p className="muted-text">
+              Browse storefronts, find items, check stock, and submit purchase requests from the dashboard.
+            </p>
           </div>
-          {message && <p className="message">{message}</p>}
+          <button className="ghost" onClick={loadMarket} disabled={loading}>
+            <RefreshCw size={16} /> {loading ? "Loading..." : "Refresh"}
+          </button>
+        </div>
+
+        <div className="market-summary-grid">
+          <div className="card market-summary-card">
+            <span>Open Shops</span>
+            <strong>{summary.shops ?? shops.length}</strong>
+          </div>
+          <div className="card market-summary-card">
+            <span>Items Listed</span>
+            <strong>{summary.items ?? items.length}</strong>
+          </div>
+          <div className="card market-summary-card">
+            <span>Needs Approval</span>
+            <strong>{summary.approval_required ?? 0}</strong>
+          </div>
+          <div className="card market-summary-card">
+            <span>Out of Stock</span>
+            <strong>{summary.out_of_stock ?? 0}</strong>
+          </div>
+        </div>
+
+        <div className="card market-filters-card">
+          <form className="market-search-form" onSubmit={submitSearch}>
+            <label>
+              <span>Search Market</span>
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search items, shops, categories..."
+              />
+            </label>
+            <button type="submit">Search</button>
+          </form>
+
           <label>
-            Shop
-            <select value={shopId} onChange={(e) => setShopId(e.target.value)}>
-              <option value="">Select a shop</option>
-              {shops.map((s) => <option key={s.company_id} value={s.company_id}>{s.name} {s.member_role ? `• ${s.member_role}` : ""}</option>)}
+            <span>Shop</span>
+            <select value={shopId} onChange={(event) => setShopId(event.target.value)}>
+              <option value="all">All shops</option>
+              {shops.map((shop: any) => (
+                <option value={shop.shop_id} key={shop.shop_id}>
+                  {shop.name}
+                </option>
+              ))}
             </select>
           </label>
 
-          {shop ? (
-            <>
-              <label>Storefront Name<input value={shop.name || ""} onChange={(e) => setShop({ ...shop, name: e.target.value })} /></label>
-              <label>Description<textarea value={shop.shop_description || ""} onChange={(e) => setShop({ ...shop, shop_description: e.target.value })} /></label>
-              <label>Banner URL<input value={shop.shop_banner_url || ""} onChange={(e) => setShop({ ...shop, shop_banner_url: e.target.value })} /></label>
-              <label>Logo URL<input value={shop.shop_logo_url || ""} onChange={(e) => setShop({ ...shop, shop_logo_url: e.target.value })} /></label>
-              <button onClick={saveShop}><Save size={16} /> Save Storefront</button>
-            </>
-          ) : <p>Select a shop to manage.</p>}
+          <label>
+            <span>Category</span>
+            <select value={category} onChange={(event) => setCategory(event.target.value)}>
+              <option value="all">All categories</option>
+              {categories.map((item: any) => (
+                <option value={item} key={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
-        <div className="card shop-create-card">
-          <div className="card-title-row">
-            <div>
-              <h2>Create Listing</h2>
-              <p className="muted-text">Submit a shop item for staff review. Approved listings can be published to Discord later.</p>
+        {message ? <p className="message">{message}</p> : null}
+
+        <div className="market-layout">
+          <div className="market-main">
+            <div className="card market-section-title">
+              <h3>Market Listings</h3>
+              <p className="muted-text">Item cards show price, stock, category, approval requirements, and source shop.</p>
             </div>
-            <button className="ghost" onClick={() => setCreateOpen((value) => !value)}>
-              {createOpen ? "Collapse" : "Open"}
-            </button>
-          </div>
 
-          {createOpen ? (
-            <>
-              <div className="shop-create-grid">
-                <label>
-                  Item Name
-                  <input value={listingForm.name} onChange={(e) => updateListingForm("name", e.target.value)} placeholder="Clockwork Grapple" />
-                </label>
-                <label>
-                  Price
-                  <input type="number" min={0} value={listingForm.price} onChange={(e) => updateListingForm("price", e.target.value)} />
-                </label>
-                <label>
-                  Stock
-                  <input type="number" min={0} value={listingForm.stock} onChange={(e) => updateListingForm("stock", e.target.value)} placeholder="Blank = unlimited" />
-                </label>
-                <label>
-                  Item Type
-                  <input value={listingForm.item_type} onChange={(e) => updateListingForm("item_type", e.target.value)} placeholder="item, service, recipe..." />
-                </label>
-                <label>
-                  Item Class
-                  <input value={listingForm.item_class} onChange={(e) => updateListingForm("item_class", e.target.value)} placeholder="Weapon, Armor, Consumable..." />
-                </label>
-                <label>
-                  Image URL
-                  <input value={listingForm.image_url} onChange={(e) => updateListingForm("image_url", e.target.value)} placeholder="https://..." />
-                </label>
-                <label>
-                  Upload Image
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp,image/gif"
-                    disabled={uploadingImage}
-                    onChange={(e) => uploadListingImage(e.target.files?.[0] || null)}
-                  />
-                  <small>{uploadingImage ? "Uploading..." : "PNG, JPG, WEBP, or GIF. Max 8 MB."}</small>
-                </label>
-                <label className="full-span">
-                  Description
-                  <textarea value={listingForm.description} onChange={(e) => updateListingForm("description", e.target.value)} placeholder="What is this listing?" />
-                </label>
-                <label className="full-span">
-                  Recipe / Sheet Link
-                  <input value={listingForm.recipe_link} onChange={(e) => updateListingForm("recipe_link", e.target.value)} placeholder="Optional doc/sheet link" />
-                </label>
-                <label className="full-span">
-                  Stat Limits
-                  <textarea value={listingForm.stat_limits} onChange={(e) => updateListingForm("stat_limits", e.target.value)} placeholder="Optional stat requirements or limits..." />
-                </label>
-                <label className="full-span">
-                  Special Effects
-                  <textarea value={listingForm.special_effects} onChange={(e) => updateListingForm("special_effects", e.target.value)} placeholder="Optional effects..." />
-                </label>
-                <label className="full-span">
-                  Usage Information
-                  <textarea value={listingForm.usage_information} onChange={(e) => updateListingForm("usage_information", e.target.value)} placeholder="How should players use this?" />
-                </label>
-              </div>
-
-              {listingForm.image_url.trim() ? (
-                <div className="shop-image-preview">
-                  <span>Image Preview</span>
-                  <img src={listingForm.image_url.trim()} alt="Listing preview" />
+            <div className="market-item-grid">
+              {items.length === 0 ? (
+                <div className="card market-empty-state">
+                  <strong>No market items found.</strong>
+                  <p className="muted-text">Try clearing filters or adding items to the shop system.</p>
                 </div>
               ) : null}
 
-              <div className="actions">
-                <button className="primary-action" onClick={createListing}><Send size={16} /> Submit Listing</button>
-                <button className="ghost secondary-action" onClick={resetListingForm}>Clear Form</button>
-              </div>
-            </>
-          ) : null}
-        </div>
+              {items.map((item: any) => {
+                const itemId = item.item_id;
+                const outOfStock = item.stock !== null && item.stock !== undefined && Number(item.stock) <= 0;
 
-        <div className="card shop-listings-card">
-          <h2>Listings</h2>
-          <div className="item-list">
-            {items.length === 0 ? <p>No listings found.</p> : null}
-            {items.map((item) => (
-              <div className="request-card shop-listing-card" key={item.item_id}>
-                {item.image_url ? <img src={item.image_url} alt="" /> : null}
+                return (
+                  <div className="card market-item-card" key={itemId || item.name}>
+                    {item.image_url ? <img className="market-item-image" src={item.image_url} alt="" /> : null}
+
+                    <div className="market-item-heading">
+                      <div>
+                        <span className="activity-type-label">{item.category || "Item"}</span>
+                        <h3>{item.name}</h3>
+                        <p className="muted-text">{item.shop_name}</p>
+                      </div>
+                      <strong className="market-price">{priceLabel(item)}</strong>
+                    </div>
+
+                    {item.description ? <p className="market-description">{item.description}</p> : null}
+
+                    <div className="market-badges">
+                      <span>{stockLabel(item)}</span>
+                      {item.requires_approval ? <span>Approval Required</span> : <span>Instant / Logged</span>}
+                    </div>
+
+                    <div className="market-request-panel">
+                      <label>
+                        <span>Qty</span>
+                        <input
+                          type="number"
+                          min={1}
+                          value={quantityByItem[itemId] || 1}
+                          onChange={(event) =>
+                            setQuantityByItem((current) => ({
+                              ...current,
+                              [itemId]: Math.max(1, Number(event.target.value || 1)),
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <label className="market-note-field">
+                        <span>Note</span>
+                        <input
+                          value={noteByItem[itemId] || ""}
+                          onChange={(event) =>
+                            setNoteByItem((current) => ({ ...current, [itemId]: event.target.value }))
+                          }
+                          placeholder="Optional note..."
+                        />
+                      </label>
+
+                      <button onClick={() => requestItem(item)} disabled={outOfStock || !itemId}>
+                        <Store size={16} /> {item.requires_approval ? "Request" : "Buy / Log"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <aside className="market-side">
+            <div className="card market-shops-card">
+              <div className="card-title-row">
+                <h3>Storefronts</h3>
+                <span className="pill">{shops.length}</span>
+              </div>
+
+              <div className="market-shop-list">
+                {shops.length === 0 ? <p className="muted-text">No open shops found.</p> : null}
+
+                {shops.map((shop: any) => (
+                  <button
+                    type="button"
+                    className={`market-shop-card ${shopId === shop.shop_id ? "active" : ""}`}
+                    key={shop.shop_id}
+                    onClick={() => setShopId(shop.shop_id)}
+                  >
+                    <strong>{shop.name}</strong>
+                    <span>{shop.item_count || 0} items • {shop.status || "Open"}</span>
+                    {shop.description ? <small>{shop.description}</small> : null}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="card market-orders-card">
+              <div className="card-title-row">
                 <div>
-                  <h3>{item.name}</h3>
-                  <p>Price: {item.price} • Stock: {item.stock ?? "∞"} • Status: {listingStatus(item)}</p>
-                  {item.description ? <small>{item.description}</small> : null}
-                </div>
-                <div className="inline-form compact-inline">
-                  <input type="number" defaultValue={item.stock ?? 0} onBlur={(e) => patchItem(item.item_id, { stock: Number(e.target.value) })} />
-                  <button className="ghost" onClick={() => patchItem(item.item_id, { is_active: false })}>Unpublish</button>
+                  <h3>Orders</h3>
+                  <p className="muted-text">Recent purchase requests.</p>
                 </div>
               </div>
-            ))}
-          </div>
+
+              <select value={orderStatus} onChange={(event) => setOrderStatus(event.target.value)}>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="denied">Denied</option>
+                <option value="all">All</option>
+              </select>
+
+              <div className="market-order-list">
+                {orders.length === 0 ? <p className="muted-text">No orders found.</p> : null}
+
+                {orders.slice(0, 8).map((order: any, index: number) => (
+                  <div className="market-order-row" key={order.order_id || order.id || index}>
+                    <strong>{order.status || "pending"}</strong>
+                    <span>Item: {order.item_id || order.shop_item_id || "—"}</span>
+                    <span>Qty: {order.quantity || 1}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </aside>
         </div>
       </section>
     </RequireDiscord>
   );
 }
+
+
 
 function SkillsDashboard({ discordId, selectedCharacterId, setSelectedCharacterId }: { discordId: string; selectedCharacterId: string; setSelectedCharacterId: (id: string) => void }) {
   const [skills, setSkills] = useState<any[]>([]);
