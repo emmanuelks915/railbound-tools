@@ -132,6 +132,14 @@ function App() {
   ] as const;
 
     const permissions = usePermissions(discordId);
+  // Staff OC Autoselect Safety: clear stale OC selection
+  useEffect(() => {
+    if (permissions?.is_staff && selectedCharacterId) {
+      setSelectedCharacterId("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permissions?.is_staff]);
+
 
   if (tab && !canUseTab(permissions, tab)) {
     setTab("dashboard");
@@ -244,18 +252,36 @@ function usePermissions(discordId: string) {
     if (!discordId) return;
 
     apiFetch("/api/auth/permissions", {}, discordId)
-      .then(setPermissions)
+      .then((data) => setPermissions(rememberPermissionsForSelectionSafety(data)))
       .catch(() =>
-        setPermissions({
-          is_logged_in: Boolean(discordId),
-          is_staff: false,
-          is_admin: false,
-          allowed_tabs: [],
-        })
+        setPermissions(
+          rememberPermissionsForSelectionSafety({
+            is_logged_in: Boolean(discordId),
+            is_staff: false,
+            is_admin: false,
+            allowed_tabs: [],
+          })
+        )
       );
   }, [discordId]);
 
   return permissions;
+}
+
+function rememberPermissionsForSelectionSafety(data: any) {
+  if (typeof window !== "undefined") {
+    (window as any).__railboundPermissions = data;
+  }
+  return data;
+}
+
+function shouldAutoSelectOc() {
+  if (typeof window === "undefined") return false;
+  const permissions = (window as any).__railboundPermissions;
+
+  if (!permissions || permissions.is_staff === undefined) return false;
+
+  return permissions.is_staff !== true;
 }
 
 function canUseTab(permissions: any, tab: Tab) {
@@ -1033,7 +1059,7 @@ function ManageOCDashboard({
       const rows = Array.isArray(data) ? data : data.characters || data.data || [];
       setCharacters(rows);
 
-      if (!selectedCharacterId && rows.length > 0) {
+      if (!selectedCharacterId && rows.length > 0 && shouldAutoSelectOc()) {
         setSelectedCharacterId(String(rows[0].character_id || rows[0].id));
       }
     } catch (error: any) {
@@ -1314,7 +1340,7 @@ function InventoryDashboard({
       const rows = Array.isArray(result) ? result : result.characters || result.data || [];
       setCharacters(rows);
 
-      if (!selectedCharacterId && rows.length > 0) {
+      if (!selectedCharacterId && rows.length > 0 && shouldAutoSelectOc()) {
         setSelectedCharacterId(String(rows[0].character_id || rows[0].id));
       }
     } catch (error: any) {
