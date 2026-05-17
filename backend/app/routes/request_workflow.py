@@ -270,7 +270,6 @@ def get_request_queue(
     }
 
 
-@router.post("/{request_type}/{request_id}/approve")
 # --- Skill Purchase Approval Apply v1 ---
 
 def _apply_skill_purchase_approval(
@@ -366,6 +365,7 @@ def _apply_skill_purchase_approval(
         "notes": staff_note or ("Staff override approval." if staff_override else "Skill purchase approved."),
     }).execute()
 
+@router.post("/{request_type}/{request_id}/approve")
 def approve_request(
     request_type: str,
     request_id: str,
@@ -456,21 +456,13 @@ def deny_request(
         "staff_note": reason,
     }
 
-    updated_rows = []
-    try:
-        updated_rows = _as_list(
-            sb.table(table)
-            .update({**update_payload, "denied_at": "now()"})
-            .eq(id_column, request_id)
-            .execute()
-        )
-    except Exception:
-        updated_rows = _as_list(
-            sb.table(table)
-            .update(update_payload)
-            .eq(id_column, request_id)
-            .execute()
-        )
+    updated_rows = _safe_update_request(
+        sb,
+        table,
+        id_column,
+        request_id,
+        {**update_payload, "denied_at": "now()"},
+    )
 
     updated = updated_rows[0] if updated_rows else {**row, **update_payload}
 
@@ -554,6 +546,7 @@ def _normalize_request_update_payload(table: str, payload: dict[str, Any]) -> di
     return {key: value for key, value in out.items() if key in allowed}
 
 def _safe_update_request(sb, table: str, id_column: str, request_id: str, update_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    update_payload = _normalize_request_update_payload(table, update_payload)
     try:
         return _as_list(
             sb.table(table)
