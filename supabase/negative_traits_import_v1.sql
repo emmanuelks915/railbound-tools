@@ -25,6 +25,7 @@ create table if not exists public.traits (
 );
 
 alter table public.traits add column if not exists guild_id text;
+alter table public.traits add column if not exists slug text;
 alter table public.traits add column if not exists trait_key text;
 alter table public.traits add column if not exists name text;
 alter table public.traits add column if not exists trait_type text;
@@ -46,7 +47,8 @@ where guild_id = '1462489358908129354'
 and trait_key in (
         '1462489358908129354',
         'negative_knucklehead',
-  'negative_unlucky',
+          'negative_knucklehead',
+        'negative_unlucky',
   'negative_illiterate',
   'negative_non_swimmer',
   'negative_monotoned',
@@ -74,6 +76,7 @@ and trait_key in (
 insert into public.traits (
   guild_id,
   trait_key,
+  slug,
   name,
   trait_type,
   trait_group,
@@ -91,6 +94,7 @@ values
 (
         '1462489358908129354',
         'negative_knucklehead',
+                'negative_knucklehead',
         'Knucklehead',
         'negative',
         'negative',
@@ -107,6 +111,7 @@ values
 (
         '1462489358908129354',
         'negative_unlucky',
+                'negative_unlucky',
         'Unlucky',
         'negative',
         'negative',
@@ -123,6 +128,7 @@ values
 (
         '1462489358908129354',
         'negative_illiterate',
+                'negative_illiterate',
         'Illiterate',
         'negative',
         'negative',
@@ -139,6 +145,7 @@ values
 (
         '1462489358908129354',
         'negative_non_swimmer',
+                'negative_non_swimmer',
         'Non-swimmer',
         'negative',
         'negative',
@@ -155,6 +162,7 @@ values
 (
         '1462489358908129354',
         'negative_monotoned',
+                'negative_monotoned',
         'Monotoned',
         'negative',
         'negative',
@@ -171,6 +179,7 @@ values
 (
         '1462489358908129354',
         'negative_bad_back',
+                'negative_bad_back',
         'Bad Back',
         'negative',
         'negative',
@@ -187,6 +196,7 @@ values
 (
         '1462489358908129354',
         'negative_hearing_impaired',
+                'negative_hearing_impaired',
         'Hearing Impaired',
         'negative',
         'negative',
@@ -203,6 +213,7 @@ values
 (
         '1462489358908129354',
         'negative_big_spender',
+                'negative_big_spender',
         'Big Spender',
         'negative',
         'negative',
@@ -219,6 +230,7 @@ values
 (
         '1462489358908129354',
         'negative_clumsy',
+                'negative_clumsy',
         'Clumsy',
         'negative',
         'negative',
@@ -235,6 +247,7 @@ values
 (
         '1462489358908129354',
         'negative_in_debt',
+                'negative_in_debt',
         'In Debt',
         'negative',
         'negative',
@@ -251,6 +264,7 @@ values
 (
         '1462489358908129354',
         'negative_deaf',
+                'negative_deaf',
         'Deaf',
         'negative',
         'negative',
@@ -267,6 +281,7 @@ values
 (
         '1462489358908129354',
         'negative_weak_body',
+                'negative_weak_body',
         'Weak Body',
         'negative',
         'negative',
@@ -283,6 +298,7 @@ values
 (
         '1462489358908129354',
         'negative_inflamed_mana_circuits',
+                'negative_inflamed_mana_circuits',
         'Inflamed Mana Circuits',
         'negative',
         'negative',
@@ -299,6 +315,7 @@ values
 (
         '1462489358908129354',
         'negative_hot_natured',
+                'negative_hot_natured',
         'Hot-Natured',
         'negative',
         'negative',
@@ -315,6 +332,7 @@ values
 (
         '1462489358908129354',
         'negative_cold_natured',
+                'negative_cold_natured',
         'Cold-Natured',
         'negative',
         'negative',
@@ -331,6 +349,7 @@ values
 (
         '1462489358908129354',
         'negative_visually_impaired',
+                'negative_visually_impaired',
         'Visually Impaired',
         'negative',
         'negative',
@@ -347,6 +366,7 @@ values
 (
         '1462489358908129354',
         'negative_easily_hurt',
+                'negative_easily_hurt',
         'Easily Hurt',
         'negative',
         'negative',
@@ -363,6 +383,7 @@ values
 (
         '1462489358908129354',
         'negative_got_a_prosthetic',
+                'negative_got_a_prosthetic',
         'Got a Prosthetic',
         'negative',
         'negative',
@@ -379,6 +400,7 @@ values
 (
         '1462489358908129354',
         'negative_pyrophobia',
+                'negative_pyrophobia',
         'Pyrophobia',
         'negative',
         'negative',
@@ -395,6 +417,7 @@ values
 (
         '1462489358908129354',
         'negative_claustrophobia',
+                'negative_claustrophobia',
         'Claustrophobia',
         'negative',
         'negative',
@@ -411,6 +434,7 @@ values
 (
         '1462489358908129354',
         'negative_acrophobia',
+                'negative_acrophobia',
         'Acrophobia',
         'negative',
         'negative',
@@ -427,6 +451,7 @@ values
 (
         '1462489358908129354',
         'negative_source_sensitivity',
+                'negative_source_sensitivity',
         'Source Sensitivity',
         'negative',
         'negative',
@@ -443,6 +468,7 @@ values
 (
         '1462489358908129354',
         'negative_mana_less',
+                'negative_mana_less',
         'Mana-Less',
         'negative',
         'negative',
@@ -459,6 +485,7 @@ values
 (
         '1462489358908129354',
         'negative_panic_attacks',
+                'negative_panic_attacks',
         'Panic Attacks',
         'negative',
         'negative',
@@ -473,7 +500,7 @@ values
         true
     );
 -- Verify
-select trait_key, name, tier, point_value, refund_points, trait_type, is_active
+select trait_key, slug, name, tier, point_value, refund_points, trait_type, is_active
 from public.traits
 where guild_id = '1462489358908129354'
   and trait_type = 'negative'
