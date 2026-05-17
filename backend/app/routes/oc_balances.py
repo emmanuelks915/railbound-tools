@@ -350,22 +350,35 @@ def _grant_xp_to_oc(sb, character: dict[str, Any], amount: int, staff_id: int, r
         )
         wallet = inserted[0] if inserted else {"guild_id": gid, "character_id": character_id, "available_xp": amount, "total_earned_xp": amount, "total_spent_xp": 0}
 
-    tx_rows = _as_list(
-        sb.table("oc_xp_transactions")
-        .insert({
-            "guild_id": gid,
-            "character_id": character_id,
-            "direction": "earn",
-            "amount": amount,
-            "source": "staff_grant",
-            "reference_type": None,
-            "reference_key": "staff_resource_grant",
-            "reason": reason,
-            "actor_discord_id": staff_id,
-            "metadata": {"resource_type": "xp", "staff_grant": True},
-        })
-        .execute()
-    )
+    # XP transaction logging should never crash the staff grant after the wallet succeeds.
+    # Some databases restrict oc_xp_transactions.source values; if "staff_grant"
+    # is rejected, try safer legacy values, then continue with transaction=None.
+    tx_rows = []
+    tx_payload = {
+        "guild_id": gid,
+        "character_id": character_id,
+        "direction": "earn",
+        "amount": amount,
+        "source": "staff_grant",
+        "reference_type": None,
+        "reference_key": "staff_resource_grant",
+        "reason": reason,
+        "actor_discord_id": staff_id,
+        "metadata": {"resource_type": "xp", "staff_grant": True},
+    }
+
+    for source_value in ("staff_grant", "staff", "manual", "admin", "adjustment", None):
+        try:
+            payload = dict(tx_payload)
+            payload["source"] = source_value
+            tx_rows = _as_list(
+                sb.table("oc_xp_transactions")
+                .insert(payload)
+                .execute()
+            )
+            break
+        except Exception:
+            tx_rows = []
 
     return {"wallet": wallet, "transaction": tx_rows[0] if tx_rows else None}
 
