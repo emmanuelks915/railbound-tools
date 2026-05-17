@@ -3305,3 +3305,21 @@ table {
     width: fit-content;
   }
 }
+
+/* Staff Permissions v1 */
+
+.permission-denied-card {
+  display: grid;
+  gap: 0.55rem;
+  border-color: rgba(160, 43, 43, 0.18);
+  background: rgba(160, 43, 43, 0.06);
+}
+
+.permission-denied-card h2 {
+  margin: 0;
+}
+
+.staff-locked-nav {
+  opacity: 0.48;
+  pointer-events: none;
+}

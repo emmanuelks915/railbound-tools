@@ -129,7 +129,13 @@ function App() {
     ["combat", ClipboardList, "Derived Stats"],
   ] as const;
 
-  return (
+    const permissions = usePermissions(discordId);
+
+  if (tab && !canUseTab(permissions, tab)) {
+    setTab("dashboard");
+  }
+
+return (
     <main className="app-shell">
       <section className="hero">
         <div>
@@ -190,7 +196,8 @@ function App() {
       </section>
 
       <nav className="tabs">
-        {tabs.map(([key, Icon, label]) => (
+        {tabs.filter(([key]) => canUseTab(permissions, key as Tab))
+            .map(([key, Icon, label]) => (
           <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>
             <Icon size={18} /> {label}
           </button>
@@ -205,8 +212,8 @@ function App() {
           jump={setTab}
         />
       )}
-      {tab === "activity" && <ActivityDashboard discordId={discordId} />}
-      {tab === "qa" && <ProductionQADashboard discordId={discordId} jump={setTab} />}
+      {tab === "activity" && <StaffOnly discordId={discordId}><ActivityDashboard discordId={discordId} /></StaffOnly>}
+      {tab === "qa" && <StaffOnly discordId={discordId}><ProductionQADashboard discordId={discordId} jump={setTab} /></StaffOnly>}
       {tab === "planner" && <Planner discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "oc" && <OCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} jump={setTab} />}
       {tab === "manage_oc" && <ManageOCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
@@ -216,10 +223,72 @@ function App() {
       {tab === "rp" && <RpHubDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "register" && <OCRegistrationDashboard discordId={discordId} jump={setTab} />}
       {tab === "registry" && <OCRegistry discordId={discordId} />}
-      {tab === "staff" && <StaffQueue discordId={discordId} />}
+      {tab === "staff" && <StaffOnly discordId={discordId}><StaffQueue discordId={discordId} /></StaffOnly>}
       {tab === "combat" && <DerivedStatsCalculator />}
     </main>
   );
+}
+
+function usePermissions(discordId: string) {
+  const [permissions, setPermissions] = useState<any>({
+    is_logged_in: false,
+    is_staff: false,
+    is_admin: false,
+    allowed_tabs: [],
+  });
+
+  useEffect(() => {
+    if (!discordId) return;
+
+    apiFetch("/api/auth/permissions", {}, discordId)
+      .then(setPermissions)
+      .catch(() =>
+        setPermissions({
+          is_logged_in: Boolean(discordId),
+          is_staff: false,
+          is_admin: false,
+          allowed_tabs: [],
+        })
+      );
+  }, [discordId]);
+
+  return permissions;
+}
+
+function canUseTab(permissions: any, tab: Tab) {
+  const allowedTabs = permissions?.allowed_tabs || [];
+
+  if (!allowedTabs.length) {
+    return !["staff", "qa", "activity"].includes(String(tab));
+  }
+
+  return allowedTabs.includes(tab);
+}
+
+function StaffOnly({
+  discordId,
+  children,
+}: {
+  discordId: string;
+  children: React.ReactNode;
+}) {
+  const permissions = usePermissions(discordId);
+
+  if (!permissions?.is_staff) {
+    return (
+      <RequireDiscord discordId={discordId}>
+        <div className="card permission-denied-card">
+          <span className="activity-type-label">Restricted</span>
+          <h2>Staff Only</h2>
+          <p className="muted-text">
+            This page is restricted to staff. If you should have access, check your STAFF_DISCORD_IDS backend variable.
+          </p>
+        </div>
+      </RequireDiscord>
+    );
+  }
+
+  return <>{children}</>;
 }
 
 function RequireDiscord({ discordId, children }: { discordId: string; children: React.ReactNode }) {
