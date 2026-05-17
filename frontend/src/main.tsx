@@ -67,66 +67,6 @@ function App() {
   const [authUser, setAuthUser] = useState<any>(null);
   const [discordId, setDiscordId] = useState(() => localStorage.getItem("railbound_discord_id") || "");
   const [selectedCharacterId, setSelectedCharacterId] = useState(() => localStorage.getItem("railbound_character_id") || "");
-
-  // Kill Stale OC Ghost v1: never allow one Discord account to inherit another account's selected OC/data.
-  const lastDiscordIdRef = useRef<string | null>(null);
-  const ocSessionKey = `${discordId || "logged-out"}:${selectedCharacterId || "none"}`;
-
-  useEffect(() => {
-    const lastDiscordId = lastDiscordIdRef.current;
-
-    if (lastDiscordId !== null && String(lastDiscordId || "") !== String(discordId || "")) {
-      setSelectedCharacterId("");
-
-      try {
-        const keysToRemove: string[] = [];
-        for (let i = 0; i < localStorage.length; i += 1) {
-          const key = localStorage.key(i) || "";
-          const lower = key.toLowerCase();
-          if (
-            lower.includes("selectedcharacter") ||
-            lower.includes("selected_character") ||
-            lower.includes("selected-oc") ||
-            lower.includes("selectedoc") ||
-            lower.includes("characterid") ||
-            lower.includes("ocid")
-          ) {
-            keysToRemove.push(key);
-          }
-        }
-
-        keysToRemove.forEach((key) => localStorage.removeItem(key));
-      } catch {
-        // localStorage may be unavailable; ignore safely.
-      }
-
-      try {
-        const keysToRemove: string[] = [];
-        for (let i = 0; i < sessionStorage.length; i += 1) {
-          const key = sessionStorage.key(i) || "";
-          const lower = key.toLowerCase();
-          if (
-            lower.includes("selectedcharacter") ||
-            lower.includes("selected_character") ||
-            lower.includes("selected-oc") ||
-            lower.includes("selectedoc") ||
-            lower.includes("characterid") ||
-            lower.includes("ocid")
-          ) {
-            keysToRemove.push(key);
-          }
-        }
-
-        keysToRemove.forEach((key) => sessionStorage.removeItem(key));
-      } catch {
-        // sessionStorage may be unavailable; ignore safely.
-      }
-    }
-
-    lastDiscordIdRef.current = discordId || null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discordId]);
-
   useEffect(() => {
     localStorage.setItem("railbound_discord_id", discordId);
   }, [discordId]);
@@ -283,15 +223,15 @@ return (
           jump={setTab}
         />
       )}
-      {tab === "activity" && <StaffOnly discordId={discordId}><ActivityDashboard key={`ActivityDashboard-${ocSessionKey}`} discordId={discordId} /></StaffOnly>}
+      {tab === "activity" && <StaffOnly discordId={discordId}><ActivityDashboard discordId={discordId} /></StaffOnly>}
       {tab === "qa" && <StaffOnly discordId={discordId}><ProductionQADashboard discordId={discordId} jump={setTab} /></StaffOnly>}
       {tab === "planner" && <Planner discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
-      {tab === "oc" && <OCDashboard key={`OCDashboard-${ocSessionKey}`} discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} jump={setTab} />}
-      {tab === "manage_oc" && <ManageOCDashboard key={`ManageOCDashboard-${ocSessionKey}`} discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
-      {tab === "inventory" && <InventoryDashboard key={`InventoryDashboard-${ocSessionKey}`} discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "oc" && <OCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} jump={setTab} />}
+      {tab === "manage_oc" && <ManageOCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "inventory" && <InventoryDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "shops" && <ShopDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} />}
       {tab === "shop_owner" && <ShopOwnerDashboard discordId={discordId} />}
-      {tab === "skills" && <SkillsDashboard key={`SkillsDashboard-${ocSessionKey}`} discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "skills" && <SkillsDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "rp" && <RpHubDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "register" && <OCRegistrationDashboard discordId={discordId} jump={setTab} />}
       {tab === "registry" && <OCRegistry discordId={discordId} />}
@@ -1265,17 +1205,6 @@ function OCDashboard({ discordId, selectedCharacterId, setSelectedCharacterId, j
   }, {});
 
   const pendingRequests = skillRequests.filter((request) => String(request.status || "").toLowerCase() === "pending");
-
-    // Kill Stale OC Ghost v1: blank OC dashboard guard
-  if (!selectedCharacterId) {
-    return (
-      <section className="card">
-        <h2>OC Dashboard</h2>
-        <p className="muted-text">Select one of your OCs to view stats, XP, skills, and derived values.</p>
-      </section>
-    );
-  }
-
 return (
     <RequireDiscord discordId={discordId}>
       {jump ? (
