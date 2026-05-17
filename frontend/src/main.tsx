@@ -4917,186 +4917,6 @@ function StaffQueue({ discordId }: { discordId: string }) {
     <RequireDiscord discordId={discordId}>
       <section className="request-workflow-page">
 
-        <div className="card staff-resource-grant-card">
-          <div className="card-title-row">
-            <div>
-              <span className="activity-type-label">Staff Resources</span>
-              <h3>Grant OC Resources</h3>
-              <p className="muted-text">
-                Use this for starting XP, event awards, corrections, or staff-approved currency grants. New OCs should start with 600 XP unless staff says otherwise.
-              </p>
-            </div>
-            <button className="ghost" onClick={loadStaffResourceOptions}>
-              <RefreshCw size={16} /> Refresh Options
-            </button>
-          </div>
-
-          <div className="request-actions-panel staff-resource-grant-form">
-            <label>
-              <span>OC</span>
-              <select
-                value={resourceForm.character_id}
-                onChange={(event) =>
-                  setResourceForm((current) => ({ ...current, character_id: event.target.value }))
-                }
-              >
-                <option value="">Select an OC</option>
-                {resourceCharacters.map((character: any) => (
-                  <option key={character.character_id} value={character.character_id}>
-                    {character.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              <span>Grant Type</span>
-              <select
-                value={resourceForm.grant_type}
-                onChange={(event) =>
-                  setResourceForm((current) => ({
-                    ...current,
-                    grant_type: event.target.value,
-                    amount: event.target.value === "xp" ? "600" : current.amount,
-                  }))
-                }
-              >
-                <option value="xp">XP</option>
-                <option value="currency">Currency</option>
-              </select>
-            </label>
-
-            {resourceForm.grant_type === "currency" ? (
-              <label>
-                <span>Currency</span>
-                <select
-                  value={resourceForm.currency_id}
-                  onChange={(event) =>
-                    setResourceForm((current) => ({ ...current, currency_id: event.target.value }))
-                  }
-                >
-                  <option value="">Primary currency</option>
-                  {resourceCurrencies.map((currency: any) => (
-                    <option key={currency.currency_id} value={currency.currency_id}>
-                      {currency.emoji ? `${currency.emoji} ` : ""}{currency.name} ({currency.ticker})
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-
-            <label>
-              <span>Amount</span>
-              <input
-                type="number"
-                min="1"
-                value={resourceForm.amount}
-                onChange={(event) =>
-                  setResourceForm((current) => ({ ...current, amount: event.target.value }))
-                }
-                placeholder={resourceForm.grant_type === "xp" ? "600" : "Amount"}
-              />
-            </label>
-
-            <label>
-              <span>Staff Reason</span>
-              <textarea
-                rows={3}
-                value={resourceForm.reason}
-                onChange={(event) =>
-                  setResourceForm((current) => ({ ...current, reason: event.target.value }))
-                }
-                placeholder="Example: Starting OC setup grant, event reward, correction, or approved staff adjustment."
-              />
-            </label>
-
-            <div className="actions">
-              <button onClick={grantStaffResource}>
-                <ShieldCheck size={16} /> Grant Resources
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="card staff-skill-override-card">
-          <div className="card-title-row">
-            <div>
-              <span className="activity-type-label">Staff Override</span>
-              <h3>Grant Skill Override</h3>
-              <p className="muted-text">
-                Use this for Origin traits, Magic Background, Mana Circuits, or other staff-approved exceptions that bypass normal skill requirements.
-              </p>
-            </div>
-            <button className="ghost" onClick={loadSkillOverrideOptions}>
-              <RefreshCw size={16} /> Refresh Options
-            </button>
-          </div>
-
-          <div className="request-actions-panel staff-skill-override-form">
-            <label>
-              <span>OC</span>
-              <select
-                value={overrideForm.character_id}
-                onChange={(event) =>
-                  setOverrideForm((current) => ({ ...current, character_id: event.target.value }))
-                }
-              >
-                <option value="">Select an OC</option>
-                {overrideCharacters.map((character: any) => (
-                  <option key={character.character_id} value={character.character_id}>
-                    {character.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              <span>Skill</span>
-              <select
-                value={overrideForm.skill_key}
-                onChange={(event) =>
-                  setOverrideForm((current) => ({ ...current, skill_key: event.target.value }))
-                }
-              >
-                <option value="">Select a skill</option>
-                {overrideSkills.map((skill: any) => (
-                  <option key={skill.skill_key} value={skill.skill_key}>
-                    {skill.name || skill.skill_key}{skill.tree ? ` / ${skill.tree}` : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              <span>Source / Trait</span>
-              <input
-                value={overrideForm.source_trait}
-                onChange={(event) =>
-                  setOverrideForm((current) => ({ ...current, source_trait: event.target.value }))
-                }
-                placeholder="Origin Trait, Magic Background, Mana Circuits..."
-              />
-            </label>
-
-            <label>
-              <span>Staff Reason</span>
-              <textarea
-                rows={3}
-                value={overrideForm.reason}
-                onChange={(event) =>
-                  setOverrideForm((current) => ({ ...current, reason: event.target.value }))
-                }
-                placeholder="Example: Origin Trait grants one free Knowledge skill and bypasses normal purchase requirements."
-              />
-            </label>
-
-            <div className="actions">
-              <button onClick={grantSkillOverride}>
-                <ShieldCheck size={16} /> Grant Skill Override
-              </button>
-            </div>
-          </div>
-        </div>
         <div className="card request-workflow-hero">
           <div>
             <span className="activity-type-label">Staff Operations</span>
@@ -5258,6 +5078,190 @@ function StaffQueue({ discordId }: { discordId: string }) {
             );
           })}
         </div>
+
+<div className="card staff-resource-grant-card">
+          <div className="card-title-row">
+            <div>
+              <span className="activity-type-label">Staff Resources</span>
+              <h3>Grant OC Resources</h3>
+              <p className="muted-text">
+                Use this for starting XP, event awards, corrections, or staff-approved currency grants. New OCs should start with 600 XP unless staff says otherwise.
+              </p>
+            </div>
+            <button className="ghost" onClick={loadStaffResourceOptions}>
+              <RefreshCw size={16} /> Refresh Options
+            </button>
+          </div>
+
+          <div className="request-actions-panel staff-resource-grant-form">
+            <label>
+              <span>OC</span>
+              <select
+                value={resourceForm.character_id}
+                onChange={(event) =>
+                  setResourceForm((current) => ({ ...current, character_id: event.target.value }))
+                }
+              >
+                <option value="">Select an OC</option>
+                {resourceCharacters.map((character: any) => (
+                  <option key={character.character_id} value={character.character_id}>
+                    {character.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Grant Type</span>
+              <select
+                value={resourceForm.grant_type}
+                onChange={(event) =>
+                  setResourceForm((current) => ({
+                    ...current,
+                    grant_type: event.target.value,
+                    amount: event.target.value === "xp" ? "600" : current.amount,
+                  }))
+                }
+              >
+                <option value="xp">XP</option>
+                <option value="currency">Currency</option>
+              </select>
+            </label>
+
+            {resourceForm.grant_type === "currency" ? (
+              <label>
+                <span>Currency</span>
+                <select
+                  value={resourceForm.currency_id}
+                  onChange={(event) =>
+                    setResourceForm((current) => ({ ...current, currency_id: event.target.value }))
+                  }
+                >
+                  <option value="">Primary currency</option>
+                  {resourceCurrencies.map((currency: any) => (
+                    <option key={currency.currency_id} value={currency.currency_id}>
+                      {currency.emoji ? `${currency.emoji} ` : ""}{currency.name} ({currency.ticker})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
+            <label>
+              <span>Amount</span>
+              <input
+                type="number"
+                min="1"
+                value={resourceForm.amount}
+                onChange={(event) =>
+                  setResourceForm((current) => ({ ...current, amount: event.target.value }))
+                }
+                placeholder={resourceForm.grant_type === "xp" ? "600" : "Amount"}
+              />
+            </label>
+
+            <label>
+              <span>Staff Reason</span>
+              <textarea
+                rows={3}
+                value={resourceForm.reason}
+                onChange={(event) =>
+                  setResourceForm((current) => ({ ...current, reason: event.target.value }))
+                }
+                placeholder="Example: Starting OC setup grant, event reward, correction, or approved staff adjustment."
+              />
+            </label>
+
+            <div className="actions">
+              <button onClick={grantStaffResource}>
+                <ShieldCheck size={16} /> Grant Resources
+              </button>
+            </div>
+          </div>
+        </div>
+
+        
+
+<div className="card staff-skill-override-card">
+          <div className="card-title-row">
+            <div>
+              <span className="activity-type-label">Staff Override</span>
+              <h3>Grant Skill Override</h3>
+              <p className="muted-text">
+                Use this for Origin traits, Magic Background, Mana Circuits, or other staff-approved exceptions that bypass normal skill requirements.
+              </p>
+            </div>
+            <button className="ghost" onClick={loadSkillOverrideOptions}>
+              <RefreshCw size={16} /> Refresh Options
+            </button>
+          </div>
+
+          <div className="request-actions-panel staff-skill-override-form">
+            <label>
+              <span>OC</span>
+              <select
+                value={overrideForm.character_id}
+                onChange={(event) =>
+                  setOverrideForm((current) => ({ ...current, character_id: event.target.value }))
+                }
+              >
+                <option value="">Select an OC</option>
+                {overrideCharacters.map((character: any) => (
+                  <option key={character.character_id} value={character.character_id}>
+                    {character.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Skill</span>
+              <select
+                value={overrideForm.skill_key}
+                onChange={(event) =>
+                  setOverrideForm((current) => ({ ...current, skill_key: event.target.value }))
+                }
+              >
+                <option value="">Select a skill</option>
+                {overrideSkills.map((skill: any) => (
+                  <option key={skill.skill_key} value={skill.skill_key}>
+                    {skill.name || skill.skill_key}{skill.tree ? ` / ${skill.tree}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Source / Trait</span>
+              <input
+                value={overrideForm.source_trait}
+                onChange={(event) =>
+                  setOverrideForm((current) => ({ ...current, source_trait: event.target.value }))
+                }
+                placeholder="Origin Trait, Magic Background, Mana Circuits..."
+              />
+            </label>
+
+            <label>
+              <span>Staff Reason</span>
+              <textarea
+                rows={3}
+                value={overrideForm.reason}
+                onChange={(event) =>
+                  setOverrideForm((current) => ({ ...current, reason: event.target.value }))
+                }
+                placeholder="Example: Origin Trait grants one free Knowledge skill and bypasses normal purchase requirements."
+              />
+            </label>
+
+            <div className="actions">
+              <button onClick={grantSkillOverride}>
+                <ShieldCheck size={16} /> Grant Skill Override
+              </button>
+            </div>
+          </div>
+        </div>
+        
       </section>
     </RequireDiscord>
   );
