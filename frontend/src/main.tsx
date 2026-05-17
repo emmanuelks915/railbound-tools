@@ -21,7 +21,7 @@ type CoreStats = {
   mana: number;
 };
 
-type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "staff" | "combat" | "registry" | "register" | "manage_oc";
+type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "staff" | "combat" | "registry" | "register" | "manage_oc" | "qa";
 
 const STAT_LABELS: Record<keyof CoreStats, string> = {
   strength: "Strength",
@@ -125,6 +125,7 @@ function App() {
     ["registry", Users, "OC Registry"],
     ["staff", ShieldCheck, "Staff"],
     ["activity", ClipboardList, "Activity"],
+    ["qa", ClipboardList, "QA Checklist"],
     ["combat", ClipboardList, "Derived Stats"],
   ] as const;
 
@@ -205,6 +206,7 @@ function App() {
         />
       )}
       {tab === "activity" && <ActivityDashboard discordId={discordId} />}
+      {tab === "qa" && <ProductionQADashboard discordId={discordId} jump={setTab} />}
       {tab === "planner" && <Planner discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "oc" && <OCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} jump={setTab} />}
       {tab === "manage_oc" && <ManageOCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
@@ -364,6 +366,7 @@ function HomeDashboard({
             <button onClick={() => jump("register")}><UserRound size={16} /> Register OC</button>
             <button onClick={() => jump("shops")}><Store size={16} /> Manage Shops</button>
             <button onClick={() => jump("staff")}><ShieldCheck size={16} /> Staff Queue</button>
+            <button onClick={() => jump("qa")}><ClipboardList size={16} /> QA Checklist</button>
           </div>
 
           {data && (
@@ -3280,6 +3283,224 @@ function OCRegistry({ discordId }: { discordId: string }) {
 }
 
 
+
+function ProductionQADashboard({ discordId, jump }: { discordId: string; jump: (tab: Tab) => void }) {
+  const checklistGroups = [
+    {
+      title: "Access & Login",
+      items: [
+        "Open Railway frontend on desktop",
+        "Open Railway frontend on mobile",
+        "Login with Discord",
+        "Confirm Dev Login is not visible publicly",
+        "Confirm user avatar/name loads after login",
+      ],
+    },
+    {
+      title: "Core Player Flow",
+      items: [
+        "Dashboard loads without overlap on desktop",
+        "Dashboard loads without overlap on mobile",
+        "Register a test OC",
+        "Confirm test OC appears in Citizen Registry",
+        "Open OC tab and select the new OC",
+        "Confirm XP & Currency card loads",
+        "Confirm owned skills section loads",
+      ],
+    },
+    {
+      title: "Citizen Registry",
+      items: [
+        "Search by OC name",
+        "Open a citizen profile",
+        "Check Overview tab",
+        "Check Stats tab",
+        "Check Traits tab",
+        "Check Skills tab",
+        "Check Inventory tab",
+        "Check RP Activity tab",
+        "Owner can access Edit tab",
+        "Non-owner cannot access Edit tab",
+      ],
+    },
+    {
+      title: "OC Management",
+      items: [
+        "Open Manage OC tab",
+        "Edit name/occupation/affiliation",
+        "Edit sheet link",
+        "Edit public blurb",
+        "Archive OC",
+        "Restore OC",
+        "Staff-only delete test OC works",
+        "Non-staff cannot delete OC",
+      ],
+    },
+    {
+      title: "Staff & Requests",
+      items: [
+        "Staff Queue loads",
+        "Pending stat requests load",
+        "Pending skill requests load",
+        "Approve flow works",
+        "Deny flow works",
+        "Activity page shows recent updates",
+      ],
+    },
+    {
+      title: "Railway Deployment",
+      items: [
+        "Frontend deploy succeeds",
+        "Backend deploy succeeds",
+        "Frontend VITE_API_BASE_URL points to backend",
+        "Backend FRONTEND_URL points to frontend",
+        "Discord OAuth redirect URI matches backend callback",
+        "CORS_ORIGINS includes frontend URL",
+      ],
+    },
+  ];
+
+  const storageKey = "railbound-production-qa-v1";
+
+  const [checked, setChecked] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(storageKey) || "{}");
+    } catch {
+      return {};
+    }
+  });
+
+  const [notes, setNotes] = useState(() => {
+    try {
+      return localStorage.getItem(`${storageKey}-notes`) || "";
+    } catch {
+      return "";
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(storageKey, JSON.stringify(checked));
+  }, [checked]);
+
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}-notes`, notes);
+  }, [notes]);
+
+  function keyFor(groupTitle: string, item: string) {
+    return `${groupTitle}::${item}`;
+  }
+
+  const allItems = checklistGroups.flatMap((group) => group.items.map((item) => keyFor(group.title, item)));
+  const completed = allItems.filter((key) => checked[key]).length;
+  const total = allItems.length;
+  const percent = total ? Math.round((completed / total) * 100) : 0;
+
+  function toggle(groupTitle: string, item: string) {
+    const key = keyFor(groupTitle, item);
+    setChecked((current) => ({ ...current, [key]: !current[key] }));
+  }
+
+  function resetChecklist() {
+    setChecked({});
+    setNotes("");
+    localStorage.removeItem(storageKey);
+    localStorage.removeItem(`${storageKey}-notes`);
+  }
+
+  function copySummary() {
+    const lines = [
+      `Railbound Tools Production QA: ${completed}/${total} complete (${percent}%)`,
+      "",
+      ...checklistGroups.flatMap((group) => [
+        group.title,
+        ...group.items.map((item) => `${checked[keyFor(group.title, item)] ? "✅" : "⬜"} ${item}`),
+        "",
+      ]),
+      notes ? `Notes:\n${notes}` : "",
+    ];
+
+    navigator.clipboard?.writeText(lines.join("\n"));
+  }
+
+  return (
+    <RequireDiscord discordId={discordId}>
+      <section className="qa-page">
+        <div className="card qa-hero">
+          <div>
+            <span className="activity-type-label">Release Readiness</span>
+            <h2>Production QA Checklist</h2>
+            <p className="muted-text">
+              Use this before staff/player testing. Progress saves in this browser so you can refresh without losing checks.
+            </p>
+          </div>
+
+          <div className="qa-progress-card">
+            <strong>{percent}%</strong>
+            <span>{completed}/{total} checks complete</span>
+          </div>
+        </div>
+
+        <div className="card qa-actions-card">
+          <div className="auth-actions">
+            <button onClick={() => jump("dashboard")}>Open Dashboard</button>
+            <button className="ghost" onClick={() => jump("register")}>Test Register OC</button>
+            <button className="ghost" onClick={() => jump("registry")}>Test Registry</button>
+            <button className="ghost" onClick={() => jump("manage_oc")}>Test Manage OC</button>
+            <button className="ghost" onClick={copySummary}>Copy QA Summary</button>
+            <button className="ghost" onClick={resetChecklist}>Reset</button>
+          </div>
+        </div>
+
+        <div className="qa-grid">
+          {checklistGroups.map((group) => {
+            const groupCompleted = group.items.filter((item) => checked[keyFor(group.title, item)]).length;
+
+            return (
+              <div className="card qa-group-card" key={group.title}>
+                <div className="card-title-row">
+                  <div>
+                    <h3>{group.title}</h3>
+                    <p className="muted-text">{groupCompleted}/{group.items.length} complete</p>
+                  </div>
+                  <span className="pill">{Math.round((groupCompleted / group.items.length) * 100)}%</span>
+                </div>
+
+                <div className="qa-checklist">
+                  {group.items.map((item) => {
+                    const key = keyFor(group.title, item);
+                    const isChecked = Boolean(checked[key]);
+
+                    return (
+                      <label className={`qa-check-row ${isChecked ? "done" : ""}`} key={key}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggle(group.title, item)}
+                        />
+                        <span>{item}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="card qa-notes-card">
+          <h3>QA Notes</h3>
+          <p className="muted-text">Track bugs, weird behavior, or staff feedback here while testing.</p>
+          <textarea
+            rows={8}
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="Example: Mobile dashboard looks good. Registry search works. Need to retest staff delete after backend redeploy..."
+          />
+        </div>
+      </section>
+    </RequireDiscord>
+  );
+}
 
 function ActivityDashboard({ discordId }: { discordId: string }) {
   const [events, setEvents] = useState<any[]>([]);

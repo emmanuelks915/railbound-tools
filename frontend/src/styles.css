@@ -2871,3 +2871,118 @@ table {
     border-radius: 20px !important;
   }
 }
+
+/* Production QA Checklist v1 */
+
+.qa-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.qa-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.qa-progress-card {
+  min-width: 170px;
+  border-radius: 22px;
+  padding: 1rem;
+  background: rgba(47, 111, 115, 0.12);
+  border: 1px solid rgba(47, 111, 115, 0.18);
+  text-align: center;
+}
+
+.qa-progress-card strong {
+  display: block;
+  font-size: 2rem;
+}
+
+.qa-progress-card span {
+  color: rgba(44, 31, 22, 0.62);
+  font-weight: 850;
+}
+
+.qa-actions-card .auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.qa-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.qa-group-card {
+  min-width: 0;
+}
+
+.qa-checklist {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.qa-check-row {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+  border-radius: 16px;
+  padding: 0.65rem 0.75rem;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(61, 51, 43, 0.08);
+  cursor: pointer;
+}
+
+.qa-check-row input {
+  width: auto;
+  min-width: 18px;
+  height: 18px;
+}
+
+.qa-check-row span {
+  font-weight: 800;
+  color: rgba(44, 31, 22, 0.76);
+}
+
+.qa-check-row.done {
+  background: rgba(47, 123, 79, 0.09);
+  border-color: rgba(47, 123, 79, 0.2);
+}
+
+.qa-check-row.done span {
+  text-decoration: line-through;
+  color: rgba(44, 31, 22, 0.52);
+}
+
+.qa-notes-card textarea {
+  width: 100%;
+  min-height: 170px;
+}
+
+@media (max-width: 920px) {
+  .qa-hero,
+  .qa-grid {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .qa-progress-card {
+    width: 100%;
+    text-align: left;
+  }
+}
+
+@media (max-width: 560px) {
+  .qa-actions-card .auth-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .qa-check-row {
+    align-items: flex-start;
+  }
+}
