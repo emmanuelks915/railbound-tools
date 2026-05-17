@@ -124,7 +124,7 @@ def _normalize_stat_request(row: dict[str, Any], characters: dict[str, dict[str,
         "summary": f"{stat_name}: {amount if amount is not None else 'requested'}",
         "amount": amount,
         "character_id": character_id,
-        "character_name": character.get("name") or row.get("character_name"),
+        "character_name": character.get("name") or row.get("character_name") or character_id,
         "actor_id": _actor_id(row),
         "reviewer_id": _reviewer_id(row),
         "reason": row.get("reason") or row.get("notes") or row.get("note"),
@@ -149,7 +149,7 @@ def _normalize_skill_request(row: dict[str, Any], characters: dict[str, dict[str
         "summary": f"{skill_name}{f' • {cost} XP' if cost is not None else ''}",
         "amount": cost,
         "character_id": character_id,
-        "character_name": character.get("name") or row.get("character_name"),
+        "character_name": character.get("name") or row.get("character_name") or character_id,
         "actor_id": _actor_id(row),
         "reviewer_id": _reviewer_id(row),
         "reason": row.get("reason") or row.get("notes") or row.get("note"),
@@ -271,6 +271,101 @@ def get_request_queue(
 
 
 @router.post("/{request_type}/{request_id}/approve")
+# --- Skill Purchase Approval Apply v1 ---
+
+def _apply_skill_purchase_approval(
+    sb,
+    request_row: dict[str, Any],
+    actor_discord_id: int,
+    staff_note: str | None = None,
+    staff_override: bool = False,
+) -> None:
+    # Deduct XP, grant the skill, and log the XP spend for an approved skill_purchase_request.
+    gid = get_guild_id()
+    character_id = str(request_row.get("character_id") or "")
+    skill_key = str(request_row.get("skill_key") or "")
+    cost = int(request_row.get("cost") or 0)
+
+    if not character_id or not skill_key:
+        raise HTTPException(status_code=400, detail="Skill request is missing character or skill.")
+
+    existing = sb_data(
+        sb.table("oc_skills")
+        .select("skill_key")
+        .eq("guild_id", gid)
+        .eq("character_id", character_id)
+        .eq("skill_key", skill_key)
+        .limit(1)
+        .execute()
+    ) or []
+    if existing:
+        return
+
+    wallet_rows = sb_data(
+        sb.table("oc_xp_wallets")
+        .select("*")
+        .eq("guild_id", gid)
+        .eq("character_id", character_id)
+        .limit(1)
+        .execute()
+    ) or []
+    wallet = wallet_rows[0] if wallet_rows else None
+
+    available_xp = int((wallet or {}).get("available_xp") or 0)
+    spent_xp = int((wallet or {}).get("total_spent_xp") or 0)
+
+    if not staff_override and available_xp < cost:
+        raise HTTPException(status_code=400, detail=f"OC does not have enough XP. Available: {available_xp}, cost: {cost}.")
+
+    new_available = available_xp - cost if not staff_override else available_xp
+    new_spent = spent_xp + cost if not staff_override else spent_xp
+
+    if wallet:
+        sb.table("oc_xp_wallets").update({
+            "available_xp": new_available,
+            "total_spent_xp": new_spent,
+        }).eq("guild_id", gid).eq("character_id", character_id).execute()
+    else:
+        sb.table("oc_xp_wallets").insert({
+            "guild_id": gid,
+            "character_id": character_id,
+            "available_xp": new_available,
+            "total_earned_xp": available_xp,
+            "total_spent_xp": new_spent,
+        }).execute()
+
+    xp_tx_id = None
+    if cost > 0 and not staff_override:
+        tx_rows = sb_data(
+            sb.table("oc_xp_transactions")
+            .insert({
+                "guild_id": gid,
+                "character_id": character_id,
+                "direction": "spend",
+                "amount": cost,
+                "source": "skill_purchase",
+                "reference_type": "skill_purchase_request",
+                "reference_key": str(request_row.get("request_id") or ""),
+                "reason": staff_note or f"Approved skill purchase: {skill_key}",
+                "actor_discord_id": actor_discord_id,
+                "metadata": {"skill_key": skill_key, "staff_override": staff_override},
+            })
+            .execute()
+        ) or []
+        if tx_rows:
+            xp_tx_id = tx_rows[0].get("xp_tx_id")
+
+    sb.table("oc_skills").insert({
+        "guild_id": gid,
+        "character_id": character_id,
+        "skill_key": skill_key,
+        "acquired_via": "staff_override" if staff_override else "skill_purchase",
+        "xp_cost_paid": 0 if staff_override else cost,
+        "xp_tx_id": xp_tx_id,
+        "actor_discord_id": actor_discord_id,
+        "notes": staff_note or ("Staff override approval." if staff_override else "Skill purchase approved."),
+    }).execute()
+
 def approve_request(
     request_type: str,
     request_id: str,
@@ -295,6 +390,19 @@ def approve_request(
         updated_rows = _safe_update_request(sb, table, id_column, request_id, {**update_payload, "approved_at": "now()"})
     except Exception:
         updated_rows = _safe_update_request(sb, table, id_column, request_id, update_payload)
+        if table == "skill_purchase_requests":
+            request_row = updated_rows[0] if updated_rows else None
+            if not request_row:
+                original_rows = sb_data(sb.table(table).select("*").eq(id_column, request_id).limit(1).execute()) or []
+                request_row = original_rows[0] if original_rows else None
+            if request_row:
+                _apply_skill_purchase_approval(
+                    sb,
+                    request_row,
+                    int(actor_discord_id),
+                    update_payload.get("staff_note") or update_payload.get("note"),
+                    bool(payload.get("staff_override") or payload.get("override_requirements") or payload.get("bypass_requirements")),
+                )
 
     updated = updated_rows[0] if updated_rows else {**row, **update_payload}
 
@@ -406,6 +514,40 @@ def _mark_skill_override(update_payload: dict[str, Any], payload: dict[str, Any]
 
     return update_payload
 
+
+# --- Skill Purchase Request Schema Compatibility v1 ---
+
+def _normalize_request_update_payload(table: str, payload: dict[str, Any]) -> dict[str, Any]:
+    # Map legacy request-review fields to the real skill_purchase_requests schema.
+    if table != "skill_purchase_requests":
+        return payload
+
+    out = dict(payload)
+
+    if "approved_at" in out and "reviewed_at" not in out:
+        out["reviewed_at"] = out.pop("approved_at")
+    else:
+        out.pop("approved_at", None)
+
+    if "denied_at" in out and "reviewed_at" not in out:
+        out["reviewed_at"] = out.pop("denied_at")
+    else:
+        out.pop("denied_at", None)
+
+    for old_key in ("reviewed_by", "reviewer_id", "approved_by", "denied_by", "staff_id"):
+        if old_key in out and "reviewed_by_discord_id" not in out:
+            out["reviewed_by_discord_id"] = out.pop(old_key)
+        else:
+            out.pop(old_key, None)
+
+    if "note" in out and "staff_note" not in out:
+        out["staff_note"] = out.pop("note")
+
+    if "denial_reason" in out and "staff_note" not in out:
+        out["staff_note"] = out.pop("denial_reason")
+
+    allowed = {"status", "staff_note", "reviewed_by_discord_id", "reviewed_at", "updated_at"}
+    return {key: value for key, value in out.items() if key in allowed}
 
 def _safe_update_request(sb, table: str, id_column: str, request_id: str, update_payload: dict[str, Any]) -> list[dict[str, Any]]:
     try:
