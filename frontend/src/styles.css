@@ -3744,3 +3744,133 @@ table {
     width: fit-content;
   }
 }
+
+/* Market Card Layout Fix v2
+   Fixes cramped market cards, broken image spacing, tiny note input,
+   and awkward 3-column mobile/tablet wrapping.
+*/
+
+.market-item-grid {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)) !important;
+  align-items: stretch;
+}
+
+.market-item-card {
+  min-width: 0;
+  align-content: start;
+  grid-template-rows: auto auto auto auto auto;
+}
+
+.market-item-image {
+  display: block;
+  width: 100%;
+  height: 190px;
+  border-radius: 18px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.market-item-card img[src=""],
+.market-item-card img:not([src]) {
+  display: none !important;
+}
+
+.market-item-heading {
+  display: grid !important;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+}
+
+.market-item-heading > div {
+  min-width: 0;
+}
+
+.market-item-heading h3,
+.market-item-heading p,
+.market-description {
+  overflow-wrap: anywhere;
+}
+
+.market-price {
+  justify-self: end;
+}
+
+.market-badges {
+  align-items: center;
+}
+
+.market-badges span {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.market-request-panel {
+  grid-template-columns: 80px minmax(130px, 1fr) minmax(96px, auto) !important;
+}
+
+.market-request-panel input {
+  min-width: 0;
+}
+
+.market-request-panel button {
+  min-width: 92px;
+  white-space: normal;
+  line-height: 1.05;
+}
+
+.market-note-field input {
+  width: 100%;
+}
+
+@media (max-width: 1180px) {
+  .market-item-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .market-item-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .market-item-image {
+    height: 210px;
+  }
+
+  .market-item-heading {
+    grid-template-columns: 1fr !important;
+  }
+
+  .market-price {
+    justify-self: start;
+  }
+
+  .market-request-panel {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .market-note-field {
+    grid-column: 1 / -1;
+  }
+
+  .market-request-panel button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .market-item-card {
+    padding: 0.9rem !important;
+  }
+
+  .market-request-panel {
+    grid-template-columns: 1fr !important;
+  }
+
+  .market-note-field,
+  .market-request-panel button {
+    grid-column: auto;
+  }
+}
