@@ -285,25 +285,16 @@ def approve_request(
     update_payload = {
         "status": "approved",
         "reviewed_by": str(staff_id),
-        "staff_note": payload.get("staff_note") or payload.get("note"),
+        "staff_note": payload.get("staff_note") or payload.get("note") or payload.get("override_reason"),
     }
+    update_payload = _mark_skill_override(update_payload, payload, request_type)
 
     # Try common timestamp field if it exists; harmlessly ignored by fallback if schema rejects.
     updated_rows = []
     try:
-        updated_rows = _as_list(
-            sb.table(table)
-            .update({**update_payload, "approved_at": "now()"})
-            .eq(id_column, request_id)
-            .execute()
-        )
+        updated_rows = _safe_update_request(sb, table, id_column, request_id, {**update_payload, "approved_at": "now()"})
     except Exception:
-        updated_rows = _as_list(
-            sb.table(table)
-            .update(update_payload)
-            .eq(id_column, request_id)
-            .execute()
-        )
+        updated_rows = _safe_update_request(sb, table, id_column, request_id, update_payload)
 
     updated = updated_rows[0] if updated_rows else {**row, **update_payload}
 
@@ -316,7 +307,13 @@ def approve_request(
         character_name=row.get("character_name"),
         note=payload.get("staff_note") or payload.get("note"),
         source="request_workflow",
-        details={"request_id": request_id, "request_type": request_type, "table": table},
+        details={
+            "request_id": request_id,
+            "request_type": request_type,
+            "table": table,
+            "staff_override": bool(payload.get("override_requirements") or payload.get("staff_override")),
+            "override_reason": payload.get("override_reason"),
+        },
         webhook_title=f"✅ {request_type.title()} Request Approved",
         webhook_description=payload.get("staff_note") or payload.get("note"),
     )
@@ -380,3 +377,58 @@ def deny_request(
     )
 
     return {"request": updated, "message": f"{request_type.title()} request denied."}
+
+# --- Skill Staff Override v1 helpers ---
+
+def _skill_override_payload(payload: dict[str, Any], request_type: str) -> tuple[bool, str | None]:
+    if request_type != "skill":
+        return False, None
+
+    override = bool(payload.get("override_requirements") or payload.get("staff_override"))
+    reason = payload.get("override_reason") or payload.get("staff_note") or payload.get("note")
+
+    if override and not str(reason or "").strip():
+        raise HTTPException(status_code=400, detail="Override reason is required when staff override is enabled.")
+
+    return override, str(reason).strip() if reason is not None else None
+
+
+def _mark_skill_override(update_payload: dict[str, Any], payload: dict[str, Any], request_type: str) -> dict[str, Any]:
+    override, reason = _skill_override_payload(payload, request_type)
+
+    if not override:
+        return update_payload
+
+    update_payload["staff_override"] = True
+    update_payload["override_requirements"] = True
+    update_payload["override_reason"] = reason
+    update_payload["staff_note"] = reason
+
+    return update_payload
+
+
+def _safe_update_request(sb, table: str, id_column: str, request_id: str, update_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    try:
+        return _as_list(
+            sb.table(table)
+            .update(update_payload)
+            .eq(id_column, request_id)
+            .execute()
+        )
+    except Exception:
+        allowed = {
+            "status",
+            "reviewed_by",
+            "approved_by",
+            "denied_by",
+            "staff_discord_id",
+            "staff_note",
+            "denial_reason",
+        }
+        fallback = {key: value for key, value in update_payload.items() if key in allowed}
+        return _as_list(
+            sb.table(table)
+            .update(fallback)
+            .eq(id_column, request_id)
+            .execute()
+        )

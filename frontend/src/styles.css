@@ -4139,3 +4139,32 @@ table {
   color: rgba(44, 31, 22, 0.72);
   font-weight: 800;
 }
+
+/* Skill Staff Override v1 */
+
+.skill-override-panel {
+  display: grid;
+  gap: 0.45rem;
+  border-radius: 16px;
+  padding: 0.75rem;
+  background: rgba(173, 120, 48, 0.08);
+  border: 1px solid rgba(173, 120, 48, 0.16);
+}
+
+.skill-override-check {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.5rem !important;
+  font-weight: 900;
+  color: rgba(44, 31, 22, 0.74);
+}
+
+.skill-override-check input {
+  width: auto;
+}
+
+.skill-override-panel small {
+  color: rgba(44, 31, 22, 0.62);
+  font-weight: 800;
+}

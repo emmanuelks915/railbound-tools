@@ -4597,6 +4597,7 @@ function StaffQueue({ discordId }: { discordId: string }) {
   const [loading, setLoading] = useState(false);
   const [workingKey, setWorkingKey] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [overrideByRequest, setOverrideByRequest] = useState<Record<string, boolean>>({});
 
   async function loadQueue() {
     if (!discordId) return;
@@ -4634,8 +4635,18 @@ function StaffQueue({ discordId }: { discordId: string }) {
     setWorkingKey(key);
     setMessage("");
 
+    if (request.request_type === "skill" && overrideByRequest[key] && !(notes[key] || "").trim()) {
+      setMessage("An override reason is required for skill staff overrides.");
+      return;
+    }
+
     try {
-      const body = JSON.stringify({ staff_note: notes[key] || "" });
+      const body = JSON.stringify({
+        staff_note: notes[key] || "",
+        override_requirements: Boolean(overrideByRequest[key]),
+        staff_override: Boolean(overrideByRequest[key]),
+        override_reason: notes[key] || "",
+      });
       const data = await apiFetch(
         `/api/requests/${request.request_type}/${request.request_id}/approve`,
         { method: "POST", body },
@@ -4850,6 +4861,24 @@ function StaffQueue({ discordId }: { discordId: string }) {
 
                 {pending ? (
                   <div className="request-actions-panel">
+                    {request.request_type === "skill" ? (
+                      <div className="skill-override-panel">
+                        <label className="skill-override-check">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(overrideByRequest[key])}
+                            onChange={(event) =>
+                              setOverrideByRequest((current) => ({ ...current, [key]: event.target.checked }))
+                            }
+                          />
+                          <span>Staff override skill requirements</span>
+                        </label>
+                        <small>
+                          Use only for Origin traits, special approvals, or staff-approved exceptions. Add the reason below.
+                        </small>
+                      </div>
+                    ) : null}
+
                     <label>
                       <span>Staff Note / Denial Reason</span>
                       <textarea
