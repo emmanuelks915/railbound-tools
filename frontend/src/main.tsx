@@ -1055,9 +1055,17 @@ function ManageOCDashboard({
     setMessage("");
 
     try {
-      const data = await apiFetch(`/api/characters?discord_id=${discordId}`, {}, discordId);
+      const data = await apiFetch("/api/characters/mine", {}, discordId);
       const rows = Array.isArray(data) ? data : data.characters || data.data || [];
       setCharacters(rows);
+
+      const validSelectedCharacter = rows.some((character: any) =>
+        String(character.character_id || character.id || "") === String(selectedCharacterId || "")
+      );
+
+      if (selectedCharacterId && !validSelectedCharacter) {
+        setSelectedCharacterId("");
+      }
 
       if (!selectedCharacterId && rows.length > 0 && shouldAutoSelectOc()) {
         setSelectedCharacterId(String(rows[0].character_id || rows[0].id));
@@ -1336,7 +1344,7 @@ function InventoryDashboard({
     if (!discordId) return;
 
     try {
-      const result = await apiFetch(`/api/characters?discord_id=${discordId}`, {}, discordId);
+      const result = await apiFetch("/api/characters/mine", {}, discordId);
       const rows = Array.isArray(result) ? result : result.characters || result.data || [];
       setCharacters(rows);
 
