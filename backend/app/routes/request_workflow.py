@@ -202,6 +202,68 @@ def _load_request(sb, request_type: str, request_id: str) -> tuple[str, str, dic
 
 
 @router.get("/queue")
+# --- Request Queue OC Name Enrichment v1 ---
+
+def _enrich_request_oc_names(sb, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    # Attach readable OC names to request queue items using characters.character_id.
+    if not items:
+        return items
+
+    character_ids: list[str] = []
+    for item in items:
+        cid = (
+            item.get("character_id")
+            or item.get("oc_id")
+            or item.get("character")
+            or item.get("target_character_id")
+        )
+        if cid is not None:
+            cid_str = str(cid)
+            if cid_str and cid_str not in character_ids:
+                character_ids.append(cid_str)
+
+    if not character_ids:
+        return items
+
+    try:
+        character_rows = sb_data(
+            sb.table("characters")
+            .select("character_id,name,user_id")
+            .eq("guild_id", get_guild_id())
+            .in_("character_id", character_ids)
+            .execute()
+        ) or []
+    except Exception:
+        character_rows = []
+
+    names_by_id = {
+        str(row.get("character_id")): row.get("name")
+        for row in character_rows
+        if row.get("character_id") and row.get("name")
+    }
+
+    for item in items:
+        cid = (
+            item.get("character_id")
+            or item.get("oc_id")
+            or item.get("character")
+            or item.get("target_character_id")
+        )
+        if cid is None:
+            continue
+
+        cid_str = str(cid)
+        oc_name = names_by_id.get(cid_str)
+
+        if oc_name:
+            item["character_name"] = oc_name
+            item["oc_name"] = oc_name
+
+            if item.get("oc") == cid_str:
+                item["oc"] = oc_name
+
+    return items
+
 def get_request_queue(
     actor_discord_id: int | None = Depends(actor_from_header),
     status: str = Query("pending"),
@@ -261,6 +323,7 @@ def get_request_queue(
 
     requests.sort(key=lambda row: str(row.get("created_at") or ""), reverse=True)
 
+    requests = _enrich_request_oc_names(sb, requests)
     return {
         "requests": requests,
         "is_staff": staff,
