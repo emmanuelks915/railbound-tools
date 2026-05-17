@@ -372,6 +372,8 @@ def approve_request(
     payload: dict[str, Any] = Body(default={}),
     actor_discord_id: int | None = Depends(actor_from_header),
 ):
+
+    payload = payload or {}
     staff_id = _require_staff(actor_discord_id)
     sb = get_supabase()
 
@@ -436,6 +438,8 @@ def deny_request(
     payload: dict[str, Any] = Body(default={}),
     actor_discord_id: int | None = Depends(actor_from_header),
 ):
+
+    payload = payload or {}
     staff_id = _require_staff(actor_discord_id)
     reason = str(payload.get("reason") or payload.get("staff_note") or "").strip()
 
