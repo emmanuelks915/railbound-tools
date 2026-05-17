@@ -1529,6 +1529,13 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
     status: "Open",
     is_active: true,
   });
+  const [createShopForm, setCreateShopForm] = useState({
+    name: "",
+    description: "",
+    image_url: "",
+    status: "Open",
+    is_active: true,
+  });
   const [itemForm, setItemForm] = useState({
     name: "",
     description: "",
@@ -1594,6 +1601,41 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
     if (selectedShopId) loadShop(selectedShopId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedShopId]);
+
+
+  async function createShop() {
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const data = await apiFetch(
+        "/api/shop-owner/shops",
+        { method: "POST", body: JSON.stringify(createShopForm) },
+        discordId
+      );
+
+      setMessage(data.message || "Shop created.");
+      setCreateShopForm({
+        name: "",
+        description: "",
+        image_url: "",
+        status: "Open",
+        is_active: true,
+      });
+
+      await loadMyShops();
+
+      const newShopId = data.shop?.shop_id;
+      if (newShopId) {
+        setSelectedShopId(newShopId);
+        await loadShop(newShopId);
+      }
+    } catch (error: any) {
+      setMessage(error.message || "Could not create shop.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function saveShop() {
     if (!selectedShopId) return;
@@ -1730,13 +1772,86 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
           </label>
 
           {shops.length === 0 ? (
-            <p className="muted-text">
-              No shops found for your account. Staff may need to create/assign the storefront first.
-            </p>
+            <div className="shop-create-empty-state">
+              <div>
+                <strong>No shop found yet.</strong>
+                <p className="muted-text">
+                  If you bought a shop owner token, create your storefront here. Staff can still review activity through the audit log.
+                </p>
+              </div>
+            </div>
           ) : null}
         </div>
 
         {message ? <p className="message">{message}</p> : null}
+
+        {shops.length === 0 ? (
+          <div className="card shop-create-card">
+            <div className="card-title-row">
+              <div>
+                <h3>Create Your Storefront</h3>
+                <p className="muted-text">
+                  This is where shop owner token holders make their first store.
+                </p>
+              </div>
+            </div>
+
+            <div className="shop-owner-form">
+              <label>
+                <span>Shop Name</span>
+                <input
+                  value={createShopForm.name}
+                  onChange={(event) => setCreateShopForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Example: Meris' Relic Exchange"
+                />
+              </label>
+
+              <label>
+                <span>Status</span>
+                <input
+                  value={createShopForm.status}
+                  onChange={(event) => setCreateShopForm((current) => ({ ...current, status: event.target.value }))}
+                  placeholder="Open, Coming Soon, Restocking..."
+                />
+              </label>
+
+              <label className="shop-owner-wide">
+                <span>Banner / Image URL</span>
+                <input
+                  value={createShopForm.image_url}
+                  onChange={(event) => setCreateShopForm((current) => ({ ...current, image_url: event.target.value }))}
+                  placeholder="https://..."
+                />
+              </label>
+
+              <label className="shop-owner-wide">
+                <span>Description</span>
+                <textarea
+                  rows={4}
+                  value={createShopForm.description}
+                  onChange={(event) => setCreateShopForm((current) => ({ ...current, description: event.target.value }))}
+                  placeholder="What does your shop sell? What is the vibe?"
+                />
+              </label>
+
+              <label className="shop-owner-check">
+                <input
+                  type="checkbox"
+                  checked={createShopForm.is_active}
+                  onChange={(event) => setCreateShopForm((current) => ({ ...current, is_active: event.target.checked }))}
+                />
+                <span>Publish shop immediately</span>
+              </label>
+            </div>
+
+            <div className="auth-actions">
+              <button onClick={createShop} disabled={saving || !createShopForm.name.trim()}>
+                <Store size={16} /> {saving ? "Creating..." : "Create Storefront"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
 
         {shop ? (
           <div className="shop-owner-layout">

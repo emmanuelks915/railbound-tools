@@ -188,6 +188,107 @@ def _normalize_item(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+@router.post("/shops")
+def create_my_shop(
+    payload: dict[str, Any] = Body(...),
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    actor = _require_login(actor_discord_id)
+    sb = get_supabase()
+
+    name = _clean(payload.get("name") or payload.get("shop_name"), 120)
+    if not name:
+        raise HTTPException(status_code=400, detail="Shop name is required.")
+
+    if not is_staff(actor):
+        existing = _safe_rows(
+            sb.table("shops")
+            .select("*")
+            .eq("guild_id", get_guild_id())
+            .eq("owner_discord_id", str(actor))
+            .limit(1)
+        )
+
+        if not existing:
+            existing = _safe_rows(
+                sb.table("shops")
+                .select("*")
+                .eq("guild_id", get_guild_id())
+                .eq("user_id", str(actor))
+                .limit(1)
+            )
+
+        if existing:
+            raise HTTPException(status_code=400, detail="You already have a shop assigned to your account.")
+
+    base_payload: dict[str, Any] = {
+        "guild_id": get_guild_id(),
+        "name": name,
+        "description": _clean(payload.get("description"), 1000),
+        "status": _clean(payload.get("status"), 80) or "Open",
+        "is_active": _bool(payload.get("is_active"), True),
+        "owner_discord_id": str(actor),
+        "user_id": str(actor),
+    }
+
+    if payload.get("image_url"):
+        base_payload["image_url"] = _clean(payload.get("image_url"), 800)
+
+    insert_attempts: list[dict[str, Any]] = [
+        base_payload,
+        {k: v for k, v in base_payload.items() if k != "owner_discord_id"},
+        {k: v for k, v in base_payload.items() if k != "user_id"},
+        {
+            "guild_id": get_guild_id(),
+            "shop_name": name,
+            "description": base_payload.get("description"),
+            "status": base_payload.get("status"),
+            "is_active": base_payload.get("is_active"),
+            "owner_discord_id": str(actor),
+        },
+        {
+            "guild_id": get_guild_id(),
+            "name": name,
+            "description": base_payload.get("description"),
+            "status": base_payload.get("status"),
+            "is_active": base_payload.get("is_active"),
+        },
+    ]
+
+    last_error: Exception | None = None
+    rows: list[dict[str, Any]] = []
+
+    for attempt in insert_attempts:
+        try:
+            rows = _as_list(sb.table("shops").insert(attempt).execute())
+            if rows:
+                break
+        except Exception as exc:
+            last_error = exc
+            rows = []
+
+    if not rows:
+        raise HTTPException(status_code=400, detail=f"Could not create shop. {last_error}")
+
+    shop = rows[0]
+
+    log_activity(
+        event_type="shop_created",
+        label=f"Shop created: {shop.get('name') or shop.get('shop_name') or name}",
+        status="created",
+        actor_discord_id=actor,
+        source="shop_owner_tools",
+        details={
+            "shop_id": shop.get("shop_id") or shop.get("id"),
+            "name": shop.get("name") or shop.get("shop_name") or name,
+        },
+        webhook_title="🏪 Shop Created",
+        webhook_description=f"{shop.get('name') or shop.get('shop_name') or name} was created.",
+    )
+
+    return {"shop": _normalize_shop(shop), "message": "Shop created."}
+
+
 @router.get("/shops")
 def get_my_shops(actor_discord_id: int | None = Depends(actor_from_header)):
     actor = _require_login(actor_discord_id)
