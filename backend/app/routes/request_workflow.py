@@ -470,6 +470,21 @@ def approve_request(
                 )
 
     updated = updated_rows[0] if updated_rows else {**row, **update_payload}
+    # --- Skill Approval Always Apply v1 ---
+    if table == "skill_purchase_requests":
+        request_row = updated_rows[0] if updated_rows else None
+        if not request_row:
+            original_rows = sb_data(sb.table(table).select("*").eq(id_column, request_id).limit(1).execute()) or []
+            request_row = original_rows[0] if original_rows else None
+        if request_row:
+            _apply_skill_purchase_approval(
+                sb,
+                request_row,
+                int(staff_id),
+                update_payload.get("staff_note") or update_payload.get("note"),
+                bool(payload.get("staff_override") or payload.get("override_requirements") or payload.get("bypass_requirements")),
+            )
+
 
     log_activity(
         event_type=f"{request_type}_request_approved",
