@@ -156,7 +156,7 @@ return (
           </p>
         </div>
         <div className="auth-box">
-                    <div className="auth-user">
+                    <div className="auth-user login-button-only-card">
             {authUser?.avatar_url ? (
               <img
                 src={authUser.avatar_url}
@@ -165,7 +165,7 @@ return (
               />
             ) : null}
 
-            <span>{authUser ? "Logged in with Discord" : "Welcome to Railbound Tools"}</span>
+            
 
             <strong>
               {authUser
@@ -183,7 +183,7 @@ return (
           <div className="auth-actions">
             {!authUser ? (
               <button type="button" onClick={loginWithDiscord} className="discord-login-button">
-                Continue with Discord
+                Login with Discord
               </button>
             ) : (
               <button type="button" className="ghost" onClick={logoutDiscord}>
@@ -325,7 +325,7 @@ function RequireDiscord({ discordId, children }: { discordId: string; children: 
     return (
       <section className="card muted-card">
         <h2>Welcome to Railbound Tools required</h2>
-        <p>Please use Continue with Discord to access Railbound Tools. Your account is used to load your characters, requests, staff access, and activity history.</p>
+        <p>Please use Login with Discord to access Railbound Tools. Your account is used to load your characters, requests, staff access, and activity history.</p>
       </section>
     );
   }
@@ -3952,7 +3952,7 @@ function ProductionQADashboard({ discordId, jump }: { discordId: string; jump: (
       items: [
         "Open Railway frontend on desktop",
         "Open Railway frontend on mobile",
-        "Continue with Discord",
+        "Login with Discord",
         "Confirm Dev Welcome to Railbound Tools is not visible publicly",
         "Confirm user avatar/name loads after login",
       ],

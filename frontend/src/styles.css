@@ -4237,3 +4237,58 @@ table {
   border-radius: 14px;
   font-weight: 950;
 }
+
+/* Login Button Only v2 */
+
+.hero-login-card h3,
+.hero-login-card p,
+.hero-login-card .muted-text,
+.login-panel h3,
+.login-panel p,
+.login-panel .muted-text,
+.auth-panel h3,
+.auth-panel p,
+.auth-panel .muted-text,
+.discord-auth-card h3,
+.discord-auth-card p,
+.discord-auth-card .muted-text {
+  display: none !important;
+}
+
+.hero-login-card,
+.login-panel,
+.auth-panel,
+.discord-auth-card {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 92px;
+}
+
+.hero-login-card button,
+.login-panel button,
+.auth-panel button,
+.discord-auth-card button,
+.discord-login-button {
+  width: auto !important;
+  min-height: 44px;
+  padding: 0.75rem 1.1rem !important;
+  border-radius: 14px !important;
+  font-weight: 950 !important;
+}
+
+.login-button-only-card {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 92px;
+}
+
+.login-button-only-card h1,
+.login-button-only-card h2,
+.login-button-only-card h3,
+.login-button-only-card h4,
+.login-button-only-card p,
+.login-button-only-card span:not(button span) {
+  display: none !important;
+}
