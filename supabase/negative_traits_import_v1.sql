@@ -24,6 +24,7 @@ create table if not exists public.traits (
   updated_at timestamptz default now()
 );
 
+alter table public.traits add column if not exists guild_id text;
 alter table public.traits add column if not exists trait_key text;
 alter table public.traits add column if not exists name text;
 alter table public.traits add column if not exists trait_type text;
@@ -41,8 +42,10 @@ alter table public.traits add column if not exists updated_at timestamptz defaul
 
 -- Negative Traits Import v3 no-conflict cleanup
 delete from public.traits
-where trait_key in (
-  'negative_knucklehead',
+where guild_id = '1462489358908129354'
+and trait_key in (
+        '1462489358908129354',
+        'negative_knucklehead',
   'negative_unlucky',
   'negative_illiterate',
   'negative_non_swimmer',
@@ -69,6 +72,7 @@ where trait_key in (
 );
 
 insert into public.traits (
+  guild_id,
   trait_key,
   name,
   trait_type,
@@ -85,6 +89,7 @@ insert into public.traits (
 )
 values
 (
+        '1462489358908129354',
         'negative_knucklehead',
         'Knucklehead',
         'negative',
@@ -100,6 +105,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_unlucky',
         'Unlucky',
         'negative',
@@ -115,6 +121,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_illiterate',
         'Illiterate',
         'negative',
@@ -130,6 +137,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_non_swimmer',
         'Non-swimmer',
         'negative',
@@ -145,6 +153,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_monotoned',
         'Monotoned',
         'negative',
@@ -160,6 +169,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_bad_back',
         'Bad Back',
         'negative',
@@ -175,6 +185,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_hearing_impaired',
         'Hearing Impaired',
         'negative',
@@ -190,6 +201,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_big_spender',
         'Big Spender',
         'negative',
@@ -205,6 +217,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_clumsy',
         'Clumsy',
         'negative',
@@ -220,6 +233,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_in_debt',
         'In Debt',
         'negative',
@@ -235,6 +249,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_deaf',
         'Deaf',
         'negative',
@@ -250,6 +265,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_weak_body',
         'Weak Body',
         'negative',
@@ -265,6 +281,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_inflamed_mana_circuits',
         'Inflamed Mana Circuits',
         'negative',
@@ -280,6 +297,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_hot_natured',
         'Hot-Natured',
         'negative',
@@ -295,6 +313,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_cold_natured',
         'Cold-Natured',
         'negative',
@@ -310,6 +329,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_visually_impaired',
         'Visually Impaired',
         'negative',
@@ -325,6 +345,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_easily_hurt',
         'Easily Hurt',
         'negative',
@@ -340,6 +361,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_got_a_prosthetic',
         'Got a Prosthetic',
         'negative',
@@ -355,6 +377,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_pyrophobia',
         'Pyrophobia',
         'negative',
@@ -370,6 +393,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_claustrophobia',
         'Claustrophobia',
         'negative',
@@ -385,6 +409,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_acrophobia',
         'Acrophobia',
         'negative',
@@ -400,6 +425,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_source_sensitivity',
         'Source Sensitivity',
         'negative',
@@ -415,6 +441,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_mana_less',
         'Mana-Less',
         'negative',
@@ -430,6 +457,7 @@ values
         true
     ),
 (
+        '1462489358908129354',
         'negative_panic_attacks',
         'Panic Attacks',
         'negative',
@@ -447,5 +475,6 @@ values
 -- Verify
 select trait_key, name, tier, point_value, refund_points, trait_type, is_active
 from public.traits
-where trait_type = 'negative'
+where guild_id = '1462489358908129354'
+  and trait_type = 'negative'
 order by tier, name;
