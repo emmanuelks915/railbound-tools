@@ -21,7 +21,7 @@ type CoreStats = {
   mana: number;
 };
 
-type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "staff" | "combat" | "registry" | "register" | "manage_oc" | "qa";
+type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "staff" | "combat" | "registry" | "register" | "manage_oc" | "qa" | "shop_owner";
 
 const STAT_LABELS: Record<keyof CoreStats, string> = {
   strength: "Strength",
@@ -120,6 +120,7 @@ function App() {
     ["skills", Sparkles, "Skills"],
     ["inventory", Package, "Inventory"],
     ["shops", Store, "Shops"],
+    ["shop_owner", Store, "Manage Shop"],
     ["rp", ClipboardList, "RP Hub"],
     ["register", UserRound, "Register OC"],
     ["registry", Users, "OC Registry"],
@@ -219,6 +220,7 @@ return (
       {tab === "manage_oc" && <ManageOCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "inventory" && <InventoryDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "shops" && <ShopDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} />}
+      {tab === "shop_owner" && <ShopOwnerDashboard discordId={discordId} />}
       {tab === "skills" && <SkillsDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "rp" && <RpHubDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "register" && <OCRegistrationDashboard discordId={discordId} jump={setTab} />}
@@ -434,6 +436,7 @@ function HomeDashboard({
             <button onClick={() => jump("skills")}><Sparkles size={16} /> Manage Skills</button>
             <button onClick={() => jump("register")}><UserRound size={16} /> Register OC</button>
             <button onClick={() => jump("shops")}><Store size={16} /> Manage Shops</button>
+            <button onClick={() => jump("shop_owner")}><Store size={16} /> Manage My Shop</button>
             <button onClick={() => jump("staff")}><ShieldCheck size={16} /> Staff Queue</button>
             <button onClick={() => jump("qa")}><ClipboardList size={16} /> QA Checklist</button>
           </div>
@@ -1512,6 +1515,454 @@ function InventoryDashboard({
 }
 
 
+
+function ShopOwnerDashboard({ discordId }: { discordId: string }) {
+  const [shops, setShops] = useState<any[]>([]);
+  const [selectedShopId, setSelectedShopId] = useState("");
+  const [shopData, setShopData] = useState<any>({ shop: null, items: [], currencies: [] });
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [shopForm, setShopForm] = useState({
+    name: "",
+    description: "",
+    image_url: "",
+    status: "Open",
+    is_active: true,
+  });
+  const [itemForm, setItemForm] = useState({
+    name: "",
+    description: "",
+    category: "General",
+    price: "0",
+    stock: "0",
+    currency_id: "",
+    image_url: "",
+    requires_approval: false,
+    is_active: true,
+  });
+  const [editingItemId, setEditingItemId] = useState("");
+  const [editingItem, setEditingItem] = useState<any>(null);
+
+  async function loadMyShops() {
+    if (!discordId) return;
+
+    setMessage("");
+
+    try {
+      const data = await apiFetch("/api/shop-owner/shops", {}, discordId);
+      const rows = data.shops || [];
+      setShops(rows);
+
+      if (!selectedShopId && rows.length > 0) {
+        setSelectedShopId(rows[0].shop_id);
+      }
+    } catch (error: any) {
+      setMessage(error.message || "Could not load your shops.");
+      setShops([]);
+    }
+  }
+
+  async function loadShop(shopId = selectedShopId) {
+    if (!discordId || !shopId) return;
+
+    setMessage("");
+
+    try {
+      const data = await apiFetch(`/api/shop-owner/shops/${shopId}`, {}, discordId);
+      setShopData(data);
+
+      const shop = data.shop || {};
+      setShopForm({
+        name: shop.name || "",
+        description: shop.description || "",
+        image_url: shop.image_url || "",
+        status: shop.status || "Open",
+        is_active: shop.is_active !== false,
+      });
+    } catch (error: any) {
+      setMessage(error.message || "Could not load shop tools.");
+      setShopData({ shop: null, items: [], currencies: [] });
+    }
+  }
+
+  useEffect(() => {
+    loadMyShops();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId]);
+
+  useEffect(() => {
+    if (selectedShopId) loadShop(selectedShopId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedShopId]);
+
+  async function saveShop() {
+    if (!selectedShopId) return;
+
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const data = await apiFetch(
+        `/api/shop-owner/shops/${selectedShopId}`,
+        { method: "PATCH", body: JSON.stringify(shopForm) },
+        discordId
+      );
+
+      setMessage(data.message || "Shop updated.");
+      await loadMyShops();
+      await loadShop(selectedShopId);
+    } catch (error: any) {
+      setMessage(error.message || "Could not save shop.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function resetItemForm() {
+    setEditingItemId("");
+    setEditingItem(null);
+    setItemForm({
+      name: "",
+      description: "",
+      category: "General",
+      price: "0",
+      stock: "0",
+      currency_id: "",
+      image_url: "",
+      requires_approval: false,
+      is_active: true,
+    });
+  }
+
+  function startEditItem(item: any) {
+    setEditingItemId(item.item_id);
+    setEditingItem(item);
+    setItemForm({
+      name: item.name || "",
+      description: item.description || "",
+      category: item.category || "General",
+      price: String(item.price ?? 0),
+      stock: String(item.stock ?? 0),
+      currency_id: item.currency_id || "",
+      image_url: item.image_url || "",
+      requires_approval: Boolean(item.requires_approval),
+      is_active: item.is_active !== false,
+    });
+  }
+
+  async function saveItem() {
+    if (!selectedShopId) return;
+
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const endpoint = editingItemId
+        ? `/api/shop-owner/items/${editingItemId}`
+        : `/api/shop-owner/shops/${selectedShopId}/items`;
+
+      const method = editingItemId ? "PATCH" : "POST";
+      const data = await apiFetch(endpoint, { method, body: JSON.stringify(itemForm) }, discordId);
+
+      setMessage(data.message || (editingItemId ? "Item updated." : "Item created."));
+      resetItemForm();
+      await loadShop(selectedShopId);
+    } catch (error: any) {
+      setMessage(error.message || "Could not save item.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleItem(item: any) {
+    if (!item.item_id) return;
+
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const data = await apiFetch(
+        `/api/shop-owner/items/${item.item_id}/toggle`,
+        { method: "POST" },
+        discordId
+      );
+
+      setMessage(data.message || "Item updated.");
+      await loadShop(selectedShopId);
+    } catch (error: any) {
+      setMessage(error.message || "Could not toggle item.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const shop = shopData.shop;
+  const items = shopData.items || [];
+  const currencies = shopData.currencies || [];
+
+  return (
+    <RequireDiscord discordId={discordId}>
+      <section className="shop-owner-page">
+        <div className="card shop-owner-hero">
+          <div>
+            <span className="activity-type-label">Owner Tools</span>
+            <h2>Manage Shop</h2>
+            <p className="muted-text">
+              Edit your storefront, create items, update prices/stock, and activate or hide listings.
+            </p>
+          </div>
+          <button className="ghost" onClick={() => loadShop()} disabled={saving || !selectedShopId}>
+            <RefreshCw size={16} /> Refresh
+          </button>
+        </div>
+
+        <div className="card shop-owner-picker">
+          <label>
+            <span>Choose Shop</span>
+            <select value={selectedShopId} onChange={(event) => setSelectedShopId(event.target.value)}>
+              <option value="">Select a shop</option>
+              {shops.map((shop) => (
+                <option value={shop.shop_id} key={shop.shop_id}>
+                  {shop.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {shops.length === 0 ? (
+            <p className="muted-text">
+              No shops found for your account. Staff may need to create/assign the storefront first.
+            </p>
+          ) : null}
+        </div>
+
+        {message ? <p className="message">{message}</p> : null}
+
+        {shop ? (
+          <div className="shop-owner-layout">
+            <div className="shop-owner-main">
+              <div className="card shop-owner-editor">
+                <div className="card-title-row">
+                  <div>
+                    <h3>Storefront Settings</h3>
+                    <p className="muted-text">These fields control how the shop appears in the Market District.</p>
+                  </div>
+                  <span className="pill">{shop.is_active ? "Active" : "Inactive"}</span>
+                </div>
+
+                <div className="shop-owner-form">
+                  <label>
+                    <span>Shop Name</span>
+                    <input
+                      value={shopForm.name}
+                      onChange={(event) => setShopForm((current) => ({ ...current, name: event.target.value }))}
+                    />
+                  </label>
+
+                  <label>
+                    <span>Status</span>
+                    <input
+                      value={shopForm.status}
+                      onChange={(event) => setShopForm((current) => ({ ...current, status: event.target.value }))}
+                      placeholder="Open, Closed, Restocking..."
+                    />
+                  </label>
+
+                  <label className="shop-owner-wide">
+                    <span>Banner / Image URL</span>
+                    <input
+                      value={shopForm.image_url}
+                      onChange={(event) => setShopForm((current) => ({ ...current, image_url: event.target.value }))}
+                      placeholder="https://..."
+                    />
+                  </label>
+
+                  <label className="shop-owner-wide">
+                    <span>Description</span>
+                    <textarea
+                      rows={4}
+                      value={shopForm.description}
+                      onChange={(event) => setShopForm((current) => ({ ...current, description: event.target.value }))}
+                      placeholder="What does this storefront sell?"
+                    />
+                  </label>
+
+                  <label className="shop-owner-check">
+                    <input
+                      type="checkbox"
+                      checked={shopForm.is_active}
+                      onChange={(event) => setShopForm((current) => ({ ...current, is_active: event.target.checked }))}
+                    />
+                    <span>Shop is active / visible</span>
+                  </label>
+                </div>
+
+                <div className="auth-actions">
+                  <button onClick={saveShop} disabled={saving}>
+                    <Save size={16} /> {saving ? "Saving..." : "Save Shop"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="card shop-item-editor">
+                <div className="card-title-row">
+                  <div>
+                    <h3>{editingItemId ? "Edit Item" : "Create Item"}</h3>
+                    <p className="muted-text">
+                      Add or update a listing without touching Discord commands.
+                    </p>
+                  </div>
+                  {editingItemId ? <button className="ghost" onClick={resetItemForm}>Cancel Edit</button> : null}
+                </div>
+
+                <div className="shop-owner-form">
+                  <label>
+                    <span>Item Name</span>
+                    <input
+                      value={itemForm.name}
+                      onChange={(event) => setItemForm((current) => ({ ...current, name: event.target.value }))}
+                      placeholder="Potion, relic, license..."
+                    />
+                  </label>
+
+                  <label>
+                    <span>Category</span>
+                    <input
+                      value={itemForm.category}
+                      onChange={(event) => setItemForm((current) => ({ ...current, category: event.target.value }))}
+                      placeholder="Consumable, Relic, Service..."
+                    />
+                  </label>
+
+                  <label>
+                    <span>Price</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={itemForm.price}
+                      onChange={(event) => setItemForm((current) => ({ ...current, price: event.target.value }))}
+                    />
+                  </label>
+
+                  <label>
+                    <span>Stock</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={itemForm.stock}
+                      onChange={(event) => setItemForm((current) => ({ ...current, stock: event.target.value }))}
+                    />
+                  </label>
+
+                  <label>
+                    <span>Currency</span>
+                    <select
+                      value={itemForm.currency_id}
+                      onChange={(event) => setItemForm((current) => ({ ...current, currency_id: event.target.value }))}
+                    >
+                      <option value="">Default / blank</option>
+                      {currencies.map((currency: any) => {
+                        const id = String(currency.currency_id || currency.id || "");
+                        return (
+                          <option value={id} key={id}>
+                            {currency.emoji ? `${currency.emoji} ` : ""}
+                            {currency.ticker || currency.name || id}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </label>
+
+                  <label>
+                    <span>Image URL</span>
+                    <input
+                      value={itemForm.image_url}
+                      onChange={(event) => setItemForm((current) => ({ ...current, image_url: event.target.value }))}
+                      placeholder="https://..."
+                    />
+                  </label>
+
+                  <label className="shop-owner-wide">
+                    <span>Description</span>
+                    <textarea
+                      rows={4}
+                      value={itemForm.description}
+                      onChange={(event) => setItemForm((current) => ({ ...current, description: event.target.value }))}
+                      placeholder="Describe what the item does or why someone would buy it."
+                    />
+                  </label>
+
+                  <label className="shop-owner-check">
+                    <input
+                      type="checkbox"
+                      checked={itemForm.requires_approval}
+                      onChange={(event) =>
+                        setItemForm((current) => ({ ...current, requires_approval: event.target.checked }))
+                      }
+                    />
+                    <span>Requires staff/shop approval</span>
+                  </label>
+
+                  <label className="shop-owner-check">
+                    <input
+                      type="checkbox"
+                      checked={itemForm.is_active}
+                      onChange={(event) =>
+                        setItemForm((current) => ({ ...current, is_active: event.target.checked }))
+                      }
+                    />
+                    <span>Item is active / visible</span>
+                  </label>
+                </div>
+
+                <div className="auth-actions">
+                  <button onClick={saveItem} disabled={saving}>
+                    <Save size={16} /> {saving ? "Saving..." : editingItemId ? "Save Item" : "Create Item"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <aside className="shop-owner-side">
+              <div className="card shop-owner-items-card">
+                <div className="card-title-row">
+                  <div>
+                    <h3>Current Items</h3>
+                    <p className="muted-text">Click edit to update a listing.</p>
+                  </div>
+                  <span className="pill">{items.length}</span>
+                </div>
+
+                <div className="shop-owner-item-list">
+                  {items.length === 0 ? (
+                    <p className="muted-text">No items yet. Create the first listing.</p>
+                  ) : null}
+
+                  {items.map((item: any) => (
+                    <div className="shop-owner-item-row" key={item.item_id || item.name}>
+                      <div>
+                        <strong>{item.name}</strong>
+                        <span>{item.category} • {item.price} • Stock {item.stock ?? "∞"}</span>
+                        <small>{item.is_active ? "Active" : "Inactive"}{item.requires_approval ? " • Approval required" : ""}</small>
+                      </div>
+
+                      <div className="shop-owner-item-actions">
+                        <button className="ghost" onClick={() => startEditItem(item)}>Edit</button>
+                        <button className="ghost" onClick={() => toggleItem(item)}>
+                          {item.is_active ? "Hide" : "Show"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </aside>
+          </div>
+        ) : null}
+      </section>
+    </RequireDiscord>
+  );
+}
 
 function ShopDashboard({ discordId, selectedCharacterId }: { discordId: string; selectedCharacterId?: string }) {
   const [data, setData] = useState<any>({ shops: [], items: [], categories: [], summary: {} });

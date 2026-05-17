@@ -3874,3 +3874,139 @@ table {
     grid-column: auto;
   }
 }
+
+/* Shop Owner Tools v1 */
+
+.shop-owner-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.shop-owner-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.shop-owner-picker {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.shop-owner-picker label,
+.shop-owner-form label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.shop-owner-picker span,
+.shop-owner-form span,
+.shop-owner-check span {
+  color: rgba(44, 31, 22, 0.58);
+  font-size: 0.75rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.shop-owner-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 1rem;
+  align-items: start;
+}
+
+.shop-owner-main,
+.shop-owner-side {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.shop-owner-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.shop-owner-wide {
+  grid-column: 1 / -1;
+}
+
+.shop-owner-check {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.55rem !important;
+  border-radius: 16px;
+  padding: 0.72rem;
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(61, 51, 43, 0.08);
+}
+
+.shop-owner-check input {
+  width: auto;
+}
+
+.shop-owner-item-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.shop-owner-item-row {
+  display: grid;
+  gap: 0.55rem;
+  border-radius: 18px;
+  padding: 0.85rem;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(61, 51, 43, 0.08);
+}
+
+.shop-owner-item-row strong,
+.shop-owner-item-row span,
+.shop-owner-item-row small {
+  display: block;
+}
+
+.shop-owner-item-row span,
+.shop-owner-item-row small {
+  color: rgba(44, 31, 22, 0.62);
+  font-weight: 800;
+  margin-top: 0.15rem;
+}
+
+.shop-owner-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.shop-owner-item-actions button {
+  flex: 1 1 90px;
+}
+
+@media (max-width: 1080px) {
+  .shop-owner-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .shop-owner-hero,
+  .shop-owner-form {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .shop-owner-wide {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 520px) {
+  .shop-owner-item-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}
