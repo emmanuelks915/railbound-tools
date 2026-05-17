@@ -3861,306 +3861,299 @@ function RpHubDashboard({
 
 
 function StaffQueue({ discordId }: { discordId: string }) {
-  const [statRequests, setStatRequests] = useState<any[]>([]);
-  const [skillRequests, setSkillRequests] = useState<any[]>([]);
-  const [shopRequests, setShopRequests] = useState<any[]>([]);
+  const [requests, setRequests] = useState<any[]>([]);
   const [message, setMessage] = useState("");
-  const [activeQueue, setActiveQueue] = useState<"stats" | "skills" | "shops">("skills");
+  const [status, setStatus] = useState("pending");
+  const [requestType, setRequestType] = useState("all");
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [workingKey, setWorkingKey] = useState("");
+  const [notes, setNotes] = useState<Record<string, string>>({});
 
-  async function loadRequests() {
+  async function loadQueue() {
+    if (!discordId) return;
+
+    setLoading(true);
     setMessage("");
 
-    const stats = await apiFetch("/api/staff/stat-requests?status=pending", {}, discordId);
-    setStatRequests(stats.requests || []);
+    try {
+      const params = new URLSearchParams({
+        status,
+        request_type: requestType,
+      });
 
-    const skills = await apiFetch("/api/staff/skill-requests?status=pending", {}, discordId);
-    setSkillRequests(skills.requests || []);
-
-    const shops = await apiFetch("/api/staff/shop-items?status=pending_staff_review", {}, discordId);
-    setShopRequests(shops.items || []);
+      const data = await apiFetch(`/api/requests/queue?${params.toString()}`, {}, discordId);
+      setRequests(data.requests || []);
+    } catch (error: any) {
+      setRequests([]);
+      setMessage(error.message || "Could not load request queue.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
-    if (discordId) loadRequests().catch((error) => setMessage(error.message));
+    loadQueue();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discordId]);
+  }, [discordId, status, requestType]);
 
-  async function actStat(requestId: string, action: "approve" | "deny") {
-    const note = window.prompt(action === "approve" ? "Approval note?" : "Denial reason?") || "";
-
-    await apiFetch(
-      `/api/staff/stat-requests/${requestId}/${action}`,
-      {
-        method: "POST",
-        body: JSON.stringify({ staff_note: note }),
-      },
-      discordId
-    );
-
-    setMessage(`Stat request ${action}d.`);
-    await loadRequests();
+  function requestKey(request: any) {
+    return `${request.request_type}:${request.request_id}`;
   }
 
-  async function actSkill(requestId: string, action: "approve" | "deny") {
-    const note = window.prompt(action === "approve" ? "Approval note?" : "Denial reason?") || "";
+  async function approveRequest(request: any) {
+    const key = requestKey(request);
+    setWorkingKey(key);
+    setMessage("");
 
-    await apiFetch(
-      `/api/staff/skill-requests/${requestId}/${action}`,
-      {
-        method: "POST",
-        body: JSON.stringify({ staff_note: note }),
-      },
-      discordId
-    );
+    try {
+      const body = JSON.stringify({ staff_note: notes[key] || "" });
+      const data = await apiFetch(
+        `/api/requests/${request.request_type}/${request.request_id}/approve`,
+        { method: "POST", body },
+        discordId
+      );
 
-    setMessage(`Skill request ${action}d.`);
-    await loadRequests();
+      setMessage(data.message || "Request approved.");
+      await loadQueue();
+    } catch (error: any) {
+      setMessage(error.message || "Could not approve request.");
+    } finally {
+      setWorkingKey("");
+    }
   }
 
-  async function actShopItem(itemId: string, action: "approve" | "deny") {
-    const note = window.prompt(action === "approve" ? "Approval note?" : "Denial reason?") || "";
+  async function denyRequest(request: any) {
+    const key = requestKey(request);
+    const reason = (notes[key] || "").trim();
 
-    await apiFetch(
-      `/api/staff/shop-items/${itemId}/${action}`,
-      {
-        method: "POST",
-        body: JSON.stringify({ staff_note: note }),
-      },
-      discordId
-    );
+    if (!reason) {
+      setMessage("A denial reason is required.");
+      return;
+    }
 
-    setMessage(`Shop listing ${action}d.`);
-    await loadRequests();
+    setWorkingKey(key);
+    setMessage("");
+
+    try {
+      const body = JSON.stringify({ reason });
+      const data = await apiFetch(
+        `/api/requests/${request.request_type}/${request.request_id}/deny`,
+        { method: "POST", body },
+        discordId
+      );
+
+      setMessage(data.message || "Request denied.");
+      await loadQueue();
+    } catch (error: any) {
+      setMessage(error.message || "Could not deny request.");
+    } finally {
+      setWorkingKey("");
+    }
   }
 
-  function checkPill(ok: boolean, label: string, badLabel?: string) {
-    return (
-      <span className={`review-check-pill ${ok ? "good" : "bad"}`}>
-        {ok ? "✓" : "!"} {ok ? label : badLabel || label}
-      </span>
-    );
+  function pretty(value: string) {
+    return String(value || "")
+      .replaceAll("_", " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
-  function skillRequestTitle(request: any) {
-    return request.skill?.name || request.skill_key || "Unknown Skill";
+  function formatDate(value: string | null | undefined) {
+    if (!value) return "Unknown time";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString();
   }
+
+  function statusClass(value: string) {
+    const normalized = String(value || "").toLowerCase();
+
+    if (normalized === "approved") return "approved";
+    if (normalized === "denied") return "denied";
+    if (normalized === "pending") return "pending";
+
+    return "info";
+  }
+
+  const visibleRequests = requests.filter((request) => {
+    const query = search.trim().toLowerCase();
+    if (!query) return true;
+
+    const haystack = [
+      request.title,
+      request.summary,
+      request.character_name,
+      request.actor_id,
+      request.request_type,
+      request.status,
+      request.reason,
+      request.staff_note,
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return haystack.includes(query);
+  });
+
+  const counts = {
+    total: requests.length,
+    pending: requests.filter((request) => request.status === "pending").length,
+    approved: requests.filter((request) => request.status === "approved").length,
+    denied: requests.filter((request) => request.status === "denied").length,
+  };
 
   return (
     <RequireDiscord discordId={discordId}>
-      <section className="staff-dashboard-v2">
-        <div className="card staff-overview-card">
-          <div className="card-title-row">
-            <div>
-              <h2>Staff Review Center</h2>
-              <p className="muted-text">
-                Review pending stat requests, skill purchases, and shop listings.
-              </p>
-            </div>
-            <button className="ghost" onClick={loadRequests}>
-              <RefreshCw size={16} /> Refresh
-            </button>
+      <section className="request-workflow-page">
+        <div className="card request-workflow-hero">
+          <div>
+            <span className="activity-type-label">Staff Operations</span>
+            <h2>Request Queue</h2>
+            <p className="muted-text">
+              Review stat and skill requests, leave staff notes, approve valid requests, or deny with a clear reason.
+            </p>
           </div>
+          <button className="ghost" onClick={loadQueue} disabled={loading}>
+            <RefreshCw size={16} /> {loading ? "Loading..." : "Refresh"}
+          </button>
+        </div>
 
-          {message && <p className="message">{message}</p>}
-
-          <div className="staff-queue-tabs">
-            <button className={activeQueue === "skills" ? "active" : ""} onClick={() => setActiveQueue("skills")}>
-              Skill Requests <span>{skillRequests.length}</span>
-            </button>
-            <button className={activeQueue === "stats" ? "active" : ""} onClick={() => setActiveQueue("stats")}>
-              Stat Requests <span>{statRequests.length}</span>
-            </button>
-            <button className={activeQueue === "shops" ? "active" : ""} onClick={() => setActiveQueue("shops")}>
-              Shop Listings <span>{shopRequests.length}</span>
-            </button>
+        <div className="request-summary-grid">
+          <div className="card request-summary-card">
+            <span>Total</span>
+            <strong>{counts.total}</strong>
+          </div>
+          <div className="card request-summary-card pending">
+            <span>Pending</span>
+            <strong>{counts.pending}</strong>
+          </div>
+          <div className="card request-summary-card approved">
+            <span>Approved</span>
+            <strong>{counts.approved}</strong>
+          </div>
+          <div className="card request-summary-card denied">
+            <span>Denied</span>
+            <strong>{counts.denied}</strong>
           </div>
         </div>
 
-        {activeQueue === "skills" ? (
-          <div className="card staff-section-card">
-            <div className="card-title-row">
-              <div>
-                <h2>Skill Request Queue</h2>
-                <p className="muted-text">
-                  Review skill prerequisites, XP, and ownership before approving.
-                </p>
-              </div>
-              <span className="pill">{skillRequests.length} pending</span>
+        <div className="card request-filters-card">
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search requests..."
+          />
+
+          <select value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="denied">Denied</option>
+            <option value="all">All Statuses</option>
+          </select>
+
+          <select value={requestType} onChange={(event) => setRequestType(event.target.value)}>
+            <option value="all">All Types</option>
+            <option value="stat">Stat Requests</option>
+            <option value="skill">Skill Requests</option>
+          </select>
+        </div>
+
+        {message ? <p className="message">{message}</p> : null}
+
+        <div className="request-card-list">
+          {visibleRequests.length === 0 ? (
+            <div className="card request-empty-state">
+              <strong>No requests found.</strong>
+              <p className="muted-text">Try changing filters or refreshing the queue.</p>
             </div>
+          ) : null}
 
-            <div className="item-list skill-review-list">
-              {skillRequests.length === 0 && <p>No pending skill requests.</p>}
+          {visibleRequests.map((request) => {
+            const key = requestKey(request);
+            const working = workingKey === key;
+            const pending = request.status === "pending";
 
-              {skillRequests.map((request) => {
-                const checks = request.review_checks || {};
-                const safeToApprove = !!checks.safe_to_approve;
+            return (
+              <div className="card request-review-card" key={key}>
+                <div className="request-review-top">
+                  <div>
+                    <span className="activity-type-label">{pretty(request.request_type)} Request</span>
+                    <h3>{request.title || request.summary || "Request"}</h3>
+                    <p className="muted-text">{request.summary}</p>
+                  </div>
 
-                return (
-                  <div className={`request-card skill-review-card-v2 ${safeToApprove ? "safe" : "needs-review"}`} key={request.request_id}>
-                    <div className="skill-review-header">
-                      <div>
-                        <div className="skill-review-eyebrow">
-                          <span>{request.skill?.tree || "Unknown Tree"}</span>
-                          <span>Tier {request.skill?.tier ?? "—"}</span>
-                          <span>{checks.cost ?? request.cost ?? request.skill?.cost ?? 0} XP</span>
-                        </div>
-                        <h3>{skillRequestTitle(request)}</h3>
-                        <p>
-                          OC: <strong>{request.character?.name || "Unknown OC"}</strong>
-                          {request.character?.user_id ? <> • Player: <strong>{request.character.user_id}</strong></> : null}
-                        </p>
-                      </div>
-                      <span className={`pill ${safeToApprove ? "good" : "bad"}`}>
-                        {safeToApprove ? "Safe to Approve" : "Needs Review"}
-                      </span>
-                    </div>
+                  <em className={`request-status-pill ${statusClass(request.status)}`}>
+                    {pretty(request.status)}
+                  </em>
+                </div>
 
-                    <div className="review-check-grid">
-                      {checkPill(!!checks.has_enough_xp, `${checks.available_xp ?? 0} XP available`, `Needs ${checks.cost ?? request.cost ?? 0} XP`)}
-                      {checkPill(!checks.already_owned, "Not owned", "Already owned")}
-                      {checkPill(!!checks.skill_active, "Skill active", "Inactive / unreleased")}
-                      {checkPill(!!checks.prerequisites_met, "Prereqs met", "Missing prereqs")}
-                    </div>
+                <div className="request-meta-grid">
+                  <div>
+                    <span>OC</span>
+                    <strong>{request.character_name || request.character_id || "—"}</strong>
+                  </div>
+                  <div>
+                    <span>Submitted By</span>
+                    <strong>{request.actor_id ? `<@${request.actor_id}>` : "—"}</strong>
+                  </div>
+                  <div>
+                    <span>Amount / Cost</span>
+                    <strong>{request.amount ?? "—"}</strong>
+                  </div>
+                  <div>
+                    <span>Created</span>
+                    <strong>{formatDate(request.created_at)}</strong>
+                  </div>
+                </div>
 
-                    {checks.prereq_names?.length ? (
-                      <div className="skill-review-detail-box">
-                        <strong>Prerequisites</strong>
-                        <p>{checks.prereq_names.join(", ")}</p>
-                      </div>
-                    ) : (
-                      <div className="skill-review-detail-box">
-                        <strong>Prerequisites</strong>
-                        <p>None listed.</p>
-                      </div>
-                    )}
+                {request.reason ? (
+                  <div className="request-note-block">
+                    <span>Player Reason</span>
+                    <p>{request.reason}</p>
+                  </div>
+                ) : null}
 
-                    {checks.missing_prereq_keys?.length ? (
-                      <div className="skill-review-warning">
-                        Missing: {checks.missing_prereq_keys.join(", ")}
-                      </div>
-                    ) : null}
+                {request.staff_note ? (
+                  <div className="request-note-block staff">
+                    <span>Staff Note</span>
+                    <p>{request.staff_note}</p>
+                  </div>
+                ) : null}
 
-                    {request.submitter_note ? (
-                      <div className="skill-review-detail-box">
-                        <strong>Player Note</strong>
-                        <p>{request.submitter_note}</p>
-                      </div>
-                    ) : null}
+                {pending ? (
+                  <div className="request-actions-panel">
+                    <label>
+                      <span>Staff Note / Denial Reason</span>
+                      <textarea
+                        rows={3}
+                        value={notes[key] || ""}
+                        onChange={(event) =>
+                          setNotes((current) => ({ ...current, [key]: event.target.value }))
+                        }
+                        placeholder="Optional for approval, required for denial."
+                      />
+                    </label>
 
-                    <div className="actions">
-                      <button disabled={!safeToApprove} onClick={() => actSkill(request.request_id, "approve")}>
-                        <Check size={16} /> Approve
+                    <div className="auth-actions">
+                      <button onClick={() => approveRequest(request)} disabled={working}>
+                        <Check size={16} /> {working ? "Working..." : "Approve"}
                       </button>
-                      <button className="danger" onClick={() => actSkill(request.request_id, "deny")}>
+                      <button className="danger-button" onClick={() => denyRequest(request)} disabled={working}>
                         <X size={16} /> Deny
                       </button>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
-
-        {activeQueue === "stats" ? (
-          <div className="card staff-section-card">
-            <h2>Stat Review Queue</h2>
-
-            <div className="item-list">
-              {statRequests.length === 0 && <p>No pending stat requests.</p>}
-
-              {statRequests.map((request) => (
-                <div className="request-card" key={request.request_id}>
-                  <div>
-                    <h3>{request.character?.name || "Unknown OC"}</h3>
-                    <p>Total: {request.total_cost} XP</p>
-                    {request.submitter_note && <p>Note: {request.submitter_note}</p>}
-                  </div>
-
-                  <ul>
-                    {request.items.map((item: any) => (
-                      <li key={item.item_id}>
-                        {STAT_LABELS[item.stat_key as keyof CoreStats]}: {item.current_value} →{" "}
-                        {item.target_value} ({item.cost} XP)
-                      </li>
-                    ))}
-                  </ul>
-
-                  <div className="actions">
-                    <button onClick={() => actStat(request.request_id, "approve")}>
-                      <Check size={16} /> Approve
-                    </button>
-                    <button className="danger" onClick={() => actStat(request.request_id, "deny")}>
-                      <X size={16} /> Deny
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {activeQueue === "shops" ? (
-          <div className="card staff-section-card staff-shop-review-card">
-            <h2>Shop Listing Review Queue</h2>
-            <p className="muted-text">
-              Review submitted player shop listings before they go live.
-            </p>
-
-            <div className="item-list">
-              {shopRequests.length === 0 && <p>No pending shop listings.</p>}
-
-              {shopRequests.map((item) => (
-                <div className="request-card shop-review-card" key={item.item_id}>
-                  {item.image_url ? (
-                    <img
-                      className="shop-review-image"
-                      src={item.image_url}
-                      alt={item.name || "Shop item"}
-                    />
-                  ) : null}
-
-                  <div>
-                    <h3>{item.name}</h3>
-                    <p>
-                      Shop: {item.company?.name || "Unknown Shop"} • Price: {item.price} • Stock:{" "}
-                      {item.stock ?? "∞"}
-                    </p>
-
-                    {item.item_type || item.item_class ? (
-                      <p>
-                        Type: {item.item_type || "—"} • Class: {item.item_class || "—"}
-                      </p>
-                    ) : null}
-
-                    {item.description ? <p>{item.description}</p> : null}
-                    {item.special_effects ? <p><strong>Effects:</strong> {item.special_effects}</p> : null}
-                    {item.usage_information ? <p><strong>Usage:</strong> {item.usage_information}</p> : null}
-
-                    {item.recipe_link ? (
-                      <a href={item.recipe_link} target="_blank" rel="noreferrer">
-                        Open recipe / sheet
-                      </a>
-                    ) : null}
-                  </div>
-
-                  <div className="actions">
-                    <button onClick={() => actShopItem(item.item_id, "approve")}>
-                      <Check size={16} /> Approve
-                    </button>
-                    <button className="danger" onClick={() => actShopItem(item.item_id, "deny")}>
-                      <X size={16} /> Deny
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
       </section>
     </RequireDiscord>
   );
 }
+
+
 
 function DerivedStatsCalculator() {
   const [stats, setStats] = useState<CoreStats>({ strength: 50, dexterity: 50, stamina: 50, magic_affinity: 50, mana: 50 });
