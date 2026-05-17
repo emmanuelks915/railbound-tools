@@ -1365,15 +1365,6 @@ function InventoryDashboard({
   const [characters, setCharacters] = useState<any[]>([]);
   const [data, setData] = useState<any>({ items: [], currencies: [], types: [] });
   const [search, setSearch] = useState("");
-  const [resourceCharacters, setResourceCharacters] = useState<any[]>([]);
-  const [resourceCurrencies, setResourceCurrencies] = useState<any[]>([]);
-  const [resourceForm, setResourceForm] = useState({
-    character_id: "",
-    grant_type: "xp",
-    amount: "600",
-    currency_id: "",
-    reason: "Starting OC setup grant.",
-  });
   const [overrideCharacters, setOverrideCharacters] = useState<any[]>([]);
   const [overrideSkills, setOverrideSkills] = useState<any[]>([]);
   const [overrideForm, setOverrideForm] = useState({
@@ -4648,6 +4639,15 @@ function StaffQueue({ discordId }: { discordId: string }) {
   const [status, setStatus] = useState("pending");
   const [requestType, setRequestType] = useState("all");
   const [search, setSearch] = useState("");
+  const [resourceCharacters, setResourceCharacters] = useState<any[]>([]);
+  const [resourceCurrencies, setResourceCurrencies] = useState<any[]>([]);
+  const [resourceForm, setResourceForm] = useState({
+    character_id: "",
+    grant_type: "xp",
+    amount: "600",
+    currency_id: "",
+    reason: "Starting OC setup grant.",
+  });
   const [loading, setLoading] = useState(false);
   const [workingKey, setWorkingKey] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
