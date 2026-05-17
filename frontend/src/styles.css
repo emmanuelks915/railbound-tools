@@ -2282,3 +2282,381 @@ label textarea {
     align-items: flex-start;
   }
 }
+
+/* Mobile Polish v1 */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+button {
+  min-height: 42px;
+}
+
+.card,
+.panel,
+.registry-profile,
+.registry-list,
+.oc-management-card,
+.oc-money-card,
+.oc-register-hero,
+.manage-oc-hero {
+  min-width: 0;
+}
+
+.card-title-row {
+  min-width: 0;
+}
+
+.card-title-row > * {
+  min-width: 0;
+}
+
+table {
+  width: 100%;
+}
+
+.table-scroll,
+.table-wrapper,
+.overflow-x-auto {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.registry-profile-tabs,
+.trait-tier-filters,
+.auth-actions,
+.nav-tabs,
+.tab-row {
+  -webkit-overflow-scrolling: touch;
+}
+
+.registry-profile-tabs::-webkit-scrollbar,
+.trait-tier-filters::-webkit-scrollbar,
+.app-sidebar nav::-webkit-scrollbar,
+.sidebar nav::-webkit-scrollbar,
+.side-nav nav::-webkit-scrollbar {
+  height: 6px;
+}
+
+@media (max-width: 1100px) {
+  .registry-layout-v2,
+  .registry-polish-layout,
+  .oc-register-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .registry-list {
+    position: static;
+  }
+
+  .registry-card-scroll {
+    max-height: 420px;
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 920px) {
+  .app-shell,
+  .dashboard-shell,
+  .dashboard-layout,
+  .page-layout,
+  .main-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-sidebar,
+  .sidebar,
+  .side-nav,
+  aside {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border-radius: 0 0 22px 22px;
+  }
+
+  .app-sidebar nav,
+  .sidebar nav,
+  .side-nav nav,
+  .nav-list,
+  .app-nav {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 0.45rem !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    padding-bottom: 0.35rem !important;
+    scrollbar-width: thin;
+  }
+
+  .app-sidebar nav button,
+  .sidebar nav button,
+  .side-nav nav button,
+  .nav-list button,
+  .app-nav button,
+  .app-sidebar nav a,
+  .sidebar nav a,
+  .side-nav nav a {
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+    min-height: 42px;
+  }
+
+  main,
+  .app-main,
+  .main-content,
+  .content,
+  .page-content {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding-left: 0.85rem !important;
+    padding-right: 0.85rem !important;
+  }
+
+  .oc-register-hero,
+  .manage-oc-hero,
+  .registry-hero-card .card-title-row,
+  .card-title-row {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 0.8rem !important;
+  }
+
+  .auth-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+  }
+
+  .auth-actions button,
+  .auth-actions input,
+  .auth-actions select {
+    flex: 1 1 180px;
+  }
+
+  .summary {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)) !important;
+  }
+
+  .oc-money-grid,
+  .oc-balances-grid,
+  .registry-wallet-grid,
+  .citizen-file-grid.polished,
+  .registry-stat-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  body {
+    font-size: 15px;
+  }
+
+  .card {
+    border-radius: 20px;
+    padding: 0.9rem;
+  }
+
+  h1 {
+    font-size: clamp(1.75rem, 9vw, 2.35rem);
+  }
+
+  h2 {
+    font-size: clamp(1.35rem, 7vw, 1.8rem);
+  }
+
+  h3 {
+    font-size: clamp(1.05rem, 5.2vw, 1.35rem);
+  }
+
+  .registry-search-row {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .registry-profile-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.55rem;
+  }
+
+  .registry-profile-tabs button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .registry-polish-header,
+  .registry-profile-header,
+  .citizen-file-header {
+    display: grid !important;
+    grid-template-columns: auto 1fr;
+    gap: 0.75rem;
+  }
+
+  .registry-polish-actions {
+    align-items: flex-start;
+  }
+
+  .citizen-registry-card {
+    width: 100%;
+    text-align: left;
+  }
+
+  .citizen-card-topline,
+  .citizen-card-fields,
+  .selected-trait-row,
+  .registry-rp-row,
+  .oc-manage-jump-card,
+  .oc-register-success {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    align-items: start !important;
+    gap: 0.55rem !important;
+  }
+
+  .trait-polish-toolbar {
+    gap: 0.55rem;
+  }
+
+  .trait-tier-filters {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.45rem;
+  }
+
+  .trait-tier-filters button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .trait-picker-grid {
+    grid-template-columns: 1fr !important;
+    max-height: none !important;
+    overflow-y: visible !important;
+  }
+
+  .oc-register-form,
+  .public-profile-form,
+  .oc-management-form {
+    grid-template-columns: 1fr !important;
+  }
+
+  .oc-register-wide,
+  .public-profile-form-wide,
+  .oc-management-wide {
+    grid-column: auto !important;
+  }
+
+  .oc-money-grid,
+  .oc-balances-grid,
+  .registry-wallet-grid,
+  .citizen-file-grid.polished,
+  .registry-stat-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .registry-inventory-item {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 0.35rem;
+  }
+
+  .registry-inventory-item a {
+    width: fit-content;
+  }
+
+  .oc-danger-zone .auth-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  main,
+  .app-main,
+  .main-content,
+  .content,
+  .page-content {
+    padding-left: 0.65rem !important;
+    padding-right: 0.65rem !important;
+  }
+
+  .card {
+    padding: 0.8rem;
+    border-radius: 18px;
+  }
+
+  button,
+  .button,
+  input,
+  select,
+  textarea {
+    width: 100%;
+  }
+
+  .ghost,
+  .pill,
+  .citizen-status,
+  .registry-polish-actions a,
+  .trait-display-meta {
+    width: fit-content;
+  }
+
+  .registry-polish-header,
+  .registry-profile-header,
+  .citizen-file-header {
+    grid-template-columns: 1fr !important;
+  }
+
+  .registry-polish-header img,
+  .registry-polish-header .registry-profile-placeholder,
+  .registry-profile-header img,
+  .registry-profile-placeholder {
+    width: 96px !important;
+    height: 96px !important;
+  }
+
+  .registry-card-scroll {
+    max-height: 360px;
+  }
+
+  .oc-money-tile strong,
+  .oc-balance-tile strong {
+    font-size: 1.25rem;
+  }
+}
