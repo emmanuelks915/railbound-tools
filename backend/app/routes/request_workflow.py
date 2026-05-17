@@ -441,6 +441,7 @@ def approve_request(
     sb = get_supabase()
 
     table, id_column, row = _load_request(sb, request_type, request_id)
+    was_already_approved = str(row.get("status") or "").lower() == "approved"
 
     update_payload = {
         "status": "approved",
@@ -467,6 +468,7 @@ def approve_request(
                     int(actor_discord_id),
                     update_payload.get("staff_note") or update_payload.get("note"),
                     bool(payload.get("staff_override") or payload.get("override_requirements") or payload.get("bypass_requirements")),
+                    already_reviewed=was_already_approved,
                 )
 
     updated = updated_rows[0] if updated_rows else {**row, **update_payload}
@@ -483,6 +485,7 @@ def approve_request(
                 int(staff_id),
                 update_payload.get("staff_note") or update_payload.get("note"),
                 bool(payload.get("staff_override") or payload.get("override_requirements") or payload.get("bypass_requirements")),
+                already_reviewed=was_already_approved,
             )
 
 
@@ -649,3 +652,105 @@ def _safe_update_request(sb, table: str, id_column: str, request_id: str, update
             .eq(id_column, request_id)
             .execute()
         )
+
+# --- Skill Purchase Approval Apply v2 Idempotent ---
+
+def _apply_skill_purchase_approval(
+    sb,
+    request_row: dict[str, Any],
+    actor_discord_id: int,
+    staff_note: str | None = None,
+    staff_override: bool = False,
+    already_reviewed: bool = False,
+) -> None:
+    gid = get_guild_id()
+    character_id = str(request_row.get("character_id") or "")
+    skill_key = str(request_row.get("skill_key") or "")
+    request_id = str(request_row.get("request_id") or "")
+    cost = int(request_row.get("cost") or 0)
+
+    if not character_id or not skill_key:
+        raise HTTPException(status_code=400, detail="Skill request is missing character or skill.")
+
+    existing = sb_data(
+        sb.table("oc_skills")
+        .select("skill_key")
+        .eq("guild_id", gid)
+        .eq("character_id", character_id)
+        .eq("skill_key", skill_key)
+        .limit(1)
+        .execute()
+    ) or []
+    if existing:
+        return
+
+    should_charge_xp = (not staff_override) and (not already_reviewed)
+
+    wallet_rows = sb_data(
+        sb.table("oc_xp_wallets")
+        .select("*")
+        .eq("guild_id", gid)
+        .eq("character_id", character_id)
+        .limit(1)
+        .execute()
+    ) or []
+    wallet = wallet_rows[0] if wallet_rows else None
+
+    available_xp = int((wallet or {}).get("available_xp") or 0)
+    spent_xp = int((wallet or {}).get("total_spent_xp") or 0)
+
+    if should_charge_xp and available_xp < cost:
+        raise HTTPException(status_code=400, detail=f"OC does not have enough XP. Available: {available_xp}, cost: {cost}.")
+
+    xp_tx_id = None
+
+    if should_charge_xp:
+        new_available = available_xp - cost
+        new_spent = spent_xp + cost
+
+        if wallet:
+            sb.table("oc_xp_wallets").update({
+                "available_xp": new_available,
+                "total_spent_xp": new_spent,
+            }).eq("guild_id", gid).eq("character_id", character_id).execute()
+        else:
+            sb.table("oc_xp_wallets").insert({
+                "guild_id": gid,
+                "character_id": character_id,
+                "available_xp": new_available,
+                "total_earned_xp": available_xp,
+                "total_spent_xp": new_spent,
+            }).execute()
+
+        try:
+            tx_rows = sb_data(
+                sb.table("oc_xp_transactions")
+                .insert({
+                    "guild_id": gid,
+                    "character_id": character_id,
+                    "direction": "spend",
+                    "amount": cost,
+                    "source": "skill_purchase",
+                    "reference_type": None,
+                    "reference_key": request_id or "skill_purchase_request",
+                    "reason": staff_note or f"Approved skill purchase: {skill_key}",
+                    "actor_discord_id": actor_discord_id,
+                    "metadata": {"skill_key": skill_key, "staff_override": staff_override},
+                })
+                .execute()
+            ) or []
+            if tx_rows:
+                xp_tx_id = tx_rows[0].get("xp_tx_id")
+        except Exception:
+            xp_tx_id = None
+
+    sb.table("oc_skills").insert({
+        "guild_id": gid,
+        "character_id": character_id,
+        "skill_key": skill_key,
+        "acquired_via": "staff_override" if staff_override else "skill_purchase",
+        "xp_cost_paid": 0 if (staff_override or already_reviewed) else cost,
+        "xp_tx_id": xp_tx_id,
+        "actor_discord_id": actor_discord_id,
+        "notes": staff_note or ("Backfilled from already-approved skill request." if already_reviewed else "Skill purchase approved."),
+    }).execute()
