@@ -143,7 +143,7 @@ def _normalize_skill_request(row: dict[str, Any], characters: dict[str, dict[str
     return {
         "request_type": "skill",
         "request_id": str(row.get("request_id") or row.get("id") or row.get("skill_request_id") or ""),
-        "table": "skill_requests",
+        "table": "skill_purchase_requests",
         "status": _status(row),
         "title": f"{skill_name}",
         "summary": f"{skill_name}{f' • {cost} XP' if cost is not None else ''}",
@@ -171,7 +171,7 @@ def _table_for_request_type(request_type: str) -> str:
     if request_type == "stat":
         return "stat_requests"
     if request_type == "skill":
-        return "skill_requests"
+        return "skill_purchase_requests"
     raise HTTPException(status_code=400, detail="request_type must be stat or skill.")
 
 
@@ -231,7 +231,7 @@ def get_request_queue(
 
     if request_type in {"all", "skill"}:
         raw_skill_rows = _safe_rows(
-            sb.table("skill_requests")
+            sb.table("skill_purchase_requests")
             .select("*")
             .eq("guild_id", get_guild_id())
             .order("created_at", desc=True)

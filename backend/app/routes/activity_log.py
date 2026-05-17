@@ -146,7 +146,7 @@ def _legacy_events(sb, limit: int) -> list[dict[str, Any]]:
             source="stat_requests",
         ))
 
-    for row in _safe_rows(sb.table("skill_requests").select("*").eq("guild_id", get_guild_id()).order("created_at", desc=True).limit(limit)):
+    for row in _safe_rows(sb.table("skill_purchase_requests").select("*").eq("guild_id", get_guild_id()).order("created_at", desc=True).limit(limit)):
         skill = row.get("skill_name") or row.get("name") or row.get("skill_key") or "skill"
         events.append(_event(
             event_type="skill_request",
@@ -155,7 +155,7 @@ def _legacy_events(sb, limit: int) -> list[dict[str, Any]]:
             row=row,
             amount=row.get("cost") or row.get("xp_cost"),
             note=row.get("reason") or row.get("notes") or row.get("denial_reason"),
-            source="skill_requests",
+            source="skill_purchase_requests",
         ))
 
     xp_rows = _safe_rows(sb.table("oc_xp_transactions").select("*").eq("guild_id", get_guild_id()).order("created_at", desc=True).limit(limit))
