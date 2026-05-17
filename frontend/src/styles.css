@@ -4207,3 +4207,33 @@ table {
   font-size: 0.88rem;
   font-weight: 750;
 }
+
+/* Login Button Only v1 */
+
+.login-card,
+.auth-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 92px;
+}
+
+.login-card h3,
+.auth-card h3,
+.login-card p,
+.auth-card p,
+.login-card .muted-text,
+.auth-card .muted-text,
+.login-helper-text {
+  display: none !important;
+}
+
+.discord-login-button,
+.login-card button,
+.auth-card button {
+  width: auto;
+  min-height: 44px;
+  padding: 0.75rem 1.1rem;
+  border-radius: 14px;
+  font-weight: 950;
+}
