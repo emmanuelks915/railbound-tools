@@ -145,6 +145,8 @@ function App() {
     setTab("dashboard");
   }
 
+  const isLoggedInForDashboard = Boolean(discordId);
+
 return (
     <main className="app-shell">
       <section className="hero">
@@ -322,12 +324,7 @@ function StaffOnly({
 
 function RequireDiscord({ discordId, children }: { discordId: string; children: React.ReactNode }) {
   if (!discordId) {
-    return (
-      <section className="card muted-card">
-        <h2>Welcome to Railbound Tools required</h2>
-        <p>Please use Login with Discord to access Railbound Tools. Your account is used to load your characters, requests, staff access, and activity history.</p>
-      </section>
-    );
+    return null;
   }
   return <>{children}</>;
 }

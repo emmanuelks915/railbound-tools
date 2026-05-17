@@ -4330,3 +4330,12 @@ table {
 .discord-login-button {
   box-shadow: 0 10px 22px rgba(47, 111, 115, 0.18) !important;
 }
+
+/* Hide Logged Out Dashboard v1 */
+
+.logged-out-hidden,
+.requires-login-card,
+.auth-required-card,
+.permission-required-card {
+  display: none !important;
+}
