@@ -8,7 +8,6 @@ from app.permissions import is_staff
 from app.security import actor_from_header
 from app.services import get_guild_id, sb_data
 from app.supabase_client import get_supabase
-from app.utils.activity_webhooks import send_staff_activity_webhook
 
 router = APIRouter(prefix="/api/characters", tags=["oc-management"])
 
@@ -214,23 +213,8 @@ def update_character_management_info(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not update OC: {exc}")
 
-    updated_character = updated[0] if updated else {**character, **cleaned}
-
-    send_staff_activity_webhook(
-        title="✏️ OC Updated",
-        description="OC public profile edited.",
-        event_type="oc_updated",
-        status="updated",
-        actor_id=actor_discord_id,
-        character_id=character_id,
-        character_name=updated_character.get("name") or character.get("name"),
-        fields=[
-            {"name": "Updated Fields", "value": ", ".join(cleaned.keys()) or "—", "inline": False},
-        ],
-    )
-
     return {
-        "character": updated_character,
+        "character": updated[0] if updated else {**character, **cleaned},
         "message": "OC updated.",
     }
 
@@ -263,20 +247,8 @@ def archive_character(
                 query = query.eq("guild_id", get_guild_id())
 
             rows = _as_list(query.execute())
-            archived_character = rows[0] if rows else {**character, **payload}
-
-            send_staff_activity_webhook(
-                title="📦 OC Archived",
-                description="OC archived from dashboard.",
-                event_type="oc_archived",
-                status="archived",
-                actor_id=actor_discord_id,
-                character_id=character_id,
-                character_name=archived_character.get("name") or character.get("name"),
-            )
-
             return {
-                "character": archived_character,
+                "character": rows[0] if rows else {**character, **payload},
                 "message": "OC archived.",
             }
         except Exception as exc:
@@ -313,20 +285,8 @@ def restore_character(
                 query = query.eq("guild_id", get_guild_id())
 
             rows = _as_list(query.execute())
-            restored_character = rows[0] if rows else {**character, **payload}
-
-            send_staff_activity_webhook(
-                title="♻️ OC Restored",
-                description="OC restored from dashboard.",
-                event_type="oc_restored",
-                status="restored",
-                actor_id=actor_discord_id,
-                character_id=character_id,
-                character_name=restored_character.get("name") or character.get("name"),
-            )
-
             return {
-                "character": restored_character,
+                "character": rows[0] if rows else {**character, **payload},
                 "message": "OC restored.",
             }
         except Exception as exc:

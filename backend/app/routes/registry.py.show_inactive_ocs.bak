@@ -13,7 +13,6 @@ from app.security import actor_from_header
 from app.permissions import is_staff
 from app.services import get_guild_id, sb_data
 from app.supabase_client import get_supabase
-from app.utils.activity_webhooks import send_staff_activity_webhook
 
 router = APIRouter(prefix="/api/registry", tags=["registry"])
 
@@ -874,6 +873,9 @@ def list_registry_characters(
     for row in rows:
         approval_status = str(row.get("status") or row.get("approval_status") or "").lower()
         if approval_status and approval_status not in {"approved", "active", "published", "registered"}:
+            continue
+
+        if row.get("is_active") is False:
             continue
 
         haystack = " ".join(

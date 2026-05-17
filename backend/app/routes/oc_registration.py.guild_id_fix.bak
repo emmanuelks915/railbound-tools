@@ -9,7 +9,6 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from app.security import actor_from_header
 from app.services import get_guild_id, sb_data
 from app.supabase_client import get_supabase
-from app.utils.activity_webhooks import send_staff_activity_webhook
 
 router = APIRouter(prefix="/api/oc-registration", tags=["oc-registration"])
 
@@ -305,21 +304,12 @@ def create_character(payload: dict[str, Any] = Body(...), actor_discord_id: int 
     if error:
         raise HTTPException(status_code=400, detail=error)
 
-    try:
-        existing = _as_list(
-            sb.table("characters")
-            .select("character_id,name")
-            .eq("guild_id", get_guild_id())
-            .eq("user_id", int(actor_discord_id))
-            .execute()
-        )
-    except Exception:
-        existing = _as_list(
-            sb.table("characters")
-            .select("character_id,name")
-            .eq("user_id", int(actor_discord_id))
-            .execute()
-        )
+    existing = _as_list(
+        sb.table("characters")
+        .select("character_id,name")
+        .eq("user_id", int(actor_discord_id))
+        .execute()
+    )
     for row in existing:
         if str(row.get("name") or "").casefold() == name.casefold():
             raise HTTPException(status_code=400, detail=f"You already have an OC named {row.get('name')}.")
@@ -330,10 +320,8 @@ def create_character(payload: dict[str, Any] = Body(...), actor_discord_id: int 
         pass
 
     character_payload: dict[str, Any] = {
-        "guild_id": get_guild_id(),
         "user_id": int(actor_discord_id),
         "name": name,
-        "is_active": True,
     }
 
     if sheet_url:
@@ -361,21 +349,6 @@ def create_character(payload: dict[str, Any] = Body(...), actor_discord_id: int 
     selected_ids = [str(row.get("trait_id")) for row in selected if row.get("trait_id")]
     _try_add_traits(sb, character_id, selected_ids, int(actor_discord_id))
     _try_create_wallet(sb, character_id)
-
-    send_staff_activity_webhook(
-        title="📝 OC Registered",
-        description="OC registered through dashboard.",
-        event_type="oc_registered",
-        status="created",
-        actor_id=actor_discord_id,
-        character_id=character_id,
-        character_name=name,
-        fields=[
-            {"name": "Occupation", "value": occupation or "—"},
-            {"name": "Affiliation", "value": affiliation or "—"},
-            {"name": "Sheet", "value": sheet_url or "—", "inline": False},
-        ],
-    )
 
     return {
         "character": character,

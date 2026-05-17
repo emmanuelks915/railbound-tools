@@ -10,7 +10,6 @@ from app.permissions import require_character_access, is_staff
 from app.security import actor_from_header, require_staff
 from app.services import get_guild_id, get_wallet, sb_data
 from app.supabase_client import get_supabase
-from app.utils.activity_webhooks import send_staff_activity_webhook
 from app.discord_webhook import notify_skill_reviewed, notify_skill_submitted
 
 router = APIRouter(prefix="/api", tags=["skills"])

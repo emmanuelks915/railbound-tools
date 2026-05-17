@@ -3,17 +3,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 import os
-import uuid
 import urllib.request
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.security import actor_from_header
-from app.permissions import is_staff
 from app.services import get_guild_id, sb_data
 from app.supabase_client import get_supabase
-from app.utils.activity_webhooks import send_staff_activity_webhook
 
 router = APIRouter(prefix="/api/registry", tags=["registry"])
 
@@ -564,23 +561,17 @@ def _display_name_for_user(user: dict[str, Any] | None, fallback_id: str | None)
 
 
 def _public_stat_rows(sb, character_ids: list[str]) -> dict[str, dict[str, Any]]:
-    """Collect all public stats for each character.
-
-    Earlier versions used _first_nonempty_source(), which meant if character_stats
-    had Strength/Dexterity/Stamina, the registry stopped there and never checked
-    derived stat tables. This merges every known stat source so the public file can
-    show core stats plus derived stats.
-    """
-    sources = [
-        ("character_stats", "character_id"),
-        ("oc_stats", "character_id"),
-        ("stats", "character_id"),
-        ("derived_stats", "character_id"),
-        ("character_derived_stats", "character_id"),
-        ("oc_derived_stats", "character_id"),
-        ("character_stat_values", "character_id"),
-        ("stat_values", "character_id"),
-    ]
+    rows = _first_nonempty_source(
+        sb,
+        character_ids,
+        [
+            ("character_stats", "character_id"),
+            ("oc_stats", "character_id"),
+            ("stats", "character_id"),
+            ("derived_stats", "character_id"),
+            ("character_derived_stats", "character_id"),
+        ],
+    )
 
     stats: dict[str, dict[str, Any]] = {}
 
@@ -591,74 +582,42 @@ def _public_stat_rows(sb, character_ids: list[str]) -> dict[str, dict[str, Any]]
         "oc_id",
         "created_at",
         "updated_at",
-        "deleted_at",
-        "source",
-        "notes",
     }
 
-    key_columns = [
-        "stat_key",
-        "key",
-        "name",
-        "stat_name",
-        "derived_key",
-        "derived_stat",
-        "label",
-    ]
+    for row in rows:
+        cid = str(row.get("character_id") or row.get("oc_id") or "")
+        if not cid:
+            continue
 
-    value_columns = [
-        "stat_value",
-        "value",
-        "amount",
-        "score",
-        "total",
-        "computed_value",
-        "calculated_value",
-    ]
+        bucket = stats.setdefault(cid, {})
 
-    for table, id_column in sources:
-        rows = _safe_select_for_ids(sb, table, id_column, character_ids)
+        stat_key = (
+            row.get("stat_key")
+            or row.get("key")
+            or row.get("name")
+            or row.get("stat_name")
+        )
+        stat_value = (
+            row.get("stat_value")
+            if row.get("stat_value") is not None
+            else row.get("value")
+            if row.get("value") is not None
+            else row.get("amount")
+        )
 
-        for row in rows:
-            cid = str(row.get("character_id") or row.get("oc_id") or row.get("id") or "")
-            if not cid:
+        if stat_key and stat_value is not None:
+            bucket[str(stat_key)] = stat_value
+            continue
+
+        for key, value in row.items():
+            if key in hidden_keys:
                 continue
-
-            bucket = stats.setdefault(cid, {})
-
-            # Row-style tables:
-            # character_id | stat_key | stat_value
-            stat_key = None
-            for key_col in key_columns:
-                if row.get(key_col) not in (None, ""):
-                    stat_key = str(row.get(key_col))
-                    break
-
-            stat_value = None
-            for value_col in value_columns:
-                if row.get(value_col) is not None:
-                    stat_value = row.get(value_col)
-                    break
-
-            if stat_key and stat_value is not None:
-                bucket[stat_key] = stat_value
+            if value is None or isinstance(value, (dict, list)):
                 continue
-
-            # Wide-row tables:
-            # character_id | strength | dexterity | stamina | safe_output...
-            for key, value in row.items():
-                if key in hidden_keys:
-                    continue
-                if value is None or isinstance(value, (dict, list)):
-                    continue
-
-                # Do not leak internal UUID-ish foreign keys as stats.
-                if key.endswith("_id"):
-                    continue
-
-                bucket[key] = value
+            bucket[key] = value
 
     return stats
+
 
 def _skill_definitions(sb, skill_keys: list[str]) -> dict[str, dict[str, Any]]:
     if not skill_keys:
@@ -761,57 +720,6 @@ def _public_inventory_rows(sb, character_ids: list[str]) -> dict[str, list[dict[
     return _group_by_character(cleaned)
 
 
-def _to_float(value: Any) -> float:
-    try:
-        if value is None or value == "":
-            return 0.0
-        return float(value)
-    except Exception:
-        return 0.0
-
-
-def _nice_number(value: float) -> int | float:
-    rounded = round(float(value), 2)
-    if rounded.is_integer():
-        return int(rounded)
-    return rounded
-
-
-def _with_computed_derived_stats(stats: dict[str, Any]) -> dict[str, Any]:
-    merged = dict(stats or {})
-
-    strength = _to_float(merged.get("strength"))
-    dexterity = _to_float(merged.get("dexterity"))
-    stamina = _to_float(merged.get("stamina"))
-    affinity = _to_float(merged.get("magic_affinity") or merged.get("affinity"))
-    mana = _to_float(merged.get("mana"))
-
-    fortitude = stamina * 1.25
-
-    computed = {
-        "reaction_score": dexterity * 1.5,
-        "dodge": dexterity * 1.25,
-        "fortitude": fortitude,
-        "safe_output": fortitude * 1.15,
-        "magic_safe_output": (fortitude * 0.6) + (mana * 0.8),
-        "action_points": 1 + (fortitude / 150),
-        "carry_capacity": 4 + (strength / 150),
-        "heavy_attack_power": (strength * 1.1) + (dexterity * 0.35),
-        "heavy_attack_speed": min(dexterity * 1.25, fortitude),
-        "precision_attack_power": (dexterity * 0.65) + (strength * 0.4),
-        "precision_attack_speed": min(dexterity * 1.25, fortitude),
-        "magic_attack_power": (affinity * 0.9) + (mana * 0.6),
-        "magic_attack_speed": min(affinity * 1.4, fortitude + (mana * 0.25)),
-        "grapple_power": (strength * 1.2) + (stamina + 0.6),
-        "escape_power": strength + stamina,
-    }
-
-    for key, value in computed.items():
-        if key not in merged or merged.get(key) in (None, ""):
-            merged[key] = _nice_number(value)
-
-    return merged
-
 def _normalize_character(
     row: dict[str, Any],
     *,
@@ -825,7 +733,7 @@ def _normalize_character(
     cid = _character_id(row)
     owner_id = _owner_id(row)
     owner_user = (users_by_id or {}).get(str(owner_id)) if owner_id else None
-    stats = _with_computed_derived_stats((stats_by_id or {}).get(cid) or _extract_stats_from_character(row))
+    stats = (stats_by_id or {}).get(cid) or _extract_stats_from_character(row)
     recent_posts = (recent_posts_by_id or {}).get(cid, [])
     last_seen = _last_seen_from_posts(recent_posts)
 
@@ -874,6 +782,9 @@ def list_registry_characters(
     for row in rows:
         approval_status = str(row.get("status") or row.get("approval_status") or "").lower()
         if approval_status and approval_status not in {"approved", "active", "published", "registered"}:
+            continue
+
+        if row.get("is_active") is False:
             continue
 
         haystack = " ".join(
@@ -957,217 +868,4 @@ def get_registry_character(
             recent_posts_by_id=recent_posts_by_id,
             users_by_id=users_by_id,
         )
-    }
-
-
-PUBLIC_PROFILE_FIELDS = {
-    "occupation": 80,
-    "affiliation": 120,
-    "sheet_url": 500,
-    "portrait_url": 500,
-    "blurb": 1200,
-}
-
-
-def _clean_public_profile_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    cleaned: dict[str, Any] = {}
-
-    for key, max_len in PUBLIC_PROFILE_FIELDS.items():
-        if key not in payload:
-            continue
-
-        value = payload.get(key)
-
-        if value is None:
-            cleaned[key] = None
-            continue
-
-        value = str(value).strip()
-
-        if not value:
-            cleaned[key] = None
-            continue
-
-        cleaned[key] = value[:max_len]
-
-    return cleaned
-
-
-@router.patch("/characters/{character_id}/profile")
-def update_registry_character_profile(
-    character_id: str,
-    payload: dict[str, Any] = Body(...),
-    actor_discord_id: int | None = Depends(actor_from_header),
-):
-    if actor_discord_id is None:
-        raise HTTPException(status_code=401, detail="Login with Discord required.")
-
-    sb = get_supabase()
-
-    row = _safe_select_one(sb, "characters", "character_id", character_id)
-    target_column = "character_id"
-
-    if not row:
-        row = _safe_select_one(sb, "characters", "id", character_id)
-        target_column = "id"
-
-    if not row:
-        raise HTTPException(status_code=404, detail="Character not found.")
-
-    owner_id = _owner_id(row)
-    actor_is_owner = owner_id is not None and str(owner_id) == str(actor_discord_id)
-    actor_is_staff = is_staff(int(actor_discord_id))
-
-    if not actor_is_owner and not actor_is_staff:
-        raise HTTPException(status_code=403, detail="You can only edit your own public OC profile.")
-
-    cleaned = _clean_public_profile_payload(payload)
-
-    if not cleaned:
-        raise HTTPException(status_code=400, detail="No public profile fields were provided.")
-
-    query = sb.table("characters").update(cleaned).eq(target_column, character_id)
-    if row.get("guild_id") is not None:
-        query = query.eq("guild_id", get_guild_id())
-
-    updated_rows = _as_list(query.execute())
-
-    updated = updated_rows[0] if updated_rows else _safe_select_one(sb, "characters", target_column, character_id)
-    if not updated:
-        raise HTTPException(status_code=500, detail="Profile updated, but the updated character could not be reloaded.")
-
-    cid = _character_id(updated)
-    character_ids = [cid] if cid else [character_id]
-    owner_id = _owner_id(updated)
-    users_by_id = _user_lookup(sb, {str(owner_id)} if owner_id else set())
-
-    stats_by_id = _public_stat_rows(sb, character_ids)
-    skills_by_id = _public_skill_rows(sb, character_ids)
-    traits_by_id = _public_trait_rows(sb, character_ids)
-    inventory_by_id = _public_inventory_rows(sb, character_ids)
-    recent_posts_by_id = _public_recent_posts(sb, character_ids)
-
-    return {
-        "character": _normalize_character(
-            updated,
-            stats_by_id=stats_by_id,
-            skills_by_id=skills_by_id,
-            traits_by_id=traits_by_id,
-            inventory_by_id=inventory_by_id,
-            recent_posts_by_id=recent_posts_by_id,
-            users_by_id=users_by_id,
-        )
-    }
-
-
-def _public_url_for_storage_path(sb, bucket: str, path: str) -> str:
-    public_url = sb.storage.from_(bucket).get_public_url(path)
-
-    if isinstance(public_url, str):
-        return public_url
-
-    if isinstance(public_url, dict):
-        return str(public_url.get("publicUrl") or public_url.get("public_url") or public_url.get("signedURL") or "")
-
-    return str(public_url)
-
-
-@router.post("/characters/{character_id}/portrait")
-async def upload_registry_character_portrait(
-    character_id: str,
-    file: UploadFile = File(...),
-    actor_discord_id: int | None = Depends(actor_from_header),
-):
-    if actor_discord_id is None:
-        raise HTTPException(status_code=401, detail="Login with Discord required.")
-
-    sb = get_supabase()
-
-    row = _safe_select_one(sb, "characters", "character_id", character_id)
-    target_column = "character_id"
-
-    if not row:
-        row = _safe_select_one(sb, "characters", "id", character_id)
-        target_column = "id"
-
-    if not row:
-        raise HTTPException(status_code=404, detail="Character not found.")
-
-    owner_id = _owner_id(row)
-    actor_is_owner = owner_id is not None and str(owner_id) == str(actor_discord_id)
-    actor_is_staff = is_staff(int(actor_discord_id))
-
-    if not actor_is_owner and not actor_is_staff:
-        raise HTTPException(status_code=403, detail="You can only edit your own public OC profile.")
-
-    content_type = (file.content_type or "").lower()
-    allowed_types = {
-        "image/png": ".png",
-        "image/jpeg": ".jpg",
-        "image/jpg": ".jpg",
-        "image/webp": ".webp",
-        "image/gif": ".gif",
-    }
-
-    if content_type not in allowed_types:
-        raise HTTPException(status_code=400, detail="Please upload a PNG, JPG, WEBP, or GIF image.")
-
-    raw = await file.read()
-
-    max_bytes = 5 * 1024 * 1024
-    if len(raw) > max_bytes:
-        raise HTTPException(status_code=400, detail="Portrait image must be 5 MB or smaller.")
-
-    bucket = os.getenv("CHARACTER_PORTRAIT_BUCKET") or os.getenv("SUPABASE_STORAGE_BUCKET") or "shop-images"
-    ext = allowed_types[content_type]
-    storage_path = f"character-portraits/{get_guild_id()}/{character_id}/{uuid.uuid4().hex}{ext}"
-
-    try:
-        sb.storage.from_(bucket).upload(
-            storage_path,
-            raw,
-            {
-                "content-type": content_type,
-                "upsert": "true",
-            },
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Could not upload portrait image: {exc}")
-
-    portrait_url = _public_url_for_storage_path(sb, bucket, storage_path)
-    if not portrait_url:
-        raise HTTPException(status_code=500, detail="Portrait uploaded, but no public URL was returned.")
-
-    query = sb.table("characters").update({"portrait_url": portrait_url}).eq(target_column, character_id)
-    if row.get("guild_id") is not None:
-        query = query.eq("guild_id", get_guild_id())
-
-    updated_rows = _as_list(query.execute())
-    updated = updated_rows[0] if updated_rows else _safe_select_one(sb, "characters", target_column, character_id)
-
-    if not updated:
-        raise HTTPException(status_code=500, detail="Portrait uploaded, but the character could not be reloaded.")
-
-    cid = _character_id(updated)
-    character_ids = [cid] if cid else [character_id]
-    owner_id = _owner_id(updated)
-    users_by_id = _user_lookup(sb, {str(owner_id)} if owner_id else set())
-
-    stats_by_id = _public_stat_rows(sb, character_ids)
-    skills_by_id = _public_skill_rows(sb, character_ids)
-    traits_by_id = _public_trait_rows(sb, character_ids)
-    inventory_by_id = _public_inventory_rows(sb, character_ids)
-    recent_posts_by_id = _public_recent_posts(sb, character_ids)
-
-    return {
-        "portrait_url": portrait_url,
-        "character": _normalize_character(
-            updated,
-            stats_by_id=stats_by_id,
-            skills_by_id=skills_by_id,
-            traits_by_id=traits_by_id,
-            inventory_by_id=inventory_by_id,
-            recent_posts_by_id=recent_posts_by_id,
-            users_by_id=users_by_id,
-        ),
     }

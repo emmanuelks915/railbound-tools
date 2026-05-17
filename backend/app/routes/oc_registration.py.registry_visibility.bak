@@ -9,7 +9,6 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from app.security import actor_from_header
 from app.services import get_guild_id, sb_data
 from app.supabase_client import get_supabase
-from app.utils.activity_webhooks import send_staff_activity_webhook
 
 router = APIRouter(prefix="/api/oc-registration", tags=["oc-registration"])
 
@@ -333,7 +332,6 @@ def create_character(payload: dict[str, Any] = Body(...), actor_discord_id: int 
         "guild_id": get_guild_id(),
         "user_id": int(actor_discord_id),
         "name": name,
-        "is_active": True,
     }
 
     if sheet_url:
@@ -361,21 +359,6 @@ def create_character(payload: dict[str, Any] = Body(...), actor_discord_id: int 
     selected_ids = [str(row.get("trait_id")) for row in selected if row.get("trait_id")]
     _try_add_traits(sb, character_id, selected_ids, int(actor_discord_id))
     _try_create_wallet(sb, character_id)
-
-    send_staff_activity_webhook(
-        title="📝 OC Registered",
-        description="OC registered through dashboard.",
-        event_type="oc_registered",
-        status="created",
-        actor_id=actor_discord_id,
-        character_id=character_id,
-        character_name=name,
-        fields=[
-            {"name": "Occupation", "value": occupation or "—"},
-            {"name": "Affiliation", "value": affiliation or "—"},
-            {"name": "Sheet", "value": sheet_url or "—", "inline": False},
-        ],
-    )
 
     return {
         "character": character,
