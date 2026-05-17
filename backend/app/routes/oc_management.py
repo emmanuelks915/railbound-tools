@@ -9,6 +9,7 @@ from app.security import actor_from_header
 from app.services import get_guild_id, sb_data
 from app.supabase_client import get_supabase
 from app.utils.activity_webhooks import send_staff_activity_webhook
+from app.utils.activity_logger import log_activity
 
 router = APIRouter(prefix="/api/characters", tags=["oc-management"])
 
@@ -229,6 +230,27 @@ def update_character_management_info(
         ],
     )
 
+    log_activity(
+        event_type="oc_updated",
+        label=f"OC updated: {updated_character.get('name') or character.get('name') or 'OC'}",
+        status="updated",
+        actor_discord_id=actor_discord_id,
+        character_id=character_id,
+        character_name=updated_character.get("name") or character.get("name"),
+        note="activity_log_hardening_v2_oc_updated",
+        source="oc_management",
+        details={
+            "updated_fields": list(cleaned.keys()),
+            "old_name": character.get("name"),
+            "new_name": updated_character.get("name"),
+        },
+        webhook_title="✏️ OC Updated",
+        webhook_description="OC public profile edited.",
+        webhook_fields=[
+            {"name": "Updated Fields", "value": ", ".join(cleaned.keys()) or "—", "inline": False},
+        ],
+    )
+
     return {
         "character": updated_character,
         "message": "OC updated.",
@@ -273,6 +295,20 @@ def archive_character(
                 actor_id=actor_discord_id,
                 character_id=character_id,
                 character_name=archived_character.get("name") or character.get("name"),
+            )
+
+            log_activity(
+                event_type="oc_archived",
+                label=f"OC archived: {archived_character.get('name') or character.get('name') or 'OC'}",
+                status="archived",
+                actor_discord_id=actor_discord_id,
+                character_id=character_id,
+                character_name=archived_character.get("name") or character.get("name"),
+                note="activity_log_hardening_v2_oc_archived",
+                source="oc_management",
+                details={"payload": payload},
+                webhook_title="📦 OC Archived",
+                webhook_description="OC archived from dashboard.",
             )
 
             return {
@@ -323,6 +359,20 @@ def restore_character(
                 actor_id=actor_discord_id,
                 character_id=character_id,
                 character_name=restored_character.get("name") or character.get("name"),
+            )
+
+            log_activity(
+                event_type="oc_restored",
+                label=f"OC restored: {restored_character.get('name') or character.get('name') or 'OC'}",
+                status="restored",
+                actor_discord_id=actor_discord_id,
+                character_id=character_id,
+                character_name=restored_character.get("name") or character.get("name"),
+                note="activity_log_hardening_v2_oc_restored",
+                source="oc_management",
+                details={"payload": payload},
+                webhook_title="♻️ OC Restored",
+                webhook_description="OC restored from dashboard.",
             )
 
             return {

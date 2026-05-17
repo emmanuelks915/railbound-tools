@@ -14,6 +14,7 @@ from app.permissions import is_staff
 from app.services import get_guild_id, sb_data
 from app.supabase_client import get_supabase
 from app.utils.activity_webhooks import send_staff_activity_webhook
+from app.utils.activity_logger import log_activity
 
 router = APIRouter(prefix="/api/registry", tags=["registry"])
 

@@ -10,6 +10,7 @@ from app.security import actor_from_header
 from app.services import get_guild_id, sb_data
 from app.supabase_client import get_supabase
 from app.utils.activity_webhooks import send_staff_activity_webhook
+from app.utils.activity_logger import log_activity
 
 router = APIRouter(prefix="/api/oc-registration", tags=["oc-registration"])
 
@@ -371,6 +372,30 @@ def create_character(payload: dict[str, Any] = Body(...), actor_discord_id: int 
         character_id=character_id,
         character_name=name,
         fields=[
+            {"name": "Occupation", "value": occupation or "—"},
+            {"name": "Affiliation", "value": affiliation or "—"},
+            {"name": "Sheet", "value": sheet_url or "—", "inline": False},
+        ],
+    )
+
+    log_activity(
+        event_type="oc_registered",
+        label=f"OC registered: {name}",
+        status="created",
+        actor_discord_id=actor_discord_id,
+        character_id=character_id,
+        character_name=name,
+        note="activity_log_hardening_v2_oc_registered",
+        source="oc_registration",
+        details={
+            "occupation": occupation,
+            "affiliation": affiliation,
+            "sheet_url": sheet_url,
+            "trait_ids": selected_ids,
+        },
+        webhook_title="📝 OC Registered",
+        webhook_description="OC registered through dashboard.",
+        webhook_fields=[
             {"name": "Occupation", "value": occupation or "—"},
             {"name": "Affiliation", "value": affiliation or "—"},
             {"name": "Sheet", "value": sheet_url or "—", "inline": False},
