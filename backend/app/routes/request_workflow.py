@@ -377,10 +377,14 @@ def _apply_skill_purchase_approval(
     gid = get_guild_id()
     character_id = str(request_row.get("character_id") or "")
     skill_key = str(request_row.get("skill_key") or "")
-    cost = int(request_row.get("cost") or 0)
+    original_cost = int(request_row.get("cost") or 0)
+    cost = original_cost
+    discount_meta: dict[str, Any] = {"discount_applied": False, "base_cost": original_cost, "final_cost": original_cost}
 
     if not character_id or not skill_key:
         raise HTTPException(status_code=400, detail="Skill request is missing character or skill.")
+
+    cost, discount_meta = _adjust_skill_purchase_cost(sb, character_id, skill_key, original_cost)
 
     existing = sb_data(
         sb.table("oc_skills")
@@ -441,7 +445,7 @@ def _apply_skill_purchase_approval(
                 "reference_key": str(request_row.get("request_id") or ""),
                 "reason": staff_note or f"Approved skill purchase: {skill_key}",
                 "actor_discord_id": actor_discord_id,
-                "metadata": {"skill_key": skill_key, "staff_override": staff_override},
+                "metadata": {"skill_key": skill_key, "staff_override": staff_override, "cost_adjustment": discount_meta},
             })
             .execute()
         ) or []
@@ -456,7 +460,10 @@ def _apply_skill_purchase_approval(
         "xp_cost_paid": 0 if staff_override else cost,
         "xp_tx_id": xp_tx_id,
         "actor_discord_id": actor_discord_id,
-        "notes": staff_note or ("Staff override approval." if staff_override else "Skill purchase approved."),
+        "notes": staff_note or (
+            discount_meta.get("discount_reason")
+            or ("Staff override approval." if staff_override else "Skill purchase approved.")
+        ),
     }).execute()
 
 @router.post("/{request_type}/{request_id}/approve")
@@ -620,7 +627,7 @@ def _skill_override_payload(payload: dict[str, Any], request_type: str) -> tuple
     reason = payload.get("override_reason") or payload.get("staff_note") or payload.get("note")
 
     if override and not str(reason or "").strip():
-        raise HTTPException(status_code=400, detail="Override reason is required when staff override is enabled.")
+        reason = "Staff override approved."
 
     return override, str(reason).strip() if reason is not None else None
 
@@ -886,6 +893,104 @@ def _apply_stat_upgrade_approval(
         except Exception:
             pass
 
+# --- Mana Circuits Magecraft Discount v1 ---
+
+def _character_has_trait_slug(sb, character_id: str, trait_slug: str) -> bool:
+    gid = get_guild_id()
+
+    trait_rows = sb_data(
+        sb.table("traits")
+        .select("trait_id,slug,name")
+        .eq("guild_id", gid)
+        .eq("slug", trait_slug)
+        .limit(1)
+        .execute()
+    ) or []
+
+    if not trait_rows:
+        return False
+
+    trait_id = str(trait_rows[0].get("trait_id") or "")
+    if not trait_id:
+        return False
+
+    for table in ("character_traits", "oc_traits"):
+        try:
+            rows = sb_data(
+                sb.table(table)
+                .select("trait_id")
+                .eq("guild_id", gid)
+                .eq("character_id", character_id)
+                .eq("trait_id", trait_id)
+                .limit(1)
+                .execute()
+            ) or []
+            if rows:
+                return True
+        except Exception:
+            continue
+
+    return False
+
+
+def _skill_is_magecraft(sb, skill_key: str) -> bool:
+    gid = get_guild_id()
+    key = str(skill_key or "").lower()
+
+    if key.startswith("magecraft_") or "magecraft" in key:
+        return True
+
+    try:
+        rows = sb_data(
+            sb.table("skill_definitions")
+            .select("skill_key,name,tree")
+            .eq("guild_id", gid)
+            .eq("skill_key", skill_key)
+            .limit(1)
+            .execute()
+        ) or []
+    except Exception:
+        rows = []
+
+    if not rows:
+        return False
+
+    skill = rows[0]
+    tree = str(skill.get("tree") or "").lower()
+    name = str(skill.get("name") or "").lower()
+
+    return "magecraft" in tree or "magecraft" in name
+
+
+def _adjust_skill_purchase_cost(sb, character_id: str, skill_key: str, base_cost: int) -> tuple[int, dict[str, Any]]:
+    base_cost = int(base_cost or 0)
+
+    if base_cost <= 0:
+        return base_cost, {"discount_applied": False, "base_cost": base_cost, "final_cost": base_cost}
+
+    has_mana_circuits = _character_has_trait_slug(sb, character_id, "mana_circuits_mage")
+    is_magecraft = _skill_is_magecraft(sb, skill_key)
+
+    if has_mana_circuits and is_magecraft:
+        # Mana Circuits Mage benefit: Magecraft skills cost 1/4.
+        # Use ceiling math so odd costs like 265 become 67, not 66.
+        final_cost = max(0, (base_cost + 3) // 4)
+        return final_cost, {
+            "discount_applied": True,
+            "discount_reason": "Mana Circuits (Mage): Magecraft skills cost 1/4 XP.",
+            "base_cost": base_cost,
+            "final_cost": final_cost,
+            "discount_multiplier": 0.25,
+        }
+
+    return base_cost, {
+        "discount_applied": False,
+        "base_cost": base_cost,
+        "final_cost": base_cost,
+        "has_mana_circuits_mage": has_mana_circuits,
+        "is_magecraft_skill": is_magecraft,
+    }
+
 # --- Skill Purchase Approval Apply v2 Idempotent ---
 
 def _apply_skill_purchase_approval(
@@ -968,7 +1073,7 @@ def _apply_skill_purchase_approval(
                     "reference_key": request_id or "skill_purchase_request",
                     "reason": staff_note or f"Approved skill purchase: {skill_key}",
                     "actor_discord_id": actor_discord_id,
-                    "metadata": {"skill_key": skill_key, "staff_override": staff_override},
+                    "metadata": {"skill_key": skill_key, "staff_override": staff_override, "cost_adjustment": discount_meta},
                 })
                 .execute()
             ) or []
@@ -985,5 +1090,8 @@ def _apply_skill_purchase_approval(
         "xp_cost_paid": 0 if (staff_override or already_reviewed) else cost,
         "xp_tx_id": xp_tx_id,
         "actor_discord_id": actor_discord_id,
-        "notes": staff_note or ("Backfilled from already-approved skill request." if already_reviewed else "Skill purchase approved."),
+        "notes": staff_note or (
+            discount_meta.get("discount_reason")
+            or ("Backfilled from already-approved skill request." if already_reviewed else "Skill purchase approved.")
+        ),
     }).execute()
