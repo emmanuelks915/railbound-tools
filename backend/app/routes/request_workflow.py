@@ -758,6 +758,30 @@ def _apply_stat_upgrade_approval(
     if not items:
         raise HTTPException(status_code=400, detail="Stat request has no upgrade items to apply.")
 
+    # Validate every stat_key before touching XP or oc_stats.
+    # This prevents partial approvals where XP/stat rows update and then a later
+    # item crashes on an oc_stats -> stat_definitions foreign key.
+    requested_stat_keys = sorted({
+        str(item.get("stat_key") or "").strip()
+        for item in items
+        if str(item.get("stat_key") or "").strip()
+    })
+
+    if requested_stat_keys:
+        definition_rows = sb_data(
+            sb.table("stat_definitions")
+            .select("stat_key")
+            .in_("stat_key", requested_stat_keys)
+            .execute()
+        ) or []
+        defined_keys = {str(row.get("stat_key")) for row in definition_rows if row.get("stat_key")}
+        missing_keys = [key for key in requested_stat_keys if key not in defined_keys]
+        if missing_keys:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot approve stat request because these stat keys are missing from stat_definitions: {', '.join(missing_keys)}",
+            )
+
     should_charge_xp = not already_reviewed
 
     wallet_rows = sb_data(
