@@ -26,8 +26,13 @@ def submit_stat_request(
     payload: SubmitStatRequest,
     actor_discord_id: int | None = Depends(actor_from_header),
 ):
-    if actor_discord_id is not None and actor_discord_id != payload.requested_by_discord_id:
-        raise HTTPException(status_code=403, detail="Header Discord ID does not match submitter.")
+    # Source of truth for submitter must be the authenticated actor/header.
+    # The frontend can carry stale localStorage/dev Discord IDs, so rejecting mismatches here
+    # caused valid stat/XP requests to 403 before reaching Supabase.
+    if actor_discord_id is None:
+        raise HTTPException(status_code=401, detail="Login with Discord required.")
+
+    submitter_id = int(actor_discord_id)
 
     sb = get_supabase()
 
@@ -37,7 +42,7 @@ def submit_stat_request(
             {
                 "p_guild_id": get_guild_id(),
                 "p_character_id": str(payload.character_id),
-                "p_requested_by_discord_id": int(payload.requested_by_discord_id),
+                "p_requested_by_discord_id": submitter_id,
                 "p_target_stats": dict(payload.target_stats),
                 "p_submitter_note": payload.submitter_note,
             },
