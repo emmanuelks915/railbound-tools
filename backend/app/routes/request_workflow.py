@@ -1005,10 +1005,18 @@ def _apply_skill_purchase_approval(
     character_id = str(request_row.get("character_id") or "")
     skill_key = str(request_row.get("skill_key") or "")
     request_id = str(request_row.get("request_id") or "")
-    cost = int(request_row.get("cost") or 0)
+    original_cost = int(request_row.get("cost") or 0)
+    cost = original_cost
+    discount_meta: dict[str, Any] = {
+        "discount_applied": False,
+        "base_cost": original_cost,
+        "final_cost": original_cost,
+    }
 
     if not character_id or not skill_key:
         raise HTTPException(status_code=400, detail="Skill request is missing character or skill.")
+
+    cost, discount_meta = _adjust_skill_purchase_cost(sb, character_id, skill_key, original_cost)
 
     existing = sb_data(
         sb.table("oc_skills")
@@ -1071,7 +1079,7 @@ def _apply_skill_purchase_approval(
                     "source": "skill_purchase",
                     "reference_type": None,
                     "reference_key": request_id or "skill_purchase_request",
-                    "reason": staff_note or f"Approved skill purchase: {skill_key}",
+                    "reason": staff_note or discount_meta.get("discount_reason") or f"Approved skill purchase: {skill_key}",
                     "actor_discord_id": actor_discord_id,
                     "metadata": {"skill_key": skill_key, "staff_override": staff_override, "cost_adjustment": discount_meta},
                 })
