@@ -503,6 +503,22 @@ def approve_request(
                 )
 
     updated = updated_rows[0] if updated_rows else {**row, **update_payload}
+
+    # --- Stat Upgrade Approval Apply v1 ---
+    if table == "stat_upgrade_requests":
+        request_row = updated_rows[0] if updated_rows else None
+        if not request_row:
+            original_rows = sb_data(sb.table(table).select("*").eq(id_column, request_id).limit(1).execute()) or []
+            request_row = original_rows[0] if original_rows else None
+        if request_row:
+            _apply_stat_upgrade_approval(
+                sb,
+                request_row,
+                int(staff_id),
+                update_payload.get("staff_note") or update_payload.get("note"),
+                already_reviewed=was_already_approved,
+            )
+
     # --- Skill Approval Always Apply v1 ---
     if table == "skill_purchase_requests":
         request_row = updated_rows[0] if updated_rows else None
@@ -714,6 +730,137 @@ def _safe_update_request(sb, table: str, id_column: str, request_id: str, update
         raise last_error
     return []
 
+
+# --- Stat Upgrade Approval Apply v1 ---
+
+def _apply_stat_upgrade_approval(
+    sb,
+    request_row: dict[str, Any],
+    actor_discord_id: int,
+    staff_note: str | None = None,
+    already_reviewed: bool = False,
+) -> None:
+    gid = get_guild_id()
+    request_id = str(request_row.get("request_id") or "")
+    character_id = str(request_row.get("character_id") or "")
+    total_cost = int(request_row.get("total_cost") or 0)
+
+    if not request_id or not character_id:
+        raise HTTPException(status_code=400, detail="Stat request is missing request or character id.")
+
+    items = _safe_rows(
+        sb.table("stat_upgrade_request_items")
+        .select("*")
+        .eq("request_id", request_id)
+        .limit(1000)
+    )
+
+    if not items:
+        raise HTTPException(status_code=400, detail="Stat request has no upgrade items to apply.")
+
+    should_charge_xp = not already_reviewed
+
+    wallet_rows = sb_data(
+        sb.table("oc_xp_wallets")
+        .select("*")
+        .eq("guild_id", gid)
+        .eq("character_id", character_id)
+        .limit(1)
+        .execute()
+    ) or []
+    wallet = wallet_rows[0] if wallet_rows else None
+
+    available_xp = int((wallet or {}).get("available_xp") or 0)
+    spent_xp = int((wallet or {}).get("total_spent_xp") or 0)
+    earned_xp = int((wallet or {}).get("total_earned_xp") or available_xp)
+
+    if should_charge_xp and available_xp < total_cost:
+        raise HTTPException(status_code=400, detail=f"OC does not have enough XP. Available: {available_xp}, cost: {total_cost}.")
+
+    if should_charge_xp:
+        new_available = available_xp - total_cost
+        new_spent = spent_xp + total_cost
+
+        if wallet:
+            sb.table("oc_xp_wallets").update({
+                "available_xp": new_available,
+                "total_spent_xp": new_spent,
+            }).eq("guild_id", gid).eq("character_id", character_id).execute()
+        else:
+            sb.table("oc_xp_wallets").insert({
+                "guild_id": gid,
+                "character_id": character_id,
+                "available_xp": new_available,
+                "total_earned_xp": earned_xp,
+                "total_spent_xp": new_spent,
+            }).execute()
+
+        try:
+            sb.table("oc_xp_transactions").insert({
+                "guild_id": gid,
+                "character_id": character_id,
+                "direction": "spend",
+                "amount": total_cost,
+                "source": "stat_upgrade",
+                "reference_type": None,
+                "reference_key": request_id,
+                "reason": staff_note or "Approved stat upgrade request.",
+                "actor_discord_id": actor_discord_id,
+                "metadata": {
+                    "request_id": request_id,
+                    "items": items,
+                },
+            }).execute()
+        except Exception:
+            pass
+
+    for item in items:
+        stat_key = str(item.get("stat_key") or "").strip()
+        target_value = int(item.get("target_value") or 0)
+        current_value = int(item.get("current_value") or 0)
+        cost = int(item.get("cost") or 0)
+
+        if not stat_key:
+            continue
+
+        existing_rows = sb_data(
+            sb.table("oc_stats")
+            .select("*")
+            .eq("guild_id", gid)
+            .eq("character_id", character_id)
+            .eq("stat_key", stat_key)
+            .limit(1)
+            .execute()
+        ) or []
+
+        if existing_rows:
+            sb.table("oc_stats").update({
+                "stat_value": target_value,
+            }).eq("guild_id", gid).eq("character_id", character_id).eq("stat_key", stat_key).execute()
+        else:
+            sb.table("oc_stats").insert({
+                "guild_id": gid,
+                "character_id": character_id,
+                "stat_key": stat_key,
+                "stat_value": target_value,
+            }).execute()
+
+        try:
+            sb.table("stat_ledger").insert({
+                "guild_id": gid,
+                "character_id": character_id,
+                "stat_key": stat_key,
+                "old_value": current_value,
+                "new_value": target_value,
+                "delta": target_value - current_value,
+                "xp_cost": cost,
+                "source": "stat_upgrade_request",
+                "reference_key": request_id,
+                "actor_discord_id": actor_discord_id,
+                "note": staff_note or "Approved stat upgrade request.",
+            }).execute()
+        except Exception:
+            pass
 
 # --- Skill Purchase Approval Apply v2 Idempotent ---
 
