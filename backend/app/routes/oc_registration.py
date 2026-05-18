@@ -327,6 +327,54 @@ def _try_create_starting_xp(sb, character_id: str, actor_discord_id: int | None 
         return
 
 
+# --- Baseline Starting Stats v1 ---
+
+BASELINE_CORE_STATS = {
+    "strength": 10,
+    "dexterity": 10,
+    "stamina": 10,
+    "magic_affinity": 10,
+    "mana": 10,
+}
+
+
+def _try_create_baseline_stats(sb, character_id: str) -> None:
+    # Every OC starts with 10 in each core stat.
+    # Insert missing rows and raise old below-baseline rows without lowering upgrades.
+    gid = get_guild_id()
+
+    try:
+        existing_rows = _as_list(
+            sb.table("oc_stats")
+            .select("stat_key,stat_value")
+            .eq("guild_id", gid)
+            .eq("character_id", character_id)
+            .in_("stat_key", list(BASELINE_CORE_STATS.keys()))
+            .execute()
+        )
+        existing = {
+            str(row.get("stat_key")): int(row.get("stat_value") or 0)
+            for row in existing_rows
+            if row.get("stat_key")
+        }
+
+        for stat_key, baseline_value in BASELINE_CORE_STATS.items():
+            if stat_key not in existing:
+                sb.table("oc_stats").insert({
+                    "guild_id": gid,
+                    "character_id": character_id,
+                    "stat_key": stat_key,
+                    "stat_value": baseline_value,
+                }).execute()
+            elif existing[stat_key] < baseline_value:
+                sb.table("oc_stats").update({
+                    "stat_value": baseline_value,
+                }).eq("guild_id", gid).eq("character_id", character_id).eq("stat_key", stat_key).execute()
+    except Exception:
+        # OC registration should not fully fail because optional stat initialization failed.
+        return
+
+
 @router.post("/validate")
 def validate_registration(payload: dict[str, Any] = Body(...), actor_discord_id: int | None = Depends(actor_from_header)):
     if actor_discord_id is None:
@@ -430,6 +478,8 @@ def create_character(payload: dict[str, Any] = Body(...), actor_discord_id: int 
     selected_ids = [str(row.get("trait_id")) for row in selected if row.get("trait_id")]
     _try_add_traits(sb, character_id, selected_ids, int(actor_discord_id))
     _try_create_wallet(sb, character_id)
+    _try_create_baseline_stats(sb, character_id)
+    _try_create_starting_xp(sb, character_id, int(actor_discord_id))
 
     send_staff_activity_webhook(
         title="📝 OC Registered",
