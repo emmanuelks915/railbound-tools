@@ -61,7 +61,7 @@ def _created_at(row: dict[str, Any]) -> str | None:
 
 
 def _actor_id(row: dict[str, Any]) -> str | None:
-    for key in ("user_id", "discord_id", "submitted_by", "requested_by", "actor_discord_id"):
+    for key in ("user_id", "discord_id", "submitted_by", "requested_by", "requested_by_discord_id", "actor_discord_id"):
         if row.get(key) is not None:
             return str(row.get(key))
     return None
@@ -112,22 +112,30 @@ def _character_lookup(sb, ids: set[str]) -> dict[str, dict[str, Any]]:
 def _normalize_stat_request(row: dict[str, Any], characters: dict[str, dict[str, Any]]) -> dict[str, Any]:
     character_id = _character_id(row)
     character = characters.get(character_id or "", {})
-    stat_name = row.get("stat_key") or row.get("stat_name") or row.get("stat") or "Stat"
-    amount = row.get("amount") or row.get("delta") or row.get("new_value") or row.get("requested_value")
+    total_cost = row.get("total_cost") or row.get("cost") or row.get("amount")
+    item_count = row.get("item_count") or row.get("items_count")
+    stat_name = row.get("stat_key") or row.get("stat_name") or row.get("stat") or "Stat Upgrade"
+    amount = row.get("amount") or row.get("delta") or row.get("new_value") or row.get("requested_value") or total_cost
+
+    summary_bits = []
+    if total_cost is not None:
+        summary_bits.append(f"{total_cost} XP")
+    if item_count is not None:
+        summary_bits.append(f"{item_count} stat change(s)")
 
     return {
         "request_type": "stat",
         "request_id": str(row.get("request_id") or row.get("id") or row.get("stat_request_id") or ""),
-        "table": "stat_requests",
+        "table": "stat_upgrade_requests",
         "status": _status(row),
-        "title": f"{stat_name}",
-        "summary": f"{stat_name}: {amount if amount is not None else 'requested'}",
+        "title": "Stat Upgrade",
+        "summary": " • ".join(summary_bits) if summary_bits else f"{stat_name}: {amount if amount is not None else 'requested'}",
         "amount": amount,
         "character_id": character_id,
         "character_name": character.get("name") or row.get("character_name") or character_id,
         "actor_id": _actor_id(row),
         "reviewer_id": _reviewer_id(row),
-        "reason": row.get("reason") or row.get("notes") or row.get("note"),
+        "reason": row.get("reason") or row.get("notes") or row.get("note") or row.get("submitter_note"),
         "staff_note": row.get("staff_note") or row.get("review_note") or row.get("denial_reason"),
         "created_at": _created_at(row),
         "raw": row,
@@ -169,7 +177,7 @@ def _id_column(row: dict[str, Any], request_type: str) -> str:
 
 def _table_for_request_type(request_type: str) -> str:
     if request_type == "stat":
-        return "stat_requests"
+        return "stat_upgrade_requests"
     if request_type == "skill":
         return "skill_purchase_requests"
     raise HTTPException(status_code=400, detail="request_type must be stat or skill.")
@@ -284,12 +292,35 @@ def get_request_queue(
 
     if request_type in {"all", "stat"}:
         raw_stat_rows = _safe_rows(
-            sb.table("stat_requests")
+            sb.table("stat_upgrade_requests")
             .select("*")
             .eq("guild_id", get_guild_id())
             .order("created_at", desc=True)
             .limit(250)
         )
+
+        stat_request_ids = [
+            str(row.get("request_id"))
+            for row in raw_stat_rows
+            if row.get("request_id")
+        ]
+        if stat_request_ids:
+            stat_items = _safe_rows(
+                sb.table("stat_upgrade_request_items")
+                .select("request_id,stat_key,current_value,target_value,points_added,cost")
+                .in_("request_id", stat_request_ids)
+                .limit(1000)
+            )
+            items_by_request: dict[str, list[dict[str, Any]]] = {}
+            for item in stat_items:
+                rid = str(item.get("request_id") or "")
+                if rid:
+                    items_by_request.setdefault(rid, []).append(item)
+
+            for row in raw_stat_rows:
+                rid = str(row.get("request_id") or "")
+                row["items"] = items_by_request.get(rid, [])
+                row["item_count"] = len(row["items"])
 
     if request_type in {"all", "skill"}:
         raw_skill_rows = _safe_rows(
@@ -595,6 +626,33 @@ def _mark_skill_override(update_payload: dict[str, Any], payload: dict[str, Any]
 # --- Skill Purchase Request Schema Compatibility v1 ---
 
 def _normalize_request_update_payload(table: str, payload: dict[str, Any]) -> dict[str, Any]:
+    # Map legacy request-review fields to the real request table schemas.
+    if table == "stat_upgrade_requests":
+        out = dict(payload)
+        if "approved_at" in out and "reviewed_at" not in out:
+            out["reviewed_at"] = out.pop("approved_at")
+        else:
+            out.pop("approved_at", None)
+
+        if "denied_at" in out and "reviewed_at" not in out:
+            out["reviewed_at"] = out.pop("denied_at")
+        else:
+            out.pop("denied_at", None)
+
+        for old_key in ("reviewed_by", "reviewer_id", "approved_by", "denied_by", "staff_id"):
+            if old_key in out and "reviewed_by_discord_id" not in out:
+                out["reviewed_by_discord_id"] = out.pop(old_key)
+            else:
+                out.pop(old_key, None)
+
+        if "note" in out and "staff_note" not in out:
+            out["staff_note"] = out.pop("note")
+        if "denial_reason" in out and "staff_note" not in out:
+            out["staff_note"] = out.pop("denial_reason")
+
+        allowed = {"status", "staff_note", "reviewed_by_discord_id", "reviewed_at", "updated_at"}
+        return {key: value for key, value in out.items() if key in allowed}
+
     # Map legacy request-review fields to the real skill_purchase_requests schema.
     if table != "skill_purchase_requests":
         return payload
@@ -628,30 +686,34 @@ def _normalize_request_update_payload(table: str, payload: dict[str, Any]) -> di
 
 def _safe_update_request(sb, table: str, id_column: str, request_id: str, update_payload: dict[str, Any]) -> list[dict[str, Any]]:
     update_payload = _normalize_request_update_payload(table, update_payload)
-    try:
-        return _as_list(
-            sb.table(table)
-            .update(update_payload)
-            .eq(id_column, request_id)
-            .execute()
-        )
-    except Exception:
-        allowed = {
-            "status",
-            "reviewed_by",
-            "approved_by",
-            "denied_by",
-            "staff_discord_id",
-            "staff_note",
-            "denial_reason",
-        }
-        fallback = {key: value for key, value in update_payload.items() if key in allowed}
-        return _as_list(
-            sb.table(table)
-            .update(fallback)
-            .eq(id_column, request_id)
-            .execute()
-        )
+
+    attempts: list[dict[str, Any]] = [dict(update_payload)]
+
+    # If schema is older/minimal, keep falling back until at least status can update.
+    if "status" in update_payload:
+        attempts.append({key: value for key, value in update_payload.items() if key in {"status", "staff_note", "reviewed_by_discord_id", "reviewed_at"}})
+        attempts.append({key: value for key, value in update_payload.items() if key in {"status", "staff_note"}})
+        attempts.append({"status": update_payload["status"]})
+
+    last_error: Exception | None = None
+    for attempt in attempts:
+        if not attempt:
+            continue
+        try:
+            return _as_list(
+                sb.table(table)
+                .update(attempt)
+                .eq(id_column, request_id)
+                .execute()
+            )
+        except Exception as exc:
+            last_error = exc
+            continue
+
+    if last_error:
+        raise last_error
+    return []
+
 
 # --- Skill Purchase Approval Apply v2 Idempotent ---
 
