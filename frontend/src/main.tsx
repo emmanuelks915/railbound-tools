@@ -4803,6 +4803,103 @@ function StaffQueue({ discordId }: { discordId: string }) {
   const [workingKey, setWorkingKey] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [overrideByRequest, setOverrideByRequest] = useState<Record<string, boolean>>({});
+  const [maintenanceOptions, setMaintenanceOptions] = useState<any>({ characters: [], skills: [], traits: [] });
+  const [maintenanceForm, setMaintenanceForm] = useState({
+    action: "remove_xp",
+    character_id: "",
+    amount: "",
+    skill_key: "",
+    trait_slug: "",
+    custom_name: "",
+    custom_key: "",
+    custom_tree: "Staff Custom",
+    custom_tier: "0",
+    custom_cost: "0",
+    custom_category: "custom",
+    custom_description: "",
+    reason: "",
+  });
+
+  async function loadMaintenanceOptions() {
+    try {
+      const data = await apiFetch("/api/staff/maintenance/options", {}, discordId);
+      setMaintenanceOptions(data || { characters: [], skills: [], traits: [] });
+    } catch (error: any) {
+      console.warn("Could not load staff maintenance options", error);
+    }
+  }
+
+  async function runMaintenanceAction() {
+    setMessage("");
+    setStaffConfirmation("");
+
+    if (!maintenanceForm.character_id) {
+      setMessage("Choose an OC first.");
+      return;
+    }
+    if (!maintenanceForm.reason.trim()) {
+      setMessage("Add a staff reason for the correction.");
+      return;
+    }
+
+    const action = maintenanceForm.action;
+    let endpoint = "";
+    let body: any = { character_id: maintenanceForm.character_id, reason: maintenanceForm.reason };
+
+    if (action === "remove_xp") {
+      endpoint = "/api/staff/maintenance/xp/remove";
+      body.amount = Number(maintenanceForm.amount || 0);
+      if (!body.amount || body.amount <= 0) {
+        setMessage("Enter the XP amount to remove.");
+        return;
+      }
+    } else if (action === "remove_skill") {
+      endpoint = "/api/staff/maintenance/skill/remove";
+      body.skill_key = maintenanceForm.skill_key;
+      if (!body.skill_key) {
+        setMessage("Choose the skill to remove.");
+        return;
+      }
+    } else if (action === "remove_trait") {
+      endpoint = "/api/staff/maintenance/trait/remove";
+      body.trait_slug = maintenanceForm.trait_slug;
+      if (!body.trait_slug) {
+        setMessage("Choose the trait to remove.");
+        return;
+      }
+    } else if (action === "grant_custom_skill") {
+      endpoint = "/api/staff/maintenance/custom-skill/grant";
+      body = { ...body, name: maintenanceForm.custom_name, skill_key: maintenanceForm.custom_key, tree: maintenanceForm.custom_tree, tier: Number(maintenanceForm.custom_tier || 0), cost: Number(maintenanceForm.custom_cost || 0), description: maintenanceForm.custom_description };
+      if (!body.name) {
+        setMessage("Enter a custom skill name.");
+        return;
+      }
+    } else if (action === "grant_custom_trait") {
+      endpoint = "/api/staff/maintenance/custom-trait/grant";
+      body = { ...body, name: maintenanceForm.custom_name, slug: maintenanceForm.custom_key, tier: maintenanceForm.custom_tier || "reliable", cost: Number(maintenanceForm.custom_cost || 0), category: maintenanceForm.custom_category || "custom", description: maintenanceForm.custom_description };
+      if (!body.name) {
+        setMessage("Enter a custom trait name.");
+        return;
+      }
+    }
+
+    try {
+      const data = await apiFetch(endpoint, { method: "POST", body: JSON.stringify(body) }, discordId);
+      const successMessage = data.message || "Staff maintenance action complete.";
+      setMessage(successMessage);
+      setStaffConfirmation(successMessage);
+      window.alert(successMessage);
+      setMaintenanceForm((current) => ({ ...current, amount: "", skill_key: "", trait_slug: "", custom_name: "", custom_key: "", custom_description: "", reason: "" }));
+      await Promise.all([loadQueue(), loadMaintenanceOptions(), loadSkillOverrideOptions(), loadTraitBenefitOptions(), loadStaffResourceOptions()]);
+    } catch (error: any) {
+      setMessage(error?.message || "Could not complete staff maintenance action.");
+    }
+  }
+
+  useEffect(() => {
+    loadMaintenanceOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function loadQueue() {
     if (!discordId) return;
@@ -4838,11 +4935,6 @@ function StaffQueue({ discordId }: { discordId: string }) {
     const key = requestKey(request);
     setWorkingKey(key);
     setMessage("");
-
-    if (request.request_type === "skill" && overrideByRequest[key] && !(notes[key] || "").trim()) {
-      setMessage("An override reason is required for skill staff overrides.");
-      return;
-    }
 
     try {
       const body = JSON.stringify({
@@ -5427,6 +5519,110 @@ function StaffQueue({ discordId }: { discordId: string }) {
 
         
 
+
+        <div className="card staff-maintenance-card">
+          <div className="card-title-row">
+            <div>
+              <span className="activity-type-label">Staff Corrections</span>
+              <h3>OC Maintenance</h3>
+              <p className="muted-text">
+                Remove mistaken XP, remove wrong skills/traits, or grant hidden custom skills/traits that are not visible in the normal portal.
+              </p>
+            </div>
+            <button className="ghost" onClick={loadMaintenanceOptions}>
+              <RefreshCw size={16} /> Refresh Options
+            </button>
+          </div>
+
+          <div className="request-actions-panel staff-maintenance-form">
+            <label>
+              <span>OC</span>
+              <select value={maintenanceForm.character_id} onChange={(event) => setMaintenanceForm((current) => ({ ...current, character_id: event.target.value }))}>
+                <option value="">Select an OC</option>
+                {(maintenanceOptions.characters || resourceCharacters).map((character: any) => (
+                  <option key={character.character_id} value={character.character_id}>{character.name}</option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Action</span>
+              <select value={maintenanceForm.action} onChange={(event) => setMaintenanceForm((current) => ({ ...current, action: event.target.value }))}>
+                <option value="remove_xp">Remove XP</option>
+                <option value="remove_skill">Remove Skill</option>
+                <option value="remove_trait">Remove Trait</option>
+                <option value="grant_custom_skill">Grant Hidden Custom Skill</option>
+                <option value="grant_custom_trait">Grant Hidden Custom Trait</option>
+              </select>
+            </label>
+
+            {maintenanceForm.action === "remove_xp" ? (
+              <label>
+                <span>XP to Remove</span>
+                <input type="number" min="1" value={maintenanceForm.amount} onChange={(event) => setMaintenanceForm((current) => ({ ...current, amount: event.target.value }))} placeholder="Example: 67" />
+              </label>
+            ) : null}
+
+            {maintenanceForm.action === "remove_skill" ? (
+              <label>
+                <span>Skill to Remove</span>
+                <select value={maintenanceForm.skill_key} onChange={(event) => setMaintenanceForm((current) => ({ ...current, skill_key: event.target.value }))}>
+                  <option value="">Select a skill</option>
+                  {(maintenanceOptions.skills || overrideSkills).map((skill: any) => (
+                    <option key={skill.skill_key} value={skill.skill_key}>{skill.name || skill.skill_key}{skill.tree ? ` / ${skill.tree}` : ""}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
+            {maintenanceForm.action === "remove_trait" ? (
+              <label>
+                <span>Trait to Remove</span>
+                <select value={maintenanceForm.trait_slug} onChange={(event) => setMaintenanceForm((current) => ({ ...current, trait_slug: event.target.value }))}>
+                  <option value="">Select a trait</option>
+                  {(maintenanceOptions.traits || traitBenefitTraits).map((trait: any) => (
+                    <option key={trait.slug || trait.trait_id} value={trait.slug}>{trait.name || trait.slug}{trait.tier ? ` / ${trait.tier}` : ""}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
+            {maintenanceForm.action === "grant_custom_skill" || maintenanceForm.action === "grant_custom_trait" ? (
+              <>
+                <label><span>Custom Name</span><input value={maintenanceForm.custom_name} onChange={(event) => setMaintenanceForm((current) => ({ ...current, custom_name: event.target.value }))} placeholder="Restricted lore option" /></label>
+                <label><span>Optional Key / Slug</span><input value={maintenanceForm.custom_key} onChange={(event) => setMaintenanceForm((current) => ({ ...current, custom_key: event.target.value }))} placeholder="Leave blank to auto-create" /></label>
+
+                {maintenanceForm.action === "grant_custom_skill" ? (
+                  <label><span>Skill Tree</span><input value={maintenanceForm.custom_tree} onChange={(event) => setMaintenanceForm((current) => ({ ...current, custom_tree: event.target.value }))} placeholder="Staff Custom" /></label>
+                ) : (
+                  <label>
+                    <span>Trait Tier</span>
+                    <select value={maintenanceForm.custom_tier} onChange={(event) => setMaintenanceForm((current) => ({ ...current, custom_tier: event.target.value }))}>
+                      <option value="minor">Minor</option><option value="reliable">Reliable</option><option value="keystone">Keystone</option><option value="origin">Origin</option><option value="negative">Negative</option>
+                    </select>
+                  </label>
+                )}
+
+                <label><span>{maintenanceForm.action === "grant_custom_skill" ? "Tier" : "Cost"}</span><input value={maintenanceForm.action === "grant_custom_skill" ? maintenanceForm.custom_tier : maintenanceForm.custom_cost} onChange={(event) => setMaintenanceForm((current) => maintenanceForm.action === "grant_custom_skill" ? { ...current, custom_tier: event.target.value } : { ...current, custom_cost: event.target.value })} placeholder="0" /></label>
+
+                {maintenanceForm.action === "grant_custom_skill" ? (
+                  <label><span>Normal Cost</span><input type="number" value={maintenanceForm.custom_cost} onChange={(event) => setMaintenanceForm((current) => ({ ...current, custom_cost: event.target.value }))} placeholder="0" /></label>
+                ) : (
+                  <label><span>Category</span><input value={maintenanceForm.custom_category} onChange={(event) => setMaintenanceForm((current) => ({ ...current, custom_category: event.target.value }))} placeholder="custom" /></label>
+                )}
+
+                <label><span>Description</span><textarea rows={2} value={maintenanceForm.custom_description} onChange={(event) => setMaintenanceForm((current) => ({ ...current, custom_description: event.target.value }))} placeholder="Optional staff-facing note/description." /></label>
+              </>
+            ) : null}
+
+            <label>
+              <span>Staff Reason</span>
+              <textarea rows={3} value={maintenanceForm.reason} onChange={(event) => setMaintenanceForm((current) => ({ ...current, reason: event.target.value }))} placeholder="Required. Example: correcting discounted cost, wrong skill assigned, restricted lore approval." />
+            </label>
+
+            <div className="actions"><button onClick={runMaintenanceAction}><ShieldCheck size={16} /> Run Staff Action</button></div>
+          </div>
+        </div>
 
         <div className="card staff-trait-benefit-card">
           <div className="card-title-row">
