@@ -4803,6 +4803,39 @@ function StaffQueue({ discordId }: { discordId: string }) {
   const [workingKey, setWorkingKey] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [overrideByRequest, setOverrideByRequest] = useState<Record<string, boolean>>({});
+
+  const [discordRoleSyncing, setDiscordRoleSyncing] = useState(false);
+  const [discordRoleSyncResult, setDiscordRoleSyncResult] = useState<any>(null);
+
+  async function syncAllDiscordLoreRoles(dryRun = false) {
+    setMessage("");
+    setStaffConfirmation("");
+    setDiscordRoleSyncing(true);
+
+    try {
+      const data = await apiFetch(
+        "/api/staff/discord-roles/sync-all",
+        {
+          method: "POST",
+          body: JSON.stringify({ dry_run: dryRun }),
+        },
+        discordId
+      );
+
+      setDiscordRoleSyncResult(data);
+      const successMessage = data.message || "Discord lore role sync complete.";
+      setMessage(successMessage);
+      setStaffConfirmation(successMessage);
+      if (!dryRun) {
+        window.alert(successMessage);
+      }
+    } catch (error: any) {
+      setMessage(error?.message || "Could not sync Discord lore roles.");
+    } finally {
+      setDiscordRoleSyncing(false);
+    }
+  }
+
   const [maintenanceOptions, setMaintenanceOptions] = useState<any>({ characters: [], skills: [], traits: [] });
   const [maintenanceForm, setMaintenanceForm] = useState({
     action: "remove_xp",
@@ -5308,6 +5341,37 @@ function StaffQueue({ discordId }: { discordId: string }) {
             <p>{staffConfirmation}</p>
           </div>
         ) : null}
+
+
+        <div className="card discord-lore-role-backfill-card">
+          <div className="card-title-row">
+            <div>
+              <span className="activity-type-label">Discord Roles</span>
+              <h3>Backfill City Lore Roles</h3>
+              <p className="muted-text">
+                Sync active lore role mappings for all active OCs. Since religion mappings are inactive, this currently only assigns city-state origin roles.
+              </p>
+            </div>
+          </div>
+
+          <div className="actions">
+            <button className="ghost" onClick={() => syncAllDiscordLoreRoles(true)} disabled={discordRoleSyncing}>
+              <RefreshCw size={16} /> {discordRoleSyncing ? "Working..." : "Preview Backfill"}
+            </button>
+            <button onClick={() => syncAllDiscordLoreRoles(false)} disabled={discordRoleSyncing}>
+              <ShieldCheck size={16} /> {discordRoleSyncing ? "Working..." : "Backfill Roles"}
+            </button>
+          </div>
+
+          {discordRoleSyncResult ? (
+            <div className="request-note-block">
+              <span>Last Sync Result</span>
+              <p>
+                Checked {discordRoleSyncResult.characters_checked ?? 0} OC(s) - Roles applied: {discordRoleSyncResult.roles_applied ?? 0} - Skipped: {discordRoleSyncResult.characters_skipped ?? 0} - Errors: {discordRoleSyncResult.errors ?? 0}
+              </p>
+            </div>
+          ) : null}
+        </div>
 
         <div className="request-card-list">
           {visibleRequests.length === 0 ? (
