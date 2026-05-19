@@ -4870,7 +4870,13 @@ function StaffQueue({ discordId }: { discordId: string }) {
       setMessage("Choose an OC first.");
       return;
     }
-    if (!maintenanceForm.reason.trim()) {
+    const actionNeedsReason = ![
+      "apply_trait_benefit",
+      "preview_city_lore_roles",
+      "backfill_city_lore_roles",
+    ].includes(maintenanceForm.action);
+
+    if (actionNeedsReason && !maintenanceForm.reason.trim()) {
       setMessage("Add a staff reason for the correction.");
       return;
     }
@@ -4878,6 +4884,123 @@ function StaffQueue({ discordId }: { discordId: string }) {
     const action = maintenanceForm.action;
     let endpoint = "";
     let body: any = { character_id: maintenanceForm.character_id, reason: maintenanceForm.reason };
+
+    if (action === "grant_resources") {
+      const payload = {
+        ...resourceForm,
+        character_id: maintenanceForm.character_id,
+        reason: maintenanceForm.reason,
+        amount: Number(resourceForm.amount || maintenanceForm.amount || 0),
+      };
+
+      if (!payload.amount || payload.amount <= 0) {
+        setMessage("Enter a positive amount.");
+        return;
+      }
+
+      try {
+        const data = await apiFetch(
+          "/api/staff/resource-grants/grant",
+          { method: "POST", body: JSON.stringify(payload) },
+          discordId
+        );
+        const successMessage = data.message || "Resource grant complete.";
+        setMessage(successMessage);
+        setStaffConfirmation(successMessage);
+        window.alert(successMessage);
+        setMaintenanceForm((current) => ({ ...current, amount: "", reason: "" }));
+        await Promise.all([loadQueue(), loadStaffResourceOptions(), loadMaintenanceOptions()]);
+      } catch (error: any) {
+        setMessage(error?.message || "Could not grant resources.");
+      }
+      return;
+    }
+
+    if (action === "grant_skill_override") {
+      if (!overrideForm.skill_key) {
+        setMessage("Choose a skill before granting a skill override.");
+        return;
+      }
+
+      try {
+        const data = await apiFetch(
+          "/api/staff/skill-overrides/grant",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              ...overrideForm,
+              character_id: maintenanceForm.character_id,
+              reason: maintenanceForm.reason,
+            }),
+          },
+          discordId
+        );
+        const successMessage = data.message || "Skill override granted.";
+        setMessage(successMessage);
+        setStaffConfirmation(successMessage);
+        window.alert(successMessage);
+        setOverrideForm((current) => ({ ...current, skill_key: "", reason: "" }));
+        setMaintenanceForm((current) => ({ ...current, reason: "" }));
+        await Promise.all([loadQueue(), loadSkillOverrideOptions(), loadMaintenanceOptions()]);
+      } catch (error: any) {
+        setMessage(error?.message || "Could not grant skill override.");
+      }
+      return;
+    }
+
+    if (action === "apply_trait_benefit") {
+      if (!traitBenefitForm.trait_slug) {
+        setMessage("Choose a trait or origin first.");
+        return;
+      }
+
+      if (!traitBenefitForm.skill_key) {
+        setMessage("Choose the free skill to grant.");
+        return;
+      }
+
+      try {
+        const traitName = selectedTraitBenefit?.name || traitBenefitForm.trait_slug;
+        const selectedSkill = traitBenefitSkills.find((skill: any) => skill.skill_key === traitBenefitForm.skill_key);
+        const reason = maintenanceForm.reason.trim()
+          || traitBenefitForm.reason.trim()
+          || `Granted ${selectedSkill?.name || traitBenefitForm.skill_key} from ${traitName} trait benefit.`;
+
+        const data = await apiFetch(
+          "/api/staff/trait-benefits/apply",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              ...traitBenefitForm,
+              character_id: maintenanceForm.character_id,
+              reason,
+            }),
+          },
+          discordId
+        );
+
+        const successMessage = data.message || "Trait benefit applied.";
+        setMessage(successMessage);
+        setStaffConfirmation(successMessage);
+        window.alert(successMessage);
+        setTraitBenefitForm((current) => ({ ...current, skill_key: "", reason: "" }));
+        setMaintenanceForm((current) => ({ ...current, reason: "" }));
+        await Promise.all([loadQueue(), loadTraitBenefitOptions(), loadSkillOverrideOptions(), loadMaintenanceOptions()]);
+      } catch (error: any) {
+        setMessage(error?.message || "Could not apply trait benefit.");
+      }
+      return;
+    }
+
+    if (action === "backfill_city_lore_roles") {
+      await syncAllDiscordLoreRoles(false);
+      return;
+    }
+
+    if (action === "preview_city_lore_roles") {
+      await syncAllDiscordLoreRoles(true);
+      return;
+    }
 
     if (action === "remove_xp") {
       endpoint = "/api/staff/maintenance/xp/remove";
@@ -5343,7 +5466,7 @@ function StaffQueue({ discordId }: { discordId: string }) {
         ) : null}
 
 
-        <div className="card discord-lore-role-backfill-card">
+        <div className="card discord-lore-role-backfill-card" style={{ display: "none" }}>
           <div className="card-title-row">
             <div>
               <span className="activity-type-label">Discord Roles</span>
@@ -5480,7 +5603,7 @@ function StaffQueue({ discordId }: { discordId: string }) {
           })}
         </div>
 
-<div className="card staff-resource-grant-card">
+<div className="card staff-resource-grant-card" style={{ display: "none" }}>
           <div className="card-title-row">
             <div>
               <span className="activity-type-label">Staff Resources</span>
@@ -5587,10 +5710,10 @@ function StaffQueue({ discordId }: { discordId: string }) {
         <div className="card staff-maintenance-card">
           <div className="card-title-row">
             <div>
-              <span className="activity-type-label">Staff Corrections</span>
-              <h3>OC Maintenance</h3>
+              <span className="activity-type-label">Staff Toolbox</span>
+              <h3>Staff Action Center</h3>
               <p className="muted-text">
-                Remove mistaken XP, remove wrong skills/traits, or grant hidden custom skills/traits that are not visible in the normal portal.
+                Choose one staff workflow from the dropdown. This replaces the separate resource, override, trait benefit, correction, and custom-grant cards.
               </p>
             </div>
             <button className="ghost" onClick={loadMaintenanceOptions}>
@@ -5612,6 +5735,11 @@ function StaffQueue({ discordId }: { discordId: string }) {
             <label>
               <span>Action</span>
               <select value={maintenanceForm.action} onChange={(event) => setMaintenanceForm((current) => ({ ...current, action: event.target.value }))}>
+                <option value="grant_resources">Grant XP / Currency</option>
+                <option value="grant_skill_override">Grant Skill Override</option>
+                <option value="apply_trait_benefit">Apply Trait Benefit</option>
+                <option value="preview_city_lore_roles">Preview City Lore Role Backfill</option>
+                <option value="backfill_city_lore_roles">Backfill City Lore Roles</option>
                 <option value="remove_xp">Remove XP</option>
                 <option value="remove_skill">Remove Skill</option>
                 <option value="remove_trait">Remove Trait</option>
@@ -5619,6 +5747,148 @@ function StaffQueue({ discordId }: { discordId: string }) {
                 <option value="grant_custom_trait">Grant Hidden Custom Trait</option>
               </select>
             </label>
+
+            {maintenanceForm.action === "grant_resources" ? (
+              <>
+                <label>
+                  <span>Grant Type</span>
+                  <select
+                    value={resourceForm.grant_type}
+                    onChange={(event) =>
+                      setResourceForm((current) => ({
+                        ...current,
+                        grant_type: event.target.value,
+                        amount: event.target.value === "xp" ? "600" : current.amount,
+                      }))
+                    }
+                  >
+                    <option value="xp">XP</option>
+                    <option value="currency">Currency</option>
+                  </select>
+                </label>
+
+                {resourceForm.grant_type === "currency" ? (
+                  <label>
+                    <span>Currency</span>
+                    <select
+                      value={resourceForm.currency_id}
+                      onChange={(event) =>
+                        setResourceForm((current) => ({ ...current, currency_id: event.target.value }))
+                      }
+                    >
+                      <option value="">Primary currency</option>
+                      {resourceCurrencies.map((currency: any) => (
+                        <option key={currency.currency_id} value={currency.currency_id}>
+                          {currency.emoji ? `${currency.emoji} ` : ""}{currency.name} ({currency.ticker})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+
+                <label>
+                  <span>Amount</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={resourceForm.amount}
+                    onChange={(event) =>
+                      setResourceForm((current) => ({ ...current, amount: event.target.value }))
+                    }
+                    placeholder={resourceForm.grant_type === "xp" ? "600" : "Amount"}
+                  />
+                </label>
+              </>
+            ) : null}
+
+            {maintenanceForm.action === "grant_skill_override" ? (
+              <>
+                <label>
+                  <span>Skill</span>
+                  <select
+                    value={overrideForm.skill_key}
+                    onChange={(event) =>
+                      setOverrideForm((current) => ({ ...current, skill_key: event.target.value }))
+                    }
+                  >
+                    <option value="">Select a skill</option>
+                    {overrideSkills.map((skill: any) => (
+                      <option key={skill.skill_key} value={skill.skill_key}>
+                        {skill.name || skill.skill_key}{skill.tree ? ` / ${skill.tree}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Source / Trait</span>
+                  <input
+                    value={overrideForm.source_trait}
+                    onChange={(event) =>
+                      setOverrideForm((current) => ({ ...current, source_trait: event.target.value }))
+                    }
+                    placeholder="Origin Trait, Magic Background, Mana Circuits..."
+                  />
+                </label>
+              </>
+            ) : null}
+
+            {maintenanceForm.action === "apply_trait_benefit" ? (
+              <>
+                <label>
+                  <span>Trait / Origin</span>
+                  <select
+                    value={traitBenefitForm.trait_slug}
+                    onChange={(event) =>
+                      setTraitBenefitForm((current) => ({
+                        ...current,
+                        trait_slug: event.target.value,
+                        skill_key: "",
+                        reason: "",
+                      }))
+                    }
+                  >
+                    <option value="">Select a trait</option>
+                    {traitBenefitTraits.map((trait: any) => (
+                      <option key={trait.slug || trait.trait_id} value={trait.slug}>
+                        {trait.name}{trait.tier ? ` / ${trait.tier}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Free Skill</span>
+                  <select
+                    value={traitBenefitForm.skill_key}
+                    onChange={(event) =>
+                      setTraitBenefitForm((current) => ({ ...current, skill_key: event.target.value }))
+                    }
+                  >
+                    <option value="">Select a skill</option>
+                    {traitFilteredSkills.map((skill: any) => (
+                      <option key={skill.skill_key} value={skill.skill_key}>
+                        {skill.name || skill.skill_key}{skill.tree ? ` / ${skill.tree}` : ""}{skill.cost !== undefined ? ` / ${skill.cost} XP normally` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            ) : null}
+
+            {maintenanceForm.action === "preview_city_lore_roles" || maintenanceForm.action === "backfill_city_lore_roles" ? (
+              <div className="request-note-block">
+                <span>City Lore Role Sync</span>
+                <p>
+                  Preview checks active OCs and mapped origin traits without assigning roles. Backfill assigns active city-state lore roles through Discord.
+                </p>
+                {discordRoleSyncResult ? (
+                  <p>
+                    Last result: checked {discordRoleSyncResult.characters_checked ?? 0} OC(s), roles applied {discordRoleSyncResult.roles_applied ?? 0}, skipped {discordRoleSyncResult.characters_skipped ?? 0}, errors {discordRoleSyncResult.errors ?? 0}.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
             {maintenanceForm.action === "remove_xp" ? (
               <label>
@@ -5684,11 +5954,11 @@ function StaffQueue({ discordId }: { discordId: string }) {
               <textarea rows={3} value={maintenanceForm.reason} onChange={(event) => setMaintenanceForm((current) => ({ ...current, reason: event.target.value }))} placeholder="Required. Example: correcting discounted cost, wrong skill assigned, restricted lore approval." />
             </label>
 
-            <div className="actions"><button onClick={runMaintenanceAction}><ShieldCheck size={16} /> Run Staff Action</button></div>
+            <div className="actions"><button onClick={runMaintenanceAction}><ShieldCheck size={16} /> Run Selected Action</button></div>
           </div>
         </div>
 
-        <div className="card staff-trait-benefit-card">
+        <div className="card staff-trait-benefit-card" style={{ display: "none" }}>
           <div className="card-title-row">
             <div>
               <span className="activity-type-label">Trait / Origin Resolver</span>
@@ -5790,7 +6060,7 @@ function StaffQueue({ discordId }: { discordId: string }) {
           </div>
         </div>
 
-<div className="card staff-skill-override-card">
+<div className="card staff-skill-override-card" style={{ display: "none" }}>
           <div className="card-title-row">
             <div>
               <span className="activity-type-label">Staff Override</span>
