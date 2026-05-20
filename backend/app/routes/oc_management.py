@@ -131,8 +131,115 @@ def _delete_where(sb, table: str, column: str, character_id: str) -> int:
         return 0
 
 
+
+def _delete_owned_companies_and_stores(sb, character_id: str) -> dict[str, int]:
+    """Delete companies/stores owned by an OC before hard-deleting the OC.
+
+    This prevents FK errors like:
+    companies.owner_character_id -> characters.character_id
+
+    Best effort and schema-tolerant:
+    - companies owned by this OC are found by owner_character_id
+    - related shop/order/item/wallet/transaction rows are deleted first when tables exist
+    - missing tables/columns are ignored by _delete_where/_safe_rows
+    """
+    deleted: dict[str, int] = {}
+
+    companies = _safe_rows(
+        sb.table("companies")
+        .select("*")
+        .eq("owner_character_id", character_id)
+        .limit(1000)
+    )
+
+    if not companies:
+        return deleted
+
+    company_ids = [
+        str(company.get("company_id") or company.get("id") or "")
+        for company in companies
+        if company.get("company_id") or company.get("id")
+    ]
+
+    shop_ids: list[str] = []
+    item_ids: list[str] = []
+
+    for company_id in company_ids:
+        shops = _safe_rows(
+            sb.table("shops")
+            .select("*")
+            .eq("company_id", company_id)
+            .limit(1000)
+        )
+        for shop in shops:
+            shop_id = str(shop.get("shop_id") or shop.get("id") or "")
+            if shop_id:
+                shop_ids.append(shop_id)
+
+    for shop_id in shop_ids:
+        items = _safe_rows(
+            sb.table("shop_items")
+            .select("*")
+            .eq("shop_id", shop_id)
+            .limit(1000)
+        )
+        for item in items:
+            item_id = str(item.get("item_id") or item.get("id") or "")
+            if item_id:
+                item_ids.append(item_id)
+
+    # Delete deepest children first.
+    for item_id in item_ids:
+        for table, column in (
+            ("shop_orders", "item_id"),
+            ("shop_order_items", "item_id"),
+            ("shop_purchases", "item_id"),
+        ):
+            count = _delete_where(sb, table, column, item_id)
+            if count:
+                deleted[f"{table}.{column}"] = deleted.get(f"{table}.{column}", 0) + count
+
+    for shop_id in shop_ids:
+        for table, column in (
+            ("shop_orders", "shop_id"),
+            ("shop_order_items", "shop_id"),
+            ("shop_purchases", "shop_id"),
+            ("shop_items", "shop_id"),
+            ("shop_channels", "shop_id"),
+            ("shop_logs", "shop_id"),
+        ):
+            count = _delete_where(sb, table, column, shop_id)
+            if count:
+                deleted[f"{table}.{column}"] = deleted.get(f"{table}.{column}", 0) + count
+
+    for company_id in company_ids:
+        for table, column in (
+            ("shop_orders", "company_id"),
+            ("shop_purchases", "company_id"),
+            ("shop_items", "company_id"),
+            ("shops", "company_id"),
+            ("company_wallets", "company_id"),
+            ("company_transactions", "company_id"),
+            ("company_members", "company_id"),
+            ("company_logs", "company_id"),
+            ("companies", "company_id"),
+            ("companies", "id"),
+        ):
+            count = _delete_where(sb, table, column, company_id)
+            if count:
+                deleted[f"{table}.{column}"] = deleted.get(f"{table}.{column}", 0) + count
+
+    # Fallback in case the companies table uses only owner_character_id for this relationship.
+    count = _delete_where(sb, "companies", "owner_character_id", character_id)
+    if count:
+        deleted["companies.owner_character_id"] = deleted.get("companies.owner_character_id", 0) + count
+
+    return deleted
+
 def _delete_related_rows(sb, character_id: str) -> dict[str, int]:
     deleted: dict[str, int] = {}
+
+    deleted.update(_delete_owned_companies_and_stores(sb, character_id))
 
     targets = [
         ("character_traits", "character_id"),
