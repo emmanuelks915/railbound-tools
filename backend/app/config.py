@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     staff_discord_ids: str = ""
     cors_origins: str = "http://localhost:5173"
     discord_staff_webhook_url: str = ""
+    discord_bot_token: str = ""
 
     discord_oauth_client_id: str = ""
     discord_oauth_client_secret: str = ""
