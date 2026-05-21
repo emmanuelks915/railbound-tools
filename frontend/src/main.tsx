@@ -4784,6 +4784,7 @@ function MissionBoardDashboard({
   const [selectedMissionId, setSelectedMissionId] = useState("");
   const [signups, setSignups] = useState<any[]>([]);
   const [message, setMessage] = useState("");
+  const [signupContext, setSignupContext] = useState<any>(null);
   const [signupForm, setSignupForm] = useState({
     guild_name: "",
     bst: "",
@@ -4823,6 +4824,29 @@ function MissionBoardDashboard({
     }
   }
 
+  async function loadSignupContext(characterId = selectedCharacterId) {
+    if (!characterId) {
+      setSignupContext(null);
+      return;
+    }
+
+    try {
+      const data = await apiFetch(`/api/missions/context/${characterId}`, {}, discordId);
+      const context = data.context || {};
+      setSignupContext(context);
+
+      setSignupForm((current) => ({
+        ...current,
+        guild_name: current.guild_name || context.default_guild || "",
+        bst: current.bst || String(context.bst ?? ""),
+        other_active_missions:
+          current.other_active_missions || context.other_active_missions_text || "",
+      }));
+    } catch (error: any) {
+      console.warn("Could not load mission signup context", error);
+    }
+  }
+
   async function loadSignups(missionId = selectedMissionId) {
     if (!missionId || !permissions?.is_staff) return;
     const data = await apiFetch(`/api/missions/${missionId}/signups`, {}, discordId);
@@ -4833,6 +4857,9 @@ function MissionBoardDashboard({
     if (discordId) {
       loadMissions().catch((error) => setMessage(error.message));
       loadCharacters().catch(() => {});
+      if (selectedCharacterId) {
+        loadSignupContext(selectedCharacterId).catch(() => {});
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discordId]);
@@ -4950,7 +4977,20 @@ function MissionBoardDashboard({
           <div className="request-actions-panel">
             <label>
               <span>OC</span>
-              <select value={selectedCharacterId} onChange={(event) => setSelectedCharacterId(event.target.value)}>
+              <select
+                value={selectedCharacterId}
+                onChange={(event) => {
+                  const nextCharacterId = event.target.value;
+                  setSelectedCharacterId(nextCharacterId);
+                  setSignupForm((current) => ({
+                    ...current,
+                    guild_name: "",
+                    bst: "",
+                    other_active_missions: "",
+                  }));
+                  loadSignupContext(nextCharacterId);
+                }}
+              >
                 <option value="">Select an OC</option>
                 {characters.map((character: any) => (
                   <option key={character.character_id} value={character.character_id}>
@@ -4999,6 +5039,28 @@ function MissionBoardDashboard({
               />
             </label>
           </div>
+
+          {signupContext ? (
+            <div className="request-note-block">
+              <span>Keystone Auto-Check</span>
+              <p><strong>Name:</strong> {signupContext.character_name || "—"}</p>
+              <p><strong>Guild:</strong> {signupForm.guild_name || signupContext.default_guild || "—"}</p>
+              <p><strong>EXP:</strong> {signupContext.exp_label || `${signupForm.bst || "0"} BST`}</p>
+              <p><strong>Other Active Missions:</strong> {signupForm.other_active_missions || signupContext.other_active_missions_text || "None"}</p>
+              <p>
+                <strong>Traits with Modifiers:</strong>{" "}
+                {(signupContext.traits_with_modifiers || []).length
+                  ? signupContext.traits_with_modifiers.map((trait: any) => trait.name || trait.slug).join(", ")
+                  : "None detected"}
+              </p>
+              <p>
+                <strong>Skills with Modifiers:</strong>{" "}
+                {(signupContext.skills_with_modifiers || []).length
+                  ? signupContext.skills_with_modifiers.map((skill: any) => skill.name || skill.skill_key).join(", ")
+                  : "None detected"}
+              </p>
+            </div>
+          ) : null}
         </div>
 
         {permissions?.is_staff ? (

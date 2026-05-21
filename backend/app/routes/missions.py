@@ -222,6 +222,30 @@ def update_mission(mission_id: str, payload: dict[str, Any] = Body(default={}), 
     return {"mission": rows[0] if rows else {**update, "mission_id": mission_id}, "message": "Mission updated."}
 
 
+@router.get("/context/{character_id}")
+def mission_signup_context(character_id: str, actor_discord_id: int | None = Depends(actor_from_header)):
+    sb = get_supabase()
+    character = _character_for_actor(sb, character_id, actor_discord_id)
+    context = _mission_signup_context(sb, character_id)
+
+    if not context:
+        bst = _core_bst(sb, character_id)
+        context = {
+            "guild_id": get_guild_id(),
+            "character_id": character_id,
+            "character_name": character.get("name"),
+            "player_discord_id": character.get("user_id") or character.get("discord_id"),
+            "default_guild": character.get("affiliation") or "",
+            "bst": bst,
+            "exp_label": f"{bst} BST",
+            "active_missions": [],
+            "traits_with_modifiers": [],
+            "skills_with_modifiers": [],
+        }
+
+    context["other_active_missions_text"] = _format_active_missions(context.get("active_missions") or [])
+    return {"context": context}
+
 @router.post("/{mission_id}/signup")
 def signup_for_mission(mission_id: str, payload: dict[str, Any] = Body(default={}), actor_discord_id: int | None = Depends(actor_from_header)):
     sb = get_supabase()
