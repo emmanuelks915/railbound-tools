@@ -79,6 +79,37 @@ def _core_bst(sb, character_id: str) -> int:
     return sum(int(row.get("stat_value") or 0) for row in rows)
 
 
+def _mission_signup_context(sb, character_id: str) -> dict[str, Any]:
+    rows = _safe_rows(
+        sb.table("v_mission_signup_context")
+        .select("*")
+        .eq("guild_id", get_guild_id())
+        .eq("character_id", character_id)
+        .limit(1)
+    )
+    return rows[0] if rows else {}
+
+
+def _format_active_missions(active_missions: Any) -> str:
+    if not active_missions:
+        return "None"
+
+    if isinstance(active_missions, list):
+        titles = []
+        for item in active_missions:
+            if isinstance(item, dict):
+                title = str(item.get("title") or "").strip()
+                status = str(item.get("status") or "").strip()
+                if title and status:
+                    titles.append(f"{title} ({status})")
+                elif title:
+                    titles.append(title)
+            elif str(item).strip():
+                titles.append(str(item).strip())
+        return ", ".join(titles) if titles else "None"
+
+    return str(active_missions)
+
 def _mission(sb, mission_id: str) -> dict[str, Any]:
     rows = _as_list(
         sb.table("missions")
@@ -206,7 +237,14 @@ def signup_for_mission(mission_id: str, payload: dict[str, Any] = Body(default={
     if not guild_name:
         raise HTTPException(status_code=400, detail="Guild is required for mission signup.")
 
-    bst = int(payload.get("bst") or _core_bst(sb, character_id) or 0)
+    context = _mission_signup_context(sb, character_id)
+
+    bst = int(payload.get("bst") or context.get("bst") or _core_bst(sb, character_id) or 0)
+    exp_label = str(context.get("exp_label") or f"{bst} BST")
+    active_missions_snapshot = context.get("active_missions") or []
+    traits_with_modifiers = context.get("traits_with_modifiers") or []
+    skills_with_modifiers = context.get("skills_with_modifiers") or []
+
     min_bst = mission.get("min_bst")
     max_bst = mission.get("max_bst")
 
@@ -239,18 +277,35 @@ def signup_for_mission(mission_id: str, payload: dict[str, Any] = Body(default={
     if existing:
         raise HTTPException(status_code=400, detail="This OC is already signed up for this mission.")
 
+    submitted_other_active = _clean_str(payload.get("other_active_missions"), 1000)
+    if not submitted_other_active:
+        submitted_other_active = _format_active_missions(active_missions_snapshot)
+
     row = {
         "guild_id": get_guild_id(),
         "mission_id": mission_id,
         "character_id": character_id,
-        "character_name": character.get("name"),
+        "character_name": context.get("character_name") or character.get("name"),
         "player_discord_id": int(actor_discord_id),
-        "guild_name": guild_name,
+        "guild_name": guild_name or context.get("default_guild") or "",
         "bst": bst,
-        "other_active_missions": _clean_str(payload.get("other_active_missions"), 1000),
+        "exp_label": exp_label,
+        "other_active_missions": submitted_other_active,
         "note": _clean_str(payload.get("note"), 1000),
         "placement_group": placement_group,
         "status": "pending",
+        "traits_with_modifiers": traits_with_modifiers,
+        "skills_with_modifiers": skills_with_modifiers,
+        "active_missions_snapshot": active_missions_snapshot,
+        "signup_snapshot": {
+            "name": context.get("character_name") or character.get("name"),
+            "guild": guild_name or context.get("default_guild") or "",
+            "exp": exp_label,
+            "bst": bst,
+            "other_active_missions": submitted_other_active,
+            "traits_with_modifiers": traits_with_modifiers,
+            "skills_with_modifiers": skills_with_modifiers,
+        },
     }
 
     rows = _as_list(sb.table("mission_signups").insert(row).execute())
