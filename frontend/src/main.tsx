@@ -21,7 +21,7 @@ type CoreStats = {
   mana: number;
 };
 
-type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "staff" | "combat" | "registry" | "register" | "manage_oc" | "qa" | "shop_owner";
+type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "missions" | "staff" | "combat" | "registry" | "register" | "manage_oc" | "qa" | "shop_owner";
 
 const STAT_LABELS: Record<keyof CoreStats, string> = {
   strength: "Strength",
@@ -134,6 +134,7 @@ function App() {
     ["skills", Sparkles, "Skills"],
     ["inventory", Package, "Inventory"],
     ["rp", ClipboardList, "RP Hub"],
+    ["missions", ClipboardList, "Missions"],
     ["shops", Store, "Shops"],
     ["shop_owner", Store, "Manage Shop"],
     ["activity", ClipboardList, "Activity"],
@@ -245,6 +246,7 @@ return (
       {tab === "shop_owner" && <ShopOwnerDashboard discordId={discordId} />}
       {tab === "skills" && <SkillsDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "rp" && <RpHubDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "missions" && <MissionBoardDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "register" && <OCRegistrationDashboard discordId={discordId} jump={setTab} />}
       {tab === "registry" && <OCRegistry discordId={discordId} />}
       {tab === "staff" && <StaffOnly discordId={discordId}><StaffQueue discordId={discordId} /></StaffOnly>}
@@ -4760,6 +4762,392 @@ function RpHubDashboard({
             </div>
           )}
         </div>
+      </section>
+    </RequireDiscord>
+  );
+}
+
+
+
+function MissionBoardDashboard({
+  discordId,
+  selectedCharacterId,
+  setSelectedCharacterId,
+}: {
+  discordId: string;
+  selectedCharacterId: string;
+  setSelectedCharacterId: (id: string) => void;
+}) {
+  const permissions = usePermissions(discordId);
+  const [missions, setMissions] = useState<any[]>([]);
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [selectedMissionId, setSelectedMissionId] = useState("");
+  const [signups, setSignups] = useState<any[]>([]);
+  const [message, setMessage] = useState("");
+  const [signupForm, setSignupForm] = useState({
+    guild_name: "",
+    bst: "",
+    other_active_missions: "",
+    note: "",
+  });
+  const [missionForm, setMissionForm] = useState({
+    title: "",
+    status: "open",
+    description: "",
+    reward: "",
+    location: "",
+    difficulty: "",
+    party_size: "4",
+    min_bst: "",
+    max_bst: "",
+    guild_policy: "open",
+    priority_guilds: "",
+    restricted_guilds: "",
+    bonus_pay: "",
+    priority_window_hours: "24",
+  });
+
+  async function loadMissions() {
+    setMessage("");
+    const data = await apiFetch("/api/missions", {}, discordId);
+    setMissions(data.missions || []);
+  }
+
+  async function loadCharacters() {
+    const data = await apiFetch("/api/characters/mine", {}, discordId);
+    const rows = Array.isArray(data) ? data : data.characters || data.data || [];
+    setCharacters(rows);
+
+    if (!selectedCharacterId && rows[0]?.character_id && shouldAutoSelectOc()) {
+      setSelectedCharacterId(rows[0].character_id);
+    }
+  }
+
+  async function loadSignups(missionId = selectedMissionId) {
+    if (!missionId || !permissions?.is_staff) return;
+    const data = await apiFetch(`/api/missions/${missionId}/signups`, {}, discordId);
+    setSignups(data.signups || []);
+  }
+
+  useEffect(() => {
+    if (discordId) {
+      loadMissions().catch((error) => setMessage(error.message));
+      loadCharacters().catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId]);
+
+  async function createMission() {
+    setMessage("");
+    try {
+      const data = await apiFetch(
+        "/api/missions",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            ...missionForm,
+            priority_guilds: missionForm.priority_guilds,
+            restricted_guilds: missionForm.restricted_guilds,
+          }),
+        },
+        discordId
+      );
+      setMessage(data.message || "Mission created.");
+      setMissionForm((current) => ({
+        ...current,
+        title: "",
+        description: "",
+        reward: "",
+        location: "",
+        bonus_pay: "",
+      }));
+      await loadMissions();
+    } catch (error: any) {
+      setMessage(error.message || "Could not create mission.");
+    }
+  }
+
+  async function signup(missionId: string) {
+    setMessage("");
+
+    if (!selectedCharacterId) {
+      setMessage("Choose an OC first.");
+      return;
+    }
+
+    if (!signupForm.guild_name.trim()) {
+      setMessage("Guild is required for mission signup.");
+      return;
+    }
+
+    try {
+      const data = await apiFetch(
+        `/api/missions/${missionId}/signup`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            character_id: selectedCharacterId,
+            guild_name: signupForm.guild_name,
+            bst: signupForm.bst,
+            other_active_missions: signupForm.other_active_missions,
+            note: signupForm.note,
+          }),
+        },
+        discordId
+      );
+      setMessage(data.message || "Mission signup submitted.");
+      setSignupForm((current) => ({ ...current, other_active_missions: "", note: "" }));
+      await loadMissions();
+    } catch (error: any) {
+      setMessage(error.message || "Could not sign up.");
+    }
+  }
+
+  async function updateSignupStatus(signupId: string, status: string) {
+    setMessage("");
+    try {
+      const data = await apiFetch(
+        `/api/missions/signups/${signupId}`,
+        { method: "PATCH", body: JSON.stringify({ status }) },
+        discordId
+      );
+      setMessage(data.message || "Signup updated.");
+      await loadSignups();
+    } catch (error: any) {
+      setMessage(error.message || "Could not update signup.");
+    }
+  }
+
+  function guildList(value: any) {
+    if (Array.isArray(value)) return value.join(", ");
+    return String(value || "");
+  }
+
+  return (
+    <RequireDiscord discordId={discordId}>
+      <section className="request-workflow-page">
+        <div className="card request-workflow-hero">
+          <div>
+            <span className="activity-type-label">Mission Board</span>
+            <h2>Missions</h2>
+            <p className="muted-text">
+              Browse mission openings, sign up with the standard template, and track priority or restricted placements.
+            </p>
+          </div>
+          <button className="ghost" onClick={loadMissions}>
+            <RefreshCw size={16} /> Refresh Missions
+          </button>
+        </div>
+
+        {message ? <p className="message">{message}</p> : null}
+
+        <div className="card">
+          <h3>Mission Signup Template</h3>
+          <p className="muted-text">
+            Select your OC once, fill in the template fields, then click Sign Up on the mission you want.
+          </p>
+
+          <div className="request-actions-panel">
+            <label>
+              <span>OC</span>
+              <select value={selectedCharacterId} onChange={(event) => setSelectedCharacterId(event.target.value)}>
+                <option value="">Select an OC</option>
+                {characters.map((character: any) => (
+                  <option key={character.character_id} value={character.character_id}>
+                    {character.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Guild</span>
+              <input
+                value={signupForm.guild_name}
+                onChange={(event) => setSignupForm((current) => ({ ...current, guild_name: event.target.value }))}
+                placeholder="Guild name"
+              />
+            </label>
+
+            <label>
+              <span>BST</span>
+              <input
+                type="number"
+                value={signupForm.bst}
+                onChange={(event) => setSignupForm((current) => ({ ...current, bst: event.target.value }))}
+                placeholder="Total of all core stats"
+              />
+            </label>
+
+            <label>
+              <span>Other Active Missions</span>
+              <textarea
+                rows={2}
+                value={signupForm.other_active_missions}
+                onChange={(event) => setSignupForm((current) => ({ ...current, other_active_missions: event.target.value }))}
+                placeholder="List active missions or write None."
+              />
+            </label>
+
+            <label>
+              <span>Extra Note</span>
+              <textarea
+                rows={2}
+                value={signupForm.note}
+                onChange={(event) => setSignupForm((current) => ({ ...current, note: event.target.value }))}
+                placeholder="Optional."
+              />
+            </label>
+          </div>
+        </div>
+
+        {permissions?.is_staff ? (
+          <div className="card">
+            <span className="activity-type-label">Staff</span>
+            <h3>Create Mission</h3>
+            <div className="request-actions-panel">
+              <label>
+                <span>Title</span>
+                <input value={missionForm.title} onChange={(event) => setMissionForm((current) => ({ ...current, title: event.target.value }))} />
+              </label>
+
+              <label>
+                <span>Location</span>
+                <input value={missionForm.location} onChange={(event) => setMissionForm((current) => ({ ...current, location: event.target.value }))} />
+              </label>
+
+              <label>
+                <span>Difficulty</span>
+                <input value={missionForm.difficulty} onChange={(event) => setMissionForm((current) => ({ ...current, difficulty: event.target.value }))} />
+              </label>
+
+              <label>
+                <span>Party Size</span>
+                <input type="number" value={missionForm.party_size} onChange={(event) => setMissionForm((current) => ({ ...current, party_size: event.target.value }))} />
+              </label>
+
+              <label>
+                <span>Min BST</span>
+                <input type="number" value={missionForm.min_bst} onChange={(event) => setMissionForm((current) => ({ ...current, min_bst: event.target.value }))} />
+              </label>
+
+              <label>
+                <span>Max BST</span>
+                <input type="number" value={missionForm.max_bst} onChange={(event) => setMissionForm((current) => ({ ...current, max_bst: event.target.value }))} />
+              </label>
+
+              <label>
+                <span>Placement Rule</span>
+                <select value={missionForm.guild_policy} onChange={(event) => setMissionForm((current) => ({ ...current, guild_policy: event.target.value }))}>
+                  <option value="open">Open to all</option>
+                  <option value="priority">Priority guilds first 24 hours</option>
+                  <option value="restricted">Restricted guilds only</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Priority Guilds</span>
+                <input value={missionForm.priority_guilds} onChange={(event) => setMissionForm((current) => ({ ...current, priority_guilds: event.target.value }))} placeholder="Comma separated" />
+              </label>
+
+              <label>
+                <span>Restricted Guilds</span>
+                <input value={missionForm.restricted_guilds} onChange={(event) => setMissionForm((current) => ({ ...current, restricted_guilds: event.target.value }))} placeholder="Comma separated" />
+              </label>
+
+              <label>
+                <span>Bonus Pay</span>
+                <input value={missionForm.bonus_pay} onChange={(event) => setMissionForm((current) => ({ ...current, bonus_pay: event.target.value }))} placeholder="Example: +25% for Guild members" />
+              </label>
+
+              <label>
+                <span>Reward</span>
+                <textarea rows={2} value={missionForm.reward} onChange={(event) => setMissionForm((current) => ({ ...current, reward: event.target.value }))} />
+              </label>
+
+              <label>
+                <span>Description</span>
+                <textarea rows={4} value={missionForm.description} onChange={(event) => setMissionForm((current) => ({ ...current, description: event.target.value }))} />
+              </label>
+
+              <div className="actions">
+                <button onClick={createMission}>
+                  <ShieldCheck size={16} /> Create Mission
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="request-card-list">
+          {missions.length === 0 ? (
+            <div className="card request-empty-state">
+              <strong>No missions posted yet.</strong>
+              <p className="muted-text">Check back once staff posts mission openings.</p>
+            </div>
+          ) : null}
+
+          {missions.map((mission: any) => (
+            <div className="card request-review-card" key={mission.mission_id}>
+              <div className="request-review-top">
+                <div>
+                  <span className="activity-type-label">{mission.guild_policy || "open"} mission</span>
+                  <h3>{mission.title}</h3>
+                  <p className="muted-text">
+                    {mission.location || "Location TBA"} - {mission.difficulty || "Difficulty TBA"}
+                  </p>
+                </div>
+                <em className={`request-status-pill ${mission.status === "open" ? "approved" : "pending"}`}>
+                  {mission.status}
+                </em>
+              </div>
+
+              {mission.description ? <p>{mission.description}</p> : null}
+              {mission.reward ? <p><strong>Reward:</strong> {mission.reward}</p> : null}
+              {mission.bonus_pay ? <p><strong>Bonus Pay:</strong> {mission.bonus_pay}</p> : null}
+
+              <div className="request-meta-grid">
+                <div><span>Party Size</span><strong>{mission.party_size || "—"}</strong></div>
+                <div><span>BST Range</span><strong>{mission.min_bst || "—"} - {mission.max_bst || "—"}</strong></div>
+                <div><span>Priority</span><strong>{guildList(mission.priority_guilds) || "None"}</strong></div>
+                <div><span>Restricted</span><strong>{guildList(mission.restricted_guilds) || "None"}</strong></div>
+              </div>
+
+              <div className="actions">
+                <button onClick={() => signup(mission.mission_id)}>
+                  <Send size={16} /> Sign Up
+                </button>
+
+                {permissions?.is_staff ? (
+                  <button className="ghost" onClick={() => { setSelectedMissionId(mission.mission_id); loadSignups(mission.mission_id); }}>
+                    <ClipboardList size={16} /> View Signups
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {permissions?.is_staff && selectedMissionId ? (
+          <div className="card">
+            <h3>Mission Signups</h3>
+            <div className="request-card-list">
+              {signups.length === 0 ? <p className="muted-text">No signups for this mission yet.</p> : null}
+              {signups.map((signup: any) => (
+                <div className="request-note-block" key={signup.signup_id}>
+                  <span>{signup.character_name} - {signup.guild_name} - BST {signup.bst} - {signup.placement_group}</span>
+                  <p>Other active missions: {signup.other_active_missions || "None listed."}</p>
+                  <p>Status: {signup.status}</p>
+                  <div className="actions">
+                    <button onClick={() => updateSignupStatus(signup.signup_id, "accepted")}>Accept</button>
+                    <button className="ghost" onClick={() => updateSignupStatus(signup.signup_id, "waitlisted")}>Waitlist</button>
+                    <button className="danger-button" onClick={() => updateSignupStatus(signup.signup_id, "denied")}>Deny</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </section>
     </RequireDiscord>
   );
