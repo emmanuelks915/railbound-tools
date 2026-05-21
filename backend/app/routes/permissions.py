@@ -23,6 +23,7 @@ PLAYER_TABS = [
     "shops",
     "shop_owner",
     "rp",
+    "missions",
 ]
 
 
