@@ -5216,6 +5216,40 @@ function MissionBoardDashboard({
 }
 
 
+function isOriginTraitFreeSkillRequest(request: any) {
+  const raw = request?.raw || {};
+  const haystack = [
+    request?.reason,
+    request?.staff_note,
+    request?.summary,
+    request?.title,
+    raw?.request_source,
+    raw?.source,
+    raw?.source_type,
+    raw?.submitter_note,
+    raw?.reason,
+    raw?.notes,
+    raw?.note,
+    raw?.staff_note,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return [
+    "origin / trait free skill",
+    "origin/trait free skill",
+    "origin trait free skill",
+    "trait free skill",
+    "free skill choice",
+    "free skill request",
+    "trait benefit",
+    "origin benefit",
+    "registration free skill",
+    "submitted for staff review after registration",
+  ].some((marker) => haystack.includes(marker));
+}
+
 function StaffQueue({ discordId }: { discordId: string }) {
   const [requests, setRequests] = useState<any[]>([]);
   const [message, setMessage] = useState("");
@@ -6008,6 +6042,13 @@ function StaffQueue({ discordId }: { discordId: string }) {
 
                 {pending ? (
                   <div className="request-actions-panel">
+                    {request.request_type === "skill" && isOriginTraitFreeSkillRequest(request) ? (
+                      <div className="request-note-block">
+                        <span>Free Origin / Trait Skill</span>
+                        <p>Keystone will approve this as a 0 XP staff override even if staff clicks plain Approve.</p>
+                      </div>
+                    ) : null}
+
                     {request.request_type === "skill" ? (
                       <div className="skill-override-panel">
                         <label className="skill-override-check">

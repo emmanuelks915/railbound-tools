@@ -364,6 +364,46 @@ def get_request_queue(
     }
 
 
+# --- Origin / Trait Free Skill Guardrail v1 ---
+
+def _is_origin_trait_free_skill_request(row: dict[str, Any]) -> bool:
+    haystack = " ".join(
+        str(row.get(key) or "")
+        for key in (
+            "request_source",
+            "source",
+            "source_type",
+            "submitter_note",
+            "reason",
+            "notes",
+            "note",
+            "staff_note",
+            "override_reason",
+        )
+    ).lower()
+
+    positive_markers = (
+        "origin / trait free skill",
+        "origin/trait free skill",
+        "origin trait free skill",
+        "trait free skill",
+        "free skill choice",
+        "free skill request",
+        "trait benefit",
+        "origin benefit",
+        "registration free skill",
+        "submitted for staff review after registration",
+    )
+
+    return any(marker in haystack for marker in positive_markers)
+
+
+def _origin_trait_free_skill_note(existing_note: str | None = None) -> str:
+    note = str(existing_note or "").strip()
+    if note:
+        return note
+    return "Origin / trait free skill choice approved. No XP charged."
+
 # --- Skill Purchase Approval Apply v1 ---
 
 def _apply_skill_purchase_approval(
@@ -384,7 +424,25 @@ def _apply_skill_purchase_approval(
     if not character_id or not skill_key:
         raise HTTPException(status_code=400, detail="Skill request is missing character or skill.")
 
+    auto_free_skill = _is_origin_trait_free_skill_request(request_row)
+    if auto_free_skill:
+        staff_override = True
+        staff_note = _origin_trait_free_skill_note(
+            staff_note or request_row.get("staff_note") or request_row.get("submitter_note")
+        )
+
     cost, discount_meta = _adjust_skill_purchase_cost(sb, character_id, skill_key, original_cost)
+
+    if auto_free_skill:
+        cost = 0
+        discount_meta = {
+            **(discount_meta or {}),
+            "discount_applied": True,
+            "base_cost": original_cost,
+            "final_cost": 0,
+            "discount_reason": "Origin / trait free skill choice.",
+            "auto_free_skill_guardrail": True,
+        }
 
     existing = sb_data(
         sb.table("oc_skills")
@@ -411,7 +469,7 @@ def _apply_skill_purchase_approval(
     available_xp = int((wallet or {}).get("available_xp") or 0)
     spent_xp = int((wallet or {}).get("total_spent_xp") or 0)
 
-    if not staff_override and available_xp < cost:
+    if not staff_override and cost > 0 and available_xp < cost:
         raise HTTPException(status_code=400, detail=f"OC does not have enough XP. Available: {available_xp}, cost: {cost}.")
 
     new_available = available_xp - cost if not staff_override else available_xp
@@ -462,6 +520,11 @@ def _apply_skill_purchase_approval(
         "actor_discord_id": actor_discord_id,
         "notes": staff_note or (
             discount_meta.get("discount_reason")
+            or (
+                "Origin / trait free skill choice approved. No XP charged."
+                if discount_meta.get("auto_free_skill_guardrail")
+                else None
+            )
             or ("Staff override approval." if staff_override else "Skill purchase approved.")
         ),
     }).execute()
@@ -505,7 +568,12 @@ def approve_request(
                     request_row,
                     int(actor_discord_id),
                     update_payload.get("staff_note") or update_payload.get("note"),
-                    bool(payload.get("staff_override") or payload.get("override_requirements") or payload.get("bypass_requirements")),
+                    bool(
+                    payload.get("staff_override")
+                    or payload.get("override_requirements")
+                    or payload.get("bypass_requirements")
+                    or _is_origin_trait_free_skill_request(request_row)
+                ),
                     already_reviewed=was_already_approved,
                 )
 
@@ -556,7 +624,11 @@ def approve_request(
             "request_id": request_id,
             "request_type": request_type,
             "table": table,
-            "staff_override": bool(payload.get("override_requirements") or payload.get("staff_override")),
+            "staff_override": bool(
+                payload.get("override_requirements")
+                or payload.get("staff_override")
+                or (request_type == "skill" and _is_origin_trait_free_skill_request(row))
+            ),
             "override_reason": payload.get("override_reason"),
         },
         webhook_title=f"✅ {request_type.title()} Request Approved",
