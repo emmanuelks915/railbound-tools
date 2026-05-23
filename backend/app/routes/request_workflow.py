@@ -525,7 +525,7 @@ def _apply_skill_purchase_approval(
                 if discount_meta.get("auto_free_skill_guardrail")
                 else None
             )
-            or ("Staff override approval." if staff_override else "Skill purchase approved.")
+            or ("Origin / trait free skill approved. No XP charged." if auto_free_skill else ("Staff override approval." if staff_override else "Skill purchase approved."))
         ),
     }).execute()
 
@@ -563,6 +563,7 @@ def approve_request(
                 original_rows = sb_data(sb.table(table).select("*").eq(id_column, request_id).limit(1).execute()) or []
                 request_row = original_rows[0] if original_rows else None
             if request_row:
+                request_row = {**row, **request_row}
                 _apply_skill_purchase_approval(
                     sb,
                     request_row,
@@ -601,12 +602,19 @@ def approve_request(
             original_rows = sb_data(sb.table(table).select("*").eq(id_column, request_id).limit(1).execute()) or []
             request_row = original_rows[0] if original_rows else None
         if request_row:
+            request_row = {**row, **request_row}
             _apply_skill_purchase_approval(
                 sb,
                 request_row,
                 int(staff_id),
                 update_payload.get("staff_note") or update_payload.get("note"),
-                bool(payload.get("staff_override") or payload.get("override_requirements") or payload.get("bypass_requirements")),
+                bool(
+                    payload.get("staff_override")
+                    or payload.get("override_requirements")
+                    or payload.get("bypass_requirements")
+                    or _is_origin_trait_free_skill_request(request_row)
+                    or _is_origin_trait_free_skill_request(row)
+                ),
                 already_reviewed=was_already_approved,
             )
 
