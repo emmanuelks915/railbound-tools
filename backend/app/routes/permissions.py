@@ -24,6 +24,7 @@ PLAYER_TABS = [
     "shop_owner",
     "rp",
     "missions",
+    "companion",
 ]
 
 

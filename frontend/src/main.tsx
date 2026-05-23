@@ -21,7 +21,7 @@ type CoreStats = {
   mana: number;
 };
 
-type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "missions" | "staff" | "combat" | "registry" | "register" | "manage_oc" | "qa" | "shop_owner";
+type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "missions" | "companion" | "staff" | "combat" | "registry" | "register" | "manage_oc" | "qa" | "shop_owner";
 
 const STAT_LABELS: Record<keyof CoreStats, string> = {
   strength: "Strength",
@@ -67,6 +67,7 @@ function App() {
   const [authUser, setAuthUser] = useState<any>(null);
   const [discordId, setDiscordId] = useState(() => localStorage.getItem("railbound_discord_id") || "");
   const [selectedCharacterId, setSelectedCharacterId] = useState(() => localStorage.getItem("railbound_character_id") || "");
+  const [hasLoyalCompanion, setHasLoyalCompanion] = useState(false);
   useEffect(() => {
     // Root Cause OC Ghost Fix v1: clear stored selected OC when Discord account changes.
     const previousDiscordId = localStorage.getItem("railbound_last_discord_id") || "";
@@ -85,7 +86,8 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem("railbound_character_id", selectedCharacterId);
-  }, [selectedCharacterId]);
+    loadSelectedCompanionEligibility(selectedCharacterId).catch(() => {});
+  }, [selectedCharacterId, discordId]);
 
   useEffect(() => {
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
@@ -111,6 +113,20 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function loadSelectedCompanionEligibility(characterId = selectedCharacterId) {
+    if (!discordId || !characterId) {
+      setHasLoyalCompanion(false);
+      return;
+    }
+
+    try {
+      const data = await apiFetch(`/api/companions/${characterId}`, {}, discordId);
+      setHasLoyalCompanion(Boolean(data?.eligible));
+    } catch {
+      setHasLoyalCompanion(false);
+    }
+  }
+
   function loginWithDiscord() {
     window.location.href = `${API_BASE}/api/auth/discord/login`;
   }
@@ -135,6 +151,7 @@ function App() {
     ["inventory", Package, "Inventory"],
     ["rp", ClipboardList, "RP Hub"],
     ["missions", ClipboardList, "Missions"],
+    ["companion", Sparkles, "Companion"],
     ["shops", Store, "Shops"],
     ["shop_owner", Store, "Manage Shop"],
     ["activity", ClipboardList, "Activity"],
@@ -220,7 +237,7 @@ return (
       </section>
 
       <nav className="tabs">
-        {tabs.filter(([key]) => canUseTab(permissions, key as Tab))
+        {tabs.filter(([key]) => canUseTab(permissions, key as Tab) && (key !== "companion" || hasLoyalCompanion))
             .map(([key, Icon, label]) => (
           <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>
             <Icon size={18} /> {label}
@@ -247,6 +264,7 @@ return (
       {tab === "skills" && <SkillsDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "rp" && <RpHubDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "missions" && <MissionBoardDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "companion" && <CompanionDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "register" && <OCRegistrationDashboard discordId={discordId} jump={setTab} />}
       {tab === "registry" && <OCRegistry discordId={discordId} />}
       {tab === "staff" && <StaffOnly discordId={discordId}><StaffQueue discordId={discordId} /></StaffOnly>}
@@ -4769,6 +4787,140 @@ function RpHubDashboard({
 
 
 
+function CompanionDashboard({
+  discordId,
+  selectedCharacterId,
+  setSelectedCharacterId,
+}: {
+  discordId: string;
+  selectedCharacterId: string;
+  setSelectedCharacterId: (id: string) => void;
+}) {
+  const [data, setData] = useState<any>(null);
+  const [form, setForm] = useState<any>({
+    beast_name: "",
+    beast_type: "utility",
+    description: "",
+    image_url: "",
+    xp: 0,
+    base_strength: 5,
+    base_dexterity: 5,
+    base_stamina: 5,
+    base_magic_affinity: 5,
+    base_mana: 5,
+    current_skills: "",
+    notes: "",
+  });
+  const [message, setMessage] = useState("");
+
+  async function loadCompanion(characterId = selectedCharacterId) {
+    setMessage("");
+    if (!characterId) return;
+    const result = await apiFetch(`/api/companions/${characterId}`, {}, discordId);
+    setData(result);
+    setForm((current: any) => ({ ...current, ...(result.beast || {}) }));
+  }
+
+  useEffect(() => {
+    if (discordId && selectedCharacterId) {
+      loadCompanion(selectedCharacterId).catch((error) => setMessage(error.message));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId, selectedCharacterId]);
+
+  async function saveCompanion() {
+    setMessage("");
+    try {
+      const result = await apiFetch(
+        `/api/companions/${selectedCharacterId}`,
+        { method: "PUT", body: JSON.stringify(form) },
+        discordId
+      );
+      setMessage(result.message || "Source Beast saved.");
+      await loadCompanion(selectedCharacterId);
+    } catch (error: any) {
+      setMessage(error.message || "Could not save Source Beast.");
+    }
+  }
+
+  const computed = data?.computed_stats || {};
+  const rules = data?.type_rules || {};
+
+  return (
+    <RequireDiscord discordId={discordId}>
+      <section className="request-workflow-page">
+        <div className="card request-workflow-hero">
+          <div>
+            <span className="activity-type-label">Loyal Companion</span>
+            <h2>Source Beast</h2>
+            <p className="muted-text">
+              This tab only appears for OCs with the Loyal Companion trait. Track beast type, XP, base stats, modified stats, and current skills.
+            </p>
+          </div>
+          <button className="ghost" onClick={() => loadCompanion()}>
+            <RefreshCw size={16} /> Refresh
+          </button>
+        </div>
+
+        <CharacterSelect discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />
+        {message ? <p className="message">{message}</p> : null}
+
+        {data && !data.eligible ? (
+          <div className="card">
+            <h3>No Loyal Companion Trait Detected</h3>
+            <p className="muted-text">This OC does not currently have the Loyal Companion trait, so Source Beast editing is locked.</p>
+          </div>
+        ) : null}
+
+        {data?.eligible ? (
+          <>
+            <div className="card">
+              <span className="activity-type-label">Companion Profile</span>
+              <h3>Beast Details</h3>
+              <div className="request-actions-panel">
+                <label><span>Source Beast Name</span><input value={form.beast_name || ""} onChange={(event) => setForm((current: any) => ({ ...current, beast_name: event.target.value }))} placeholder="Example: Vespera" /></label>
+                <label><span>Beast Type</span><select value={form.beast_type || "utility"} onChange={(event) => setForm((current: any) => ({ ...current, beast_type: event.target.value }))}><option value="combat">Combat</option><option value="mount">Mount</option><option value="utility">Utility</option></select></label>
+                <label><span>Beast XP</span><input type="number" min="0" value={form.xp ?? 0} onChange={(event) => setForm((current: any) => ({ ...current, xp: Number(event.target.value) }))} /></label>
+                <label><span>Image URL</span><input value={form.image_url || ""} onChange={(event) => setForm((current: any) => ({ ...current, image_url: event.target.value }))} placeholder="Optional image link" /></label>
+                <label><span>Description</span><textarea rows={5} value={form.description || ""} onChange={(event) => setForm((current: any) => ({ ...current, description: event.target.value }))} placeholder="Describe the Source Beast, appearance, behavior, and role." /></label>
+                <label><span>Current Beast Skills</span><textarea rows={4} value={form.current_skills || ""} onChange={(event) => setForm((current: any) => ({ ...current, current_skills: event.target.value }))} placeholder="Example: None yet, or list beast skills." /></label>
+              </div>
+            </div>
+
+            <div className="card">
+              <span className="activity-type-label">Stats</span>
+              <h3>Base + Modified Stats</h3>
+              <p className="muted-text">Base stats default to 5. Keystone adds 10% of the OC stat as the passive modifier.</p>
+              <div className="request-meta-grid">
+                {[["strength", "Strength"], ["dexterity", "Dexterity"], ["stamina", "Stamina"], ["magic_affinity", "Magic Affinity"], ["mana", "Mana"]].map(([key, label]) => (
+                  <div key={key}>
+                    <span>{label}</span>
+                    <input type="number" min="0" value={form[`base_${key}`] ?? 5} onChange={(event) => setForm((current: any) => ({ ...current, [`base_${key}`]: Number(event.target.value) }))} />
+                    <strong>Final: {computed[key]?.final ?? "—"} <small className="muted-text">({computed[key]?.base ?? form[`base_${key}`] ?? 5} + {computed[key]?.modifier ?? 0})</small></strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="card">
+              <span className="activity-type-label">Type Rules</span>
+              <h3>Skill Limits</h3>
+              <div className="request-meta-grid">
+                <div><span>Combat Tier Max</span><strong>{rules.combat ?? "—"}</strong></div>
+                <div><span>Mount Tier Max</span><strong>{rules.mount ?? "—"}</strong></div>
+                <div><span>Utility Tier Max</span><strong>{rules.utility ?? "—"}</strong></div>
+                <div><span>Own-Type Cap</span><strong>{rules.own_type_skill_cap_per_tier ?? 3} / tier</strong></div>
+                <div><span>Non-Type Cap</span><strong>{rules.non_type_skill_cap_per_tier ?? 2} / tier</strong></div>
+              </div>
+              <label><span>Notes</span><textarea rows={4} value={form.notes || ""} onChange={(event) => setForm((current: any) => ({ ...current, notes: event.target.value }))} placeholder="Any staff notes, sheet notes, beast type confirmation, or companion details." /></label>
+              <div className="actions"><button onClick={saveCompanion}><Save size={16} /> Save Source Beast</button></div>
+            </div>
+          </>
+        ) : null}
+      </section>
+    </RequireDiscord>
+  );
+}
 function MissionBoardDashboard({
   discordId,
   selectedCharacterId,
