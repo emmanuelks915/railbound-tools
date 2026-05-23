@@ -127,6 +127,20 @@ function App() {
     }
   }
 
+  async function loadAccountCompanionEligibility() {
+    if (!discordId) {
+      setHasLoyalCompanion(false);
+      return;
+    }
+
+    try {
+      const data = await apiFetch("/api/companions/eligibility", {}, discordId);
+      setHasLoyalCompanion(Boolean(data?.eligible));
+    } catch {
+      setHasLoyalCompanion(false);
+    }
+  }
+
   function loginWithDiscord() {
     window.location.href = `${API_BASE}/api/auth/discord/login`;
   }
