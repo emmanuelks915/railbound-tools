@@ -1,0 +1,201 @@
+/* ============================================================
+   railbound_enhance2.css — Visual Polish v2
+   Uses your actual class names: .item-card, .request-card,
+   .stat-strip, .summary, .list-button, .tabs, .item-list
+   Append to the END of styles.css
+   ============================================================ */
+
+@keyframes rb-fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes rb-scaleIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes rb-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes rb-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(47, 111, 115, 0.5); }
+  60%       { box-shadow: 0 0 0 7px rgba(47, 111, 115, 0); }
+}
+@keyframes rb-shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap');
+
+h1 {
+  font-family: 'Syne', sans-serif !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.025em !important;
+}
+
+.hero {
+  animation: rb-scaleIn 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  transition: box-shadow 0.3s ease !important;
+}
+.hero:hover {
+  box-shadow: 0 30px 80px rgba(45, 36, 30, 0.18) !important;
+}
+
+.tabs button {
+  transition: background 0.18s ease, color 0.18s ease,
+              transform 0.15s ease, box-shadow 0.18s ease !important;
+}
+.tabs button:hover:not(:disabled):not(.active) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(45, 36, 30, 0.1) !important;
+}
+.tabs button.active {
+  box-shadow: 0 4px 16px rgba(47, 111, 115, 0.35) !important;
+}
+
+button:not(:disabled) {
+  transition: background 0.18s ease, color 0.18s ease,
+              transform 0.15s ease, box-shadow 0.18s ease !important;
+}
+button:not(.ghost):not(.danger):not(.list-button):hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(47, 111, 115, 0.32) !important;
+}
+button:not(.ghost):not(.danger):not(.list-button):active:not(:disabled) {
+  transform: scale(0.97) !important;
+  box-shadow: none !important;
+}
+button.ghost:hover:not(:disabled) {
+  background: #e3d5c5 !important;
+  transform: translateY(-1px);
+}
+button.danger:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(156, 61, 61, 0.32) !important;
+}
+
+.card {
+  animation: rb-fadeUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  transition: box-shadow 0.25s ease, transform 0.25s ease !important;
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 24px 64px rgba(45, 36, 30, 0.16) !important;
+}
+
+.item-card,
+.request-card {
+  border-left: 3px solid transparent;
+  animation: rb-fadeUp 0.35s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  transition: transform 0.2s ease, box-shadow 0.2s ease,
+              border-color 0.2s ease !important;
+}
+.item-card:hover,
+.request-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 30px rgba(45, 36, 30, 0.13) !important;
+  border-color: rgba(47, 111, 115, 0.25) !important;
+}
+
+.item-card:has(.good), .request-card:has(.good) { border-left-color: #2f8f5b !important; }
+.item-card:has(.bad),  .request-card:has(.bad)  { border-left-color: #a63434 !important; }
+
+.item-card.owned,       .request-card.owned       { border-left-color: #2f8f5b !important; }
+.item-card.requestable, .request-card.requestable { border-left-color: #2f6f73 !important; }
+.item-card.pending,     .request-card.pending     { border-left-color: #a07830 !important; }
+.item-card.locked,      .request-card.locked      { border-left-color: #c4b8a8 !important; opacity: 0.8; }
+.item-card.need-xp,     .request-card.need-xp    { border-left-color: #a63434 !important; }
+
+.item-list > *:nth-child(1)  { animation-delay: 0.04s; }
+.item-list > *:nth-child(2)  { animation-delay: 0.08s; }
+.item-list > *:nth-child(3)  { animation-delay: 0.12s; }
+.item-list > *:nth-child(4)  { animation-delay: 0.16s; }
+.item-list > *:nth-child(5)  { animation-delay: 0.20s; }
+.item-list > *:nth-child(6)  { animation-delay: 0.24s; }
+.item-list > *:nth-child(7)  { animation-delay: 0.28s; }
+.item-list > *:nth-child(8)  { animation-delay: 0.32s; }
+.item-list > *:nth-child(9)  { animation-delay: 0.36s; }
+.item-list > *:nth-child(10) { animation-delay: 0.40s; }
+
+.summary div {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+.summary div::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #2f6f73, #2f8f5b);
+  border-radius: 3px 3px 0 0;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.summary div:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(45, 36, 30, 0.11); }
+.summary div:hover::before { opacity: 1; }
+
+.stat-strip {
+  animation: rb-fadeUp 0.35s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  transition: box-shadow 0.2s ease, transform 0.2s ease !important;
+}
+.stat-strip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(47, 111, 115, 0.18) !important;
+}
+
+.list-button {
+  transition: background 0.15s ease, transform 0.15s ease,
+              border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+.list-button:hover:not(:disabled):not(.selected) {
+  background: #f0e4d4 !important;
+  transform: translateX(3px);
+  border-color: rgba(47, 111, 115, 0.2) !important;
+}
+.list-button.selected {
+  box-shadow: 0 4px 14px rgba(47, 111, 115, 0.28) !important;
+}
+
+input, select, textarea {
+  transition: border-color 0.18s ease, box-shadow 0.18s ease !important;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: #2f6f73 !important;
+  box-shadow: 0 0 0 3px rgba(47, 111, 115, 0.14) !important;
+  outline: none !important;
+}
+
+.spin { animation: rb-spin 0.75s linear infinite !important; display: inline-block; }
+
+.live-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #2f8f5b;
+  animation: rb-pulse 2s ease-in-out infinite;
+  vertical-align: middle;
+  margin-right: 5px;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #efe4d7 25%, #fdf6ee 50%, #efe4d7 75%);
+  background-size: 600px 100%;
+  animation: rb-shimmer 1.4s ease-in-out infinite;
+  border-radius: 8px;
+  color: transparent !important;
+  pointer-events: none;
+}
+
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f6efe4; }
+::-webkit-scrollbar-thumb { background: #d4c4b0; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #b8a898; }
+
+@media (hover: none) {
+  .card:hover, .item-card:hover, .request-card:hover, button:hover {
+    transform: none !important;
+    box-shadow: inherit !important;
+  }
+}
