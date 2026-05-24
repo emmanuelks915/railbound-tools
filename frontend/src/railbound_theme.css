@@ -1,15 +1,15 @@
-/* ============================================================
-   railbound_theme.css — Full Visual Overhaul
+﻿/* ============================================================
+   railbound_theme.css â€” Full Visual Overhaul
    Append to your main CSS file (index.css or App.css)
    Or import it: @import './railbound_theme.css';
    ============================================================ */
 
-/* ── Google Fonts ─────────────────────────────────────────── */
+/* â”€â”€ Google Fonts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;1,9..40,400&display=swap');
 
-/* ── Design Tokens ────────────────────────────────────────── */
+/* â”€â”€ Design Tokens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 :root {
-  /* Brand palette — pulled from your webhook colors */
+  /* Brand palette â€” pulled from your webhook colors */
   --rb-teal:         #2F6F73;
   --rb-teal-light:   #3d8f94;
   --rb-teal-muted:   #1d4f52;
@@ -48,7 +48,7 @@
   --ease-spring:     cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* ── Base Reset ───────────────────────────────────────────── */
+/* â”€â”€ Base Reset â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 *, *::before, *::after {
   box-sizing: border-box;
 }
@@ -62,7 +62,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── Navigation / Top Bar ─────────────────────────────────── */
+/* â”€â”€ Navigation / Top Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .nav,
 header,
 .topbar {
@@ -176,7 +176,7 @@ nav a:hover:not(.active),
   border-color: var(--rb-teal-light);
 }
 
-/* ── Page Layout ──────────────────────────────────────────── */
+/* â”€â”€ Page Layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .page-body,
 .dashboard-body,
 main {
@@ -185,7 +185,7 @@ main {
   margin: 0 auto;
 }
 
-/* ── Stat / Summary Cards ─────────────────────────────────── */
+/* â”€â”€ Stat / Summary Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .stat-row,
 .summary-grid {
   display: grid;
@@ -285,7 +285,7 @@ main {
   color: var(--rb-text);
 }
 
-/* ── Cards ────────────────────────────────────────────────── */
+/* â”€â”€ Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .card {
   background: var(--rb-surface);
   border: 1px solid var(--rb-border);
@@ -336,7 +336,7 @@ main {
   background: var(--rb-border);
 }
 
-/* ── Grid Layouts ─────────────────────────────────────────── */
+/* â”€â”€ Grid Layouts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .grid,
 .activity-grid {
   display: grid;
@@ -355,7 +355,7 @@ main {
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
 }
 
-/* ── Pills / Badges ───────────────────────────────────────── */
+/* â”€â”€ Pills / Badges â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .pill {
   display: inline-flex;
   align-items: center;
@@ -371,7 +371,7 @@ main {
   transition: all 0.15s;
 }
 
-/* Default pill — teal */
+/* Default pill â€” teal */
 .pill {
   background: var(--rb-teal-glow);
   color: var(--rb-teal-light);
@@ -402,7 +402,7 @@ main {
   border-color: rgba(160, 120, 48, 0.3);
 }
 
-/* ── Activity / Timeline Cards ────────────────────────────── */
+/* â”€â”€ Activity / Timeline Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .item-list,
 .activity-list {
   display: flex;
@@ -441,7 +441,7 @@ main {
   margin-bottom: 2px;
 }
 
-/* Timeline dot — left accent */
+/* Timeline dot â€” left accent */
 .activity-card::before {
   content: '';
   width: 8px;
@@ -492,7 +492,7 @@ main {
 .activity-status.good { color: #5bc47a; }
 .activity-status.bad  { color: #c45b5b; }
 
-/* ── Skills Cards ─────────────────────────────────────────── */
+/* â”€â”€ Skills Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .skill-grid,
 .item-list.skill-grid {
   display: grid;
@@ -679,7 +679,7 @@ main {
   transition: width 0.8s var(--ease-out);
 }
 
-/* ── Actions Row ──────────────────────────────────────────── */
+/* â”€â”€ Actions Row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .actions {
   display: flex;
   gap: 0.5rem;
@@ -688,7 +688,7 @@ main {
   flex-wrap: wrap;
 }
 
-/* ── Buttons ──────────────────────────────────────────────── */
+/* â”€â”€ Buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 button {
   font-family: var(--font-body);
   font-size: 13px;
@@ -765,7 +765,7 @@ button:disabled {
   color: var(--rb-teal-light);
 }
 
-/* ── Form Elements ────────────────────────────────────────── */
+/* â”€â”€ Form Elements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 input[type="text"],
 input[type="search"],
 input[type="number"],
@@ -812,7 +812,7 @@ label {
   gap: 5px;
 }
 
-/* ── Messages / Alerts ────────────────────────────────────── */
+/* â”€â”€ Messages / Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .message,
 p.message {
   font-size: 13px;
@@ -837,7 +837,7 @@ p.message {
   color: #5bc47a;
 }
 
-/* ── Muted / Helper Text ──────────────────────────────────── */
+/* â”€â”€ Muted / Helper Text â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .muted-text,
 p.muted-text {
   font-size: 12px;
@@ -845,7 +845,7 @@ p.muted-text {
   line-height: 1.5;
 }
 
-/* ── Skill Request History ────────────────────────────────── */
+/* â”€â”€ Skill Request History â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .skill-request-history {
   margin-top: 1.25rem;
   padding-top: 1rem;
@@ -862,7 +862,7 @@ p.muted-text {
   margin-bottom: 0.6rem;
 }
 
-/* ── Animations ───────────────────────────────────────────── */
+/* â”€â”€ Animations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -892,12 +892,12 @@ p.muted-text {
   display: inline-block;
 }
 
-/* ── Skill Catalog Card Wrapper ───────────────────────────── */
+/* â”€â”€ Skill Catalog Card Wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .skills-catalog-card {
   animation: fadeIn 0.4s var(--ease-out) both;
 }
 
-/* ── RP Hub Styles ────────────────────────────────────────── */
+/* â”€â”€ RP Hub Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .rp-scene-card {
   background: var(--rb-surface2);
   border: 1px solid var(--rb-border);
@@ -919,13 +919,13 @@ p.muted-text {
   opacity: 0.75;
 }
 
-/* ── Scrollbar ────────────────────────────────────────────── */
+/* â”€â”€ Scrollbar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--rb-bg); }
 ::-webkit-scrollbar-thumb { background: var(--rb-border2); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--rb-border3); }
 
-/* ── Responsive ───────────────────────────────────────────── */
+/* â”€â”€ Responsive â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @media (max-width: 768px) {
   .stat-row, .summary-grid { grid-template-columns: repeat(2, 1fr); }
   .skill-grid { grid-template-columns: 1fr; }
@@ -937,4 +937,5 @@ p.muted-text {
   .stat-row, .summary-grid { grid-template-columns: 1fr; }
   .skill-toolbar { flex-direction: column; }
 }
-</style>
+
+
