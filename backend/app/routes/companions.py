@@ -71,6 +71,48 @@ def _computed(b,s):
 def _int(p,k,d=5):
     try: return max(0,int(p.get(k,d)))
     except Exception: return d
+@router.get("/eligibility")
+def companion_eligibility(actor_discord_id: int | None = Depends(actor_from_header)):
+    actor = _require_login(actor_discord_id)
+    sb = get_supabase()
+
+    character_rows = _safe_rows(
+        sb.table("characters")
+        .select("*")
+        .eq("guild_id", get_guild_id())
+        .eq("user_id", str(actor))
+        .limit(300)
+    )
+
+    if not character_rows:
+        character_rows = _safe_rows(
+            sb.table("characters")
+            .select("*")
+            .eq("user_id", str(actor))
+            .limit(300)
+        )
+
+    eligible_characters = []
+
+    for character in character_rows:
+        cid = str(character.get("character_id") or "")
+        if not cid:
+            continue
+
+        guild_id = int(character.get("guild_id") or get_guild_id())
+        traits = _trait_rows(sb, cid, guild_id)
+
+        if _has_loyal_companion(traits):
+            eligible_characters.append({
+                "character_id": cid,
+                "name": character.get("name"),
+            })
+
+    return {
+        "eligible": bool(eligible_characters),
+        "eligible_characters": eligible_characters,
+    }
+
 @router.get("/{character_id}")
 def get_companion(character_id: UUID, actor_discord_id:int|None=Depends(actor_from_header)):
     a=_actor(actor_discord_id); sb=get_supabase(); cid=str(character_id); c=_char(sb,cid)
