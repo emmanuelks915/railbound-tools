@@ -4339,3 +4339,40 @@ table {
 .permission-required-card {
   display: none !important;
 }
+
+
+/* railbound_improvements.css — already appended */
+/*
+  railbound_improvements.css
+  ===========================
+  Append this to your main CSS file (or import it in your app).
+  Adds the loading spinner animation for the Refresh button.
+
+  Run the patch script and it will handle appending this for you,
+  OR manually add it to your stylesheet.
+*/
+
+/* Spinning animation for the Refresh icon when loading */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+/* Disabled button state */
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Load More button centering */
+.activity-load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+}
+

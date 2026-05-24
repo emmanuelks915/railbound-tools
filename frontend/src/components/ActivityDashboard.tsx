@@ -3,22 +3,37 @@ function ActivityDashboard({ discordId }: { discordId: string }) {
   const [totals, setTotals] = useState<any>({});
   const [message, setMessage] = useState("");
   const [kindFilter, setKindFilter] = useState("all");
+  const [loading, setLoading] = useState(false);
+  const [limit, setLimit] = useState(80);
 
-  async function load() {
+  async function load(currentLimit = limit) {
     setMessage("");
-
-    const data = await apiFetch("/api/activity/recent?limit=120", {}, discordId);
-
-    setActivities(data.activities || []);
-    setTotals(data.totals || {});
+    setLoading(true);
+    try {
+      const data = await apiFetch(`/api/activity/recent?limit=${currentLimit}`, {}, discordId);
+      setActivities(data.activities || []);
+      setTotals(data.totals || {});
+    } catch (error: any) {
+      setMessage(error.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
     if (discordId) {
-      load().catch((error) => setMessage(error.message));
+      load();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discordId]);
+
+  // Re-fetch when limit changes (triggered by Load More)
+  useEffect(() => {
+    if (discordId && limit > 80) {
+      load(limit);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [limit]);
 
   const visibleActivities = activities.filter((activity) => {
     if (kindFilter === "all") return true;
@@ -36,28 +51,19 @@ function ActivityDashboard({ discordId }: { discordId: string }) {
     return date.toLocaleString();
   }
 
+  const GOOD_STATUSES = new Set(["approved", "paid", "active", "published", "complete", "completed"]);
+  const BAD_STATUSES = new Set(["denied", "rejected", "error", "failed", "cancelled", "canceled"]);
+
   function statusClass(status: string | undefined) {
     const normalized = String(status || "").toLowerCase();
-
-    if (
-      normalized.includes("approved") ||
-      normalized.includes("paid") ||
-      normalized.includes("active") ||
-      normalized.includes("published")
-    ) {
-      return "good";
-    }
-
-    if (
-      normalized.includes("denied") ||
-      normalized.includes("rejected") ||
-      normalized.includes("error") ||
-      normalized.includes("failed")
-    ) {
-      return "bad";
-    }
-
+    if (GOOD_STATUSES.has(normalized)) return "good";
+    if (BAD_STATUSES.has(normalized)) return "bad";
     return "";
+  }
+
+  function handleLoadMore() {
+    const next = Math.min(limit + 80, 250);
+    setLimit(next);
   }
 
   return (
@@ -71,9 +77,9 @@ function ActivityDashboard({ discordId }: { discordId: string }) {
                 Staff-facing timeline of approvals, shop listings, RP XP claims, and tool activity.
               </p>
             </div>
-
-            <button className="ghost" onClick={load}>
-              <RefreshCw size={16} /> Refresh
+            <button className="ghost" onClick={() => load()} disabled={loading}>
+              <RefreshCw size={16} className={loading ? "spin" : ""} />
+              {loading ? "Loading..." : "Refresh"}
             </button>
           </div>
 
@@ -93,7 +99,6 @@ function ActivityDashboard({ discordId }: { discordId: string }) {
               <strong>{totals.shop_listings ?? 0}</strong>
             </div>
           </div>
-
           <div className="summary">
             <div>
               <span>RP Claims</span>
@@ -123,9 +128,14 @@ function ActivityDashboard({ discordId }: { discordId: string }) {
 
         <div className="card activity-timeline-card">
           <h2>Timeline</h2>
+          {loading && activities.length === 0 ? (
+            <p className="muted-text">Loading activity...</p>
+          ) : null}
 
           <div className="item-list activity-list">
-            {visibleActivities.length === 0 ? <p>No recent activity found.</p> : null}
+            {!loading && visibleActivities.length === 0 ? (
+              <p>No recent activity found.</p>
+            ) : null}
 
             {visibleActivities.map((activity) => (
               <div className="request-card activity-card" key={activity.id}>
@@ -138,15 +148,14 @@ function ActivityDashboard({ discordId }: { discordId: string }) {
                       </span>
                     ) : null}
                   </div>
-
                   <h3>{activity.title}</h3>
                   <p>{activity.description}</p>
-
                   <small>
                     {formatTime(activity.time)}
-                    {activity.actor_discord_id ? ` • Actor: ${activity.actor_discord_id}` : ""}
+                    {activity.actor_discord_id
+                      ? ` • Actor #${activity.actor_discord_id}`
+                      : ""}
                   </small>
-
                   {activity.payout_status ? (
                     <small>
                       Payout:{" "}
@@ -159,6 +168,14 @@ function ActivityDashboard({ discordId }: { discordId: string }) {
               </div>
             ))}
           </div>
+
+          {activities.length > 0 && limit < 250 ? (
+            <div style={{ textAlign: "center", marginTop: "1rem" }}>
+              <button className="ghost" onClick={handleLoadMore} disabled={loading}>
+                {loading ? "Loading..." : `Load More (showing ${limit})`}
+              </button>
+            </div>
+          ) : null}
         </div>
       </section>
     </RequireDiscord>

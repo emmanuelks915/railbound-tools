@@ -1,71 +1,44 @@
-# Disable Dev Login for Production
+# OC Registry Guild Filter v1
 
-This patch makes the manual Discord ID fallback local-only.
+Adds a player-facing filter to the OC Registry that uses the existing `affiliation` field as a mercenary guild filter.
 
-## What it changes
+## Why
 
-Backend:
+Keystone does not currently track mercenary guild in a dedicated column, but most players put it in `affiliation`.
 
-- Adds `ALLOW_DEV_LOGIN=false` config
-- Backend ignores `X-Discord-Id` unless `ALLOW_DEV_LOGIN=true`
-- OAuth `Authorization: Bearer ...` still works normally
+## What changes
 
-Frontend:
+The Citizen Registry gets a dropdown:
 
-- Adds `VITE_ALLOW_DEV_LOGIN=false`
-- Hides the manual "Dev fallback" box unless `VITE_ALLOW_DEV_LOGIN=true`
-- Only sends `X-Discord-Id` if dev login is enabled
+```txt
+All guilds / affiliations
+No affiliation listed
+<unique affiliation values pulled from the registry>
+```
 
-## Run from project root
+The roster then only shows OCs whose `affiliation` matches the selected guild/affiliation.
+
+## Run
 
 ```powershell
-Expand-Archive -Path "$env:USERPROFILE\Downloads\disable_dev_login_for_production_patch.zip" -DestinationPath . -Force
-python patch_disable_dev_login_for_production.py
+cd C:\Users\emman\OneDrive\Documents\railbound-tools-starter
+
+Expand-Archive -Path "$env:USERPROFILE\Downloads\oc_registry_guild_filter_v1_patch.zip" -DestinationPath . -Force
+python patch_oc_registry_guild_filter_v1.py
 ```
 
-## Set local env values
-
-In `backend\.env`, add:
-
-```env
-ALLOW_DEV_LOGIN=false
-```
-
-In `frontend\.env`, add:
-
-```env
-VITE_ALLOW_DEV_LOGIN=false
-```
-
-If you ever need the manual fallback locally, set both to `true`, then restart backend and frontend.
-
-## Restart
-
-Backend:
+Then:
 
 ```powershell
-cd backend
-.\.venv\Scripts\Activate.ps1
-uvicorn app.main:app --reload --port 8000
+cd frontend
+npm run build
 ```
 
-Frontend:
+Commit:
 
 ```powershell
-cd ..\frontend
-npm run dev
-```
-
-## Test
-
-- You should only see the Discord OAuth login/profile box.
-- The Dev fallback input should be hidden.
-- Logged-in OAuth pages should still work.
-
-## Commit
-
-```powershell
-git add backend/app/config.py backend/app/security.py backend/.env.example frontend/.env.example frontend/src/main.tsx
-git commit -m "Disable dev login outside local mode"
+cd ..
+git add frontend/src/main.tsx
+git commit -m "Add OC registry guild filter"
 git push
 ```
