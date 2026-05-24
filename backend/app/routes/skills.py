@@ -287,84 +287,122 @@ def list_skill_requests(
     )
 
     reqs = sb_data(req_res) or []
-    out = []
+    if not reqs:
+        return {"requests": []}
 
-    for req in reqs:
-        character_id = req.get("character_id")
-        skill_key = req.get("skill_key")
+    character_ids = sorted({
+        str(req.get("character_id"))
+        for req in reqs
+        if req.get("character_id")
+    })
+    skill_keys = sorted({
+        str(req.get("skill_key"))
+        for req in reqs
+        if req.get("skill_key")
+    })
 
-        char_res = (
+    character_lookup: dict[str, dict[str, Any]] = {}
+    if character_ids:
+        char_rows = sb_data(
             sb.table("characters")
             .select("character_id,name,user_id")
             .eq("guild_id", gid)
-            .eq("character_id", character_id)
-            .limit(1)
+            .in_("character_id", character_ids)
             .execute()
-        )
+        ) or []
+        character_lookup = {
+            str(row.get("character_id")): row
+            for row in char_rows
+            if row.get("character_id")
+        }
 
-        skill_res = (
+    skill_lookup: dict[str, dict[str, Any]] = {}
+    if skill_keys:
+        skill_rows = sb_data(
             sb.table("skill_definitions")
             .select("*")
             .eq("guild_id", gid)
-            .eq("skill_key", skill_key)
-            .limit(1)
+            .in_("skill_key", skill_keys)
             .execute()
-        )
+        ) or []
+        skill_lookup = {
+            str(row.get("skill_key")): row
+            for row in skill_rows
+            if row.get("skill_key")
+        }
 
-        character = (sb_data(char_res) or [None])[0]
-        skill = (sb_data(skill_res) or [None])[0]
+    owned_by_character: dict[str, list[str]] = {
+        character_id: []
+        for character_id in character_ids
+    }
+    if character_ids:
+        owned_rows = sb_data(
+            sb.table("oc_skills")
+            .select("character_id,skill_key")
+            .eq("guild_id", gid)
+            .in_("character_id", character_ids)
+            .execute()
+        ) or []
 
-        wallet = None
-        owned_keys: list[str] = []
-        missing_prereqs: list[str] = []
-        prereq_keys: list[str] = []
-        prereq_names: list[str] = []
+        for row in owned_rows:
+            character_id = str(row.get("character_id") or "")
+            skill_key = row.get("skill_key")
+            if character_id and skill_key:
+                owned_by_character.setdefault(character_id, []).append(str(skill_key))
 
-        if character_id:
-            try:
-                wallet = get_wallet(sb, UUID(str(character_id)), gid)
-            except Exception:
-                wallet = None
+    prereq_keys_all: set[str] = set()
+    prereq_keys_by_skill: dict[str, list[str]] = {}
 
-            owned_res = (
-                sb.table("oc_skills")
-                .select("skill_key")
-                .eq("guild_id", gid)
-                .eq("character_id", character_id)
-                .execute()
-            )
-            owned_rows = sb_data(owned_res) or []
-            owned_keys = [
-                str(row.get("skill_key"))
-                for row in owned_rows
-                if row.get("skill_key")
-            ]
+    for skill_key, skill in skill_lookup.items():
+        prereq_keys = _skill_prereq_keys(skill.get("prerequisites"))
+        prereq_keys_by_skill[skill_key] = prereq_keys
+        prereq_keys_all.update(prereq_keys)
 
-        if skill:
-            prereq_keys = _skill_prereq_keys(skill.get("prerequisites"))
-            missing_prereqs = [
-                key
-                for key in prereq_keys
-                if key not in owned_keys
-            ]
+    prereq_name_lookup: dict[str, str] = {}
+    if prereq_keys_all:
+        prereq_rows = sb_data(
+            sb.table("skill_definitions")
+            .select("skill_key,name")
+            .eq("guild_id", gid)
+            .in_("skill_key", sorted(prereq_keys_all))
+            .execute()
+        ) or []
+        prereq_name_lookup = {
+            str(row.get("skill_key")): row.get("name") or str(row.get("skill_key"))
+            for row in prereq_rows
+            if row.get("skill_key")
+        }
 
-            if prereq_keys:
-                prereq_res = (
-                    sb.table("skill_definitions")
-                    .select("skill_key,name")
-                    .eq("guild_id", gid)
-                    .in_("skill_key", prereq_keys)
-                    .execute()
-                )
-                prereq_rows = sb_data(prereq_res) or []
-                prereq_name_lookup = {
-                    row.get("skill_key"): row.get("name")
-                    for row in prereq_rows
-                }
-                prereq_names = [
-                    prereq_name_lookup.get(key) or key
-                    for key in prereq_keys
-                ]
+    wallet_lookup: dict[str, dict[str, Any] | None] = {}
+    for character_id in character_ids:
+        try:
+            wallet_lookup[character_id] = get_wallet(sb, UUID(str(character_id)), gid)
+        except Exception:
+            wallet_lookup[character_id] = None
+
+    out = []
+
+    for req in reqs:
+        character_id = str(req.get("character_id") or "")
+        skill_key = str(req.get("skill_key") or "")
+
+        character = character_lookup.get(character_id)
+        skill = skill_lookup.get(skill_key)
+        wallet = wallet_lookup.get(character_id)
+
+        owned_keys = owned_by_character.get(character_id, [])
+        prereq_keys = prereq_keys_by_skill.get(skill_key, [])
+
+        missing_prereqs = [
+            key
+            for key in prereq_keys
+            if key not in owned_keys
+        ]
+
+        prereq_names = [
+            prereq_name_lookup.get(key) or key
+            for key in prereq_keys
+        ]
 
         available_xp = int((wallet or {}).get("available_xp") or 0)
         cost = int(req.get("cost") or (skill or {}).get("cost") or 0)
