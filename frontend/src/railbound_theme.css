@@ -937,4 +937,3 @@ p.muted-text {
   .stat-row, .summary-grid { grid-template-columns: 1fr; }
   .skill-toolbar { flex-direction: column; }
 }
-</style>
