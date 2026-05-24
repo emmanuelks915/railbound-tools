@@ -3521,6 +3521,7 @@ function OCRegistry({ discordId }: { discordId: string }) {
   const [characters, setCharacters] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
   const [search, setSearch] = useState("");
+  const [guildFilter, setGuildFilter] = useState("all");
   const [message, setMessage] = useState("");
   const [profileTab, setProfileTab] = useState("overview");
   const [profileForm, setProfileForm] = useState({
@@ -3699,6 +3700,18 @@ function OCRegistry({ discordId }: { discordId: string }) {
     return value ? String(value) : "—";
   }
 
+  function cleanAffiliation(value: any) {
+    return String(value || "").trim();
+  }
+
+  function affiliationMatchesGuild(character: any, guild: string) {
+    if (guild === "all") return true;
+    if (guild === "none") return !cleanAffiliation(character.affiliation);
+
+    const affiliation = cleanAffiliation(character.affiliation).toLowerCase();
+    return affiliation.includes(guild.toLowerCase());
+  }
+
   function statusClass(status: string | null | undefined) {
     const normalized = String(status || "unknown").toLowerCase();
 
@@ -3776,6 +3789,16 @@ function OCRegistry({ discordId }: { discordId: string }) {
 
   const xp = balanceData?.xp || {};
   const currencies = balanceData?.currencies || [];
+
+  const affiliationOptions = Array.from(
+    new Set(
+      characters
+        .map((character) => cleanAffiliation(character.affiliation))
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b));
+
+  const visibleCharacters = characters.filter((character) => affiliationMatchesGuild(character, guildFilter));
   const lastSeen = selected?.last_seen;
 
   return (
@@ -3804,6 +3827,21 @@ function OCRegistry({ discordId }: { discordId: string }) {
               }}
               placeholder="Search name, occupation, affiliation, origin..."
             />
+
+            <select
+              value={guildFilter}
+              onChange={(event) => setGuildFilter(event.target.value)}
+              title="Filter by affiliation / mercenary guild"
+            >
+              <option value="all">All guilds / affiliations</option>
+              <option value="none">No affiliation listed</option>
+              {affiliationOptions.map((affiliation) => (
+                <option value={affiliation} key={affiliation}>
+                  {affiliation}
+                </option>
+              ))}
+            </select>
+
             <button onClick={() => loadRegistry()}>Search</button>
           </div>
 
@@ -3814,13 +3852,14 @@ function OCRegistry({ discordId }: { discordId: string }) {
           <div className="registry-list card">
             <div className="card-title-row">
               <h3>Roster</h3>
-              <span className="pill">{characters.length} citizens</span>
+              <span className="pill">{visibleCharacters.length}/{characters.length} citizens</span>
             </div>
 
             <div className="registry-card-scroll">
               {characters.length === 0 ? <p className="muted-text">No citizens found yet.</p> : null}
+              {characters.length > 0 && visibleCharacters.length === 0 ? <p className="muted-text">No citizens match that guild/affiliation filter.</p> : null}
 
-              {characters.map((character) => (
+              {visibleCharacters.map((character) => (
                 <button
                   type="button"
                   key={character.character_id}
