@@ -177,6 +177,10 @@ function App() {
     const permissions = usePermissions(discordId);
   // Staff OC Autoselect Safety: clear stale OC selection
   useEffect(() => {
+    if (permissions?.is_staff) {
+      setHasLoyalCompanion(true);
+    }
+
     if (permissions?.is_staff && selectedCharacterId) {
       setSelectedCharacterId("");
     }
@@ -251,7 +255,7 @@ return (
       </section>
 
       <nav className="tabs">
-        {tabs.filter(([key]) => canUseTab(permissions, key as Tab) && (key !== "companion" || hasLoyalCompanion))
+        {tabs.filter(([key]) => canUseTab(permissions, key as Tab) && (key !== "companion" || permissions?.is_staff || hasLoyalCompanion))
             .map(([key, Icon, label]) => (
           <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>
             <Icon size={18} /> {label}

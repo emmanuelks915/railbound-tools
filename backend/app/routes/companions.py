@@ -76,6 +76,14 @@ def companion_eligibility(actor_discord_id: int | None = Depends(actor_from_head
     actor = _require_login(actor_discord_id)
     sb = get_supabase()
 
+    if is_staff(actor):
+        return {
+            "eligible": True,
+            "eligible_characters": [],
+            "staff_visibility": True,
+            "reason": "Staff can always access the Companion tab for Loyal Companion support.",
+        }
+
     character_rows = _safe_rows(
         sb.table("characters")
         .select("*")
