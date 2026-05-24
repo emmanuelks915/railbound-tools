@@ -8,7 +8,7 @@ from app.security import actor_from_header
 router = APIRouter(prefix="/api/auth", tags=["permissions"])
 
 
-STAFF_TABS = {"staff", "qa"}
+STAFF_TABS = {"staff", "qa", "beast_skills"}
 STAFF_RECOMMENDED_TABS = {"activity"}
 
 PLAYER_TABS = [
