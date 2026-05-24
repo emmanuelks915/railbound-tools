@@ -1,0 +1,292 @@
+/* ============================================================
+   railbound_enhance.css
+   Adds animations, polish, and visual upgrades to the
+   existing light beige/teal Railbound Tools design.
+   Does NOT change colors, layout, or fonts — only enhances.
+   Append to the END of styles.css.
+   ============================================================ */
+
+/* ── Smooth page load ──────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(47, 111, 115, 0.4); }
+  50%       { box-shadow: 0 0 0 6px rgba(47, 111, 115, 0); }
+}
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position: 600px 0; }
+}
+@keyframes progress-fill {
+  from { width: 0; }
+  to   { width: var(--fill-width, 60%); }
+}
+
+/* ── Hero section ──────────────────────────────────────────── */
+.hero {
+  animation: scaleIn 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  transition: box-shadow 0.3s ease;
+}
+.hero:hover {
+  box-shadow: 0 28px 70px rgba(45, 36, 30, 0.16) !important;
+}
+
+/* ── Nav tabs ──────────────────────────────────────────────── */
+.tab-bar button,
+.nav-tabs button,
+.tabs button {
+  transition: background 0.18s ease, color 0.18s ease,
+              transform 0.15s ease, box-shadow 0.18s ease !important;
+  position: relative;
+}
+
+.tab-bar button:hover:not(:disabled),
+.nav-tabs button:hover:not(:disabled),
+.tabs button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.tab-bar button.active::after,
+.nav-tabs button.active::after,
+.tabs button.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: #2f6f73;
+  border-radius: 2px;
+  animation: fadeIn 0.2s ease both;
+}
+
+/* ── All buttons ───────────────────────────────────────────── */
+button:not(:disabled) {
+  transition: background 0.18s ease, color 0.18s ease,
+              transform 0.15s ease, box-shadow 0.18s ease,
+              opacity 0.18s ease !important;
+}
+
+button:hover:not(:disabled):not(.ghost) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(47, 111, 115, 0.28) !important;
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0) scale(0.97) !important;
+  box-shadow: none !important;
+}
+
+button.ghost:hover:not(:disabled) {
+  background: #e3d5c5 !important;
+  transform: translateY(-1px);
+}
+
+/* ── Cards ─────────────────────────────────────────────────── */
+.card {
+  animation: fadeUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  transition: box-shadow 0.25s ease, transform 0.25s ease,
+              border-color 0.25s ease !important;
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px rgba(45, 36, 30, 0.12) !important;
+}
+
+/* Stagger cards in a grid */
+.grid .card:nth-child(1) { animation-delay: 0.05s; }
+.grid .card:nth-child(2) { animation-delay: 0.10s; }
+.grid .card:nth-child(3) { animation-delay: 0.15s; }
+.grid .card:nth-child(4) { animation-delay: 0.20s; }
+.grid .card:nth-child(5) { animation-delay: 0.25s; }
+.grid .card:nth-child(6) { animation-delay: 0.30s; }
+
+/* ── Item / request cards ──────────────────────────────────── */
+.item-card,
+.request-card,
+.skill-card-v2 {
+  transition: background 0.18s ease, border-color 0.18s ease,
+              transform 0.2s ease, box-shadow 0.2s ease !important;
+  animation: fadeUp 0.3s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.item-card:hover,
+.request-card:hover,
+.skill-card-v2:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(45, 36, 30, 0.10) !important;
+}
+
+/* Stagger list items */
+.item-list > *:nth-child(1)  { animation-delay: 0.04s; }
+.item-list > *:nth-child(2)  { animation-delay: 0.08s; }
+.item-list > *:nth-child(3)  { animation-delay: 0.12s; }
+.item-list > *:nth-child(4)  { animation-delay: 0.16s; }
+.item-list > *:nth-child(5)  { animation-delay: 0.20s; }
+.item-list > *:nth-child(6)  { animation-delay: 0.24s; }
+.item-list > *:nth-child(7)  { animation-delay: 0.28s; }
+.item-list > *:nth-child(8)  { animation-delay: 0.32s; }
+
+/* ── Pills / badges ────────────────────────────────────────── */
+.pill {
+  transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.pill:hover {
+  transform: scale(1.05);
+}
+
+/* Good / approved pills — subtle green glow */
+.pill.good,
+.pill.approved,
+.pill.active,
+.pill.paid {
+  box-shadow: 0 0 0 1px rgba(47, 143, 91, 0.25);
+}
+
+/* Bad / denied pills */
+.pill.bad,
+.pill.denied,
+.pill.rejected {
+  box-shadow: 0 0 0 1px rgba(156, 61, 61, 0.25);
+}
+
+/* ── Activity timeline ─────────────────────────────────────── */
+.activity-card {
+  animation: fadeUp 0.3s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  transition: background 0.15s ease, padding-left 0.2s ease !important;
+  border-left: 3px solid transparent;
+}
+
+.activity-card:hover {
+  background: rgba(239, 228, 215, 0.5) !important;
+  padding-left: 0.5rem;
+}
+
+/* Timeline color by kind */
+.activity-card[data-kind="stat_request"]  { border-left-color: #2f6f73; }
+.activity-card[data-kind="rp_xp_claim"]  { border-left-color: #2f8f5b; }
+.activity-card[data-kind="skill_request"] { border-left-color: #a07830; }
+.activity-card[data-kind="shop_listing"]  { border-left-color: #9c8070; }
+
+/* ── Skill cards ───────────────────────────────────────────── */
+.skill-card-v2.owned     { border-left: 3px solid #2f8f5b !important; }
+.skill-card-v2.requestable { border-left: 3px solid #2f6f73 !important; }
+.skill-card-v2.locked    { border-left: 3px solid #c4b8a8 !important; opacity: 0.75; }
+.skill-card-v2.pending   { border-left: 3px solid #a07830 !important; }
+.skill-card-v2.need-xp   { border-left: 3px solid #9c3d3d !important; }
+
+/* ── Inputs / selects ──────────────────────────────────────── */
+input[type="text"],
+input[type="search"],
+input[type="number"],
+input[type="email"],
+textarea,
+select {
+  transition: border-color 0.18s ease, box-shadow 0.18s ease !important;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: #2f6f73 !important;
+  box-shadow: 0 0 0 3px rgba(47, 111, 115, 0.15) !important;
+  outline: none !important;
+}
+
+/* ── Loading / spinner ─────────────────────────────────────── */
+.spin {
+  animation: spin 0.75s linear infinite;
+  display: inline-block;
+}
+
+/* ── Skeleton shimmer (for loading states) ─────────────────── */
+.skeleton {
+  background: linear-gradient(90deg,
+    #efe4d7 25%, #fdf6ee 50%, #efe4d7 75%);
+  background-size: 600px 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 8px;
+  color: transparent !important;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ── Stat / summary numbers ────────────────────────────────── */
+.stat-value,
+.summary strong,
+strong[class*="count"],
+strong[class*="total"] {
+  transition: color 0.3s ease;
+}
+
+/* ── Live indicator dot ────────────────────────────────────── */
+.live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2f8f5b;
+  animation: pulse-dot 2s ease-in-out infinite;
+  vertical-align: middle;
+  margin-right: 5px;
+}
+
+/* ── Section headings with animated underline ──────────────── */
+.card h2,
+.card-title-row h2 {
+  position: relative;
+  display: inline-block;
+}
+
+/* ── Refresh button spin on load ───────────────────────────── */
+button[disabled] .spin,
+button .spin {
+  animation: spin 0.75s linear infinite;
+}
+
+/* ── Smooth scrollbar ──────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f6efe4; }
+::-webkit-scrollbar-thumb { background: #d4c4b0; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #b8a898; }
+
+/* ── Page section entrance ─────────────────────────────────── */
+section,
+.page-section {
+  animation: fadeIn 0.4s ease both;
+}
+
+/* ── Teal glow on primary action buttons ───────────────────── */
+button:not(.ghost):not(.danger):not([disabled]):hover {
+  box-shadow: 0 6px 20px rgba(47, 111, 115, 0.3) !important;
+}
+
+/* ── Danger button hover ───────────────────────────────────── */
+button.danger:hover:not(:disabled) {
+  box-shadow: 0 6px 20px rgba(156, 61, 61, 0.3) !important;
+  transform: translateY(-2px);
+}
+
+/* ── Responsive touch — reduce hover lifts on mobile ───────── */
+@media (hover: none) {
+  .card:hover,
+  .item-card:hover,
+  .request-card:hover,
+  button:hover { transform: none !important; }
+}
