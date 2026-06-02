@@ -6360,8 +6360,7 @@ function StaffQueue({ discordId }: { discordId: string }) {
               >
                 <option value="xp">XP</option>
                 <option value="currency">Currency</option>
-                                <option value="trait_grant_only">Grant / Remove Trait Only</option>
-</select>
+              </select>
             </label>
 
             {resourceForm.grant_type === "currency" ? (
@@ -6381,12 +6380,6 @@ function StaffQueue({ discordId }: { discordId: string }) {
                   ))}
                 </select>
               </label>
-
-        {resourceForm.currency_id === "trait_grant_only" ? (
-          <div className="request-note-block">
-            <StaffTraitGrantCard discordId={discordId} />
-          </div>
-        ) : null}
             ) : null}
 
             <label>
@@ -6460,8 +6453,15 @@ function StaffQueue({ discordId }: { discordId: string }) {
                 <option value="remove_trait">Remove Trait</option>
                 <option value="grant_custom_skill">Grant Hidden Custom Skill</option>
                 <option value="grant_custom_trait">Grant Hidden Custom Trait</option>
-              </select>
+                                <option value="trait_grant_only">Grant / Remove Trait Only</option>
+                </select>
             </label>
+
+        {maintenanceForm.action === "trait_grant_only" ? (
+          <div className="request-note-block">
+            <StaffTraitGrantCard discordId={discordId} />
+          </div>
+        ) : null}
 
             {maintenanceForm.action === "grant_resources" ? (
               <>
