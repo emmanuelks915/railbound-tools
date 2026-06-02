@@ -316,32 +316,91 @@ def staff_trait_grant_options(actor_discord_id: int | None = Depends(actor_from_
     sb = get_supabase()
     gid = get_guild_id()
 
-    characters = _staff_trait_rows(
-        sb.table("characters")
-        .select("character_id,name,user_id,is_active,status")
-        .eq("guild_id", gid)
-        .order("name")
-        .limit(800)
-        .execute()
-    )
+    errors: list[str] = []
 
-    traits = _staff_trait_rows(
-        sb.table("traits")
-        .select("trait_id,slug,name,category,tier,is_active")
-        .eq("guild_id", gid)
-        .order("category")
-        .order("name")
-        .limit(1200)
-        .execute()
-    )
+    try:
+        characters = _staff_trait_rows(
+            sb.table("characters")
+            .select("*")
+            .eq("guild_id", gid)
+            .order("name")
+            .limit(1000)
+            .execute()
+        )
+    except Exception as e:
+        errors.append(f"characters:guild-filter:{e}")
+        try:
+            characters = _staff_trait_rows(
+                sb.table("characters")
+                .select("*")
+                .order("name")
+                .limit(1000)
+                .execute()
+            )
+        except Exception as fallback_error:
+            errors.append(f"characters:fallback:{fallback_error}")
+            characters = []
 
-    active_traits = [
-        trait for trait in traits
-        if trait.get("is_active") is None or trait.get("is_active") is True
-    ]
+    try:
+        traits = _staff_trait_rows(
+            sb.table("traits")
+            .select("*")
+            .eq("guild_id", gid)
+            .order("name")
+            .limit(1500)
+            .execute()
+        )
+    except Exception as e:
+        errors.append(f"traits:guild-filter:{e}")
+        try:
+            traits = _staff_trait_rows(
+                sb.table("traits")
+                .select("*")
+                .order("name")
+                .limit(1500)
+                .execute()
+            )
+        except Exception as fallback_error:
+            errors.append(f"traits:fallback:{fallback_error}")
+            traits = []
 
-    return {"characters": characters, "traits": active_traits}
+    normalized_characters = []
+    for character in characters:
+        character_id = character.get("character_id")
+        if not character_id:
+            continue
 
+        normalized_characters.append({
+            "character_id": character_id,
+            "name": character.get("name") or character.get("character_name") or str(character_id),
+            "user_id": character.get("user_id") or character.get("discord_id") or character.get("player_discord_id"),
+            "guild_id": character.get("guild_id"),
+        })
+
+    normalized_traits = []
+    for trait in traits:
+        trait_id = trait.get("trait_id")
+        if not trait_id:
+            continue
+
+        is_active = trait.get("is_active")
+        if is_active is False:
+            continue
+
+        normalized_traits.append({
+            "trait_id": trait_id,
+            "slug": trait.get("slug") or trait.get("trait_slug") or trait.get("trait_key") or "",
+            "name": trait.get("name") or trait.get("display_name") or trait.get("slug") or str(trait_id),
+            "category": trait.get("category") or trait.get("trait_type") or "",
+            "tier": trait.get("tier"),
+            "is_active": is_active,
+        })
+
+    return {
+        "characters": normalized_characters,
+        "traits": normalized_traits,
+        "debug_errors": errors,
+    }
 
 @router.post("/trait-grants/grant")
 def staff_grant_trait(payload: dict = Body(default={}), actor_discord_id: int | None = Depends(actor_from_header)):
