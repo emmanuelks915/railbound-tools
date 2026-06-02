@@ -286,7 +286,7 @@ return (
       {tab === "companion" && <CompanionDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "register" && <OCRegistrationDashboard discordId={discordId} jump={setTab} />}
       {tab === "registry" && <OCRegistry discordId={discordId} />}
-      {tab === "staff" && <StaffOnly discordId={discordId}><section className="request-workflow-page"><StaffTraitGrantCard discordId={discordId} /><StaffQueue discordId={discordId} /></section></StaffOnly>}
+      {tab === "staff" && <StaffOnly discordId={discordId}><section className="request-workflow-page"><StaffTraitGrantActionBox discordId={discordId} /><StaffQueue discordId={discordId} /></section></StaffOnly>}
       {tab === "beast_skills" && <BeastSkillCatalogDashboard discordId={discordId} />}
       {tab === "combat" && <DerivedStatsCalculator />}
     </main>
@@ -7079,6 +7079,38 @@ function StaffTraitGrantCard({ discordId }: { discordId: string }) {
           {working ? "Working..." : mode === "grant" ? "Grant Trait" : "Remove Trait"}
         </button>
       </div>
+    </div>
+  );
+}
+
+function StaffTraitGrantActionBox({ discordId }: { discordId: string }) {
+  const [selectedAction, setSelectedAction] = useState("");
+
+  return (
+    <div className="card">
+      <div className="card-title-row">
+        <div>
+          <span className="activity-type-label">Staff Actions</span>
+          <h3>Action Box</h3>
+          <p className="muted-text">Choose a staff utility to open. Trait-only grants live here instead of as a separate always-visible panel.</p>
+        </div>
+      </div>
+
+      <label>
+        <span>Staff Action</span>
+        <select value={selectedAction} onChange={(event) => setSelectedAction(event.target.value)}>
+          <option value="">Select an action</option>
+          <option value="trait-grants">Grant / Remove Trait Only</option>
+        </select>
+      </label>
+
+      {selectedAction === "trait-grants" ? (
+        <div className="request-note-block">
+          <StaffTraitGrantCard discordId={discordId} />
+        </div>
+      ) : (
+        <p className="muted-text">Pick an action above to open its tool.</p>
+      )}
     </div>
   );
 }
