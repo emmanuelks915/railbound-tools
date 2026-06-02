@@ -387,8 +387,8 @@ def staff_grant_trait(payload: dict = Body(default={}), actor_discord_id: int | 
 
     try:
         result = sb.table("character_traits").insert(insert_row).execute()
-    except APIError as e:
-        raise_clean_api_error(e)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     rows = _staff_trait_rows(result)
     row = rows[0] if rows else insert_row
@@ -405,14 +405,6 @@ def staff_grant_trait(payload: dict = Body(default={}), actor_discord_id: int | 
         },
     )
 
-    try:
-        send_staff_activity_webhook(
-            title="Trait Granted",
-            description=f"{character.get('name') or character_id} was granted {trait.get('name') or trait.get('slug')}.",
-            fields={"OC": character.get("name") or character_id, "Trait": trait.get("name") or trait.get("slug") or trait_id, "Reason": reason},
-        )
-    except Exception:
-        pass
 
     return {
         "ok": True,
@@ -452,8 +444,8 @@ def staff_remove_trait(payload: dict = Body(default={}), actor_discord_id: int |
             .eq("trait_id", trait_id)
             .execute()
         )
-    except APIError as e:
-        raise_clean_api_error(e)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     rows = _staff_trait_rows(result)
 
@@ -469,14 +461,6 @@ def staff_remove_trait(payload: dict = Body(default={}), actor_discord_id: int |
         },
     )
 
-    try:
-        send_staff_activity_webhook(
-            title="Trait Removed",
-            description=f"{trait.get('name') or trait.get('slug')} was removed from {character.get('name') or character_id}.",
-            fields={"OC": character.get("name") or character_id, "Trait": trait.get("name") or trait.get("slug") or trait_id, "Reason": reason},
-        )
-    except Exception:
-        pass
 
     return {
         "ok": True,
