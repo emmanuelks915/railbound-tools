@@ -308,7 +308,9 @@ def deny_shop_item(
         "ok": True,
         "item": item,
         "message": "Shop listing denied.",
-    }\n\n@router.get("/trait-grants/options")
+    }
+
+@router.get("/trait-grants/options")
 def staff_trait_grant_options(actor_discord_id: int | None = Depends(actor_from_header)):
     require_staff(actor_discord_id)
     sb = get_supabase()
@@ -482,4 +484,4 @@ def staff_remove_trait(payload: dict = Body(default={}), actor_discord_id: int |
         "character": character,
         "trait": trait,
         "removed": rows,
-    }\n
+    }
