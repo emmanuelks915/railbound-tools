@@ -188,7 +188,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permissions?.is_staff]);
 
-
   if (tab && !canUseTab(permissions, tab)) {
     setTab("dashboard");
   }
@@ -214,8 +213,6 @@ return (
                 className="auth-avatar"
               />
             ) : null}
-
-            
 
             <strong>
               {authUser
@@ -286,7 +283,7 @@ return (
       {tab === "companion" && <CompanionDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "register" && <OCRegistrationDashboard discordId={discordId} jump={setTab} />}
       {tab === "registry" && <OCRegistry discordId={discordId} />}
-      {tab === "staff" && <StaffOnly discordId={discordId}><section className="request-workflow-page"><StaffTraitGrantActionBox discordId={discordId} /><StaffQueue discordId={discordId} /></section></StaffOnly>}
+      {tab === "staff" && <StaffOnly discordId={discordId}><section className="request-workflow-page"><StaffQueue discordId={discordId} /></section></StaffOnly>}
       {tab === "beast_skills" && <BeastSkillCatalogDashboard discordId={discordId} />}
       {tab === "combat" && <DerivedStatsCalculator />}
     </main>
@@ -1317,7 +1314,6 @@ return (
           )}
         </div>
 
-
         <div className="card oc-traits-card">
           <div className="card-title-row">
             <div>
@@ -1652,8 +1648,6 @@ function InventoryDashboard({
   );
 }
 
-
-
 function ShopOwnerDashboard({ discordId }: { discordId: string }) {
   const [shops, setShops] = useState<any[]>([]);
   const [selectedShopId, setSelectedShopId] = useState("");
@@ -1712,7 +1706,6 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
     }
   }
 
-
   async function loadOrders(shopId = selectedShopId) {
     if (!discordId || !shopId) return;
 
@@ -1754,7 +1747,6 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
     }
   }
 
-
   async function loadShop(shopId = selectedShopId) {
     if (!discordId || !shopId) return;
 
@@ -1787,7 +1779,6 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
     if (selectedShopId) loadShop(selectedShopId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedShopId]);
-
 
   async function createShop() {
     setSaving(true);
@@ -2037,7 +2028,6 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
             </div>
           </div>
         ) : null}
-
 
         {shop ? (
           <div className="shop-owner-layout">
@@ -2661,8 +2651,6 @@ function ShopDashboard({ discordId, selectedCharacterId }: { discordId: string; 
     </RequireDiscord>
   );
 }
-
-
 
 function SkillsDashboard({ discordId, selectedCharacterId, setSelectedCharacterId }: { discordId: string; selectedCharacterId: string; setSelectedCharacterId: (id: string) => void }) {
   const [skills, setSkills] = useState<any[]>([]);
@@ -3363,7 +3351,6 @@ function OCRegistrationDashboard({ discordId, jump }: { discordId: string; jump:
                 ))}
               </select>
             </label>
-
 
             <div className="trait-benefit-request-card">
               <h4>Origin / Trait Free Skill Request</h4>
@@ -4192,8 +4179,6 @@ function OCRegistry({ discordId }: { discordId: string }) {
   );
 }
 
-
-
 function ProductionQADashboard({ discordId, jump }: { discordId: string; jump: (tab: Tab) => void }) {
   const checklistGroups = [
     {
@@ -4581,8 +4566,6 @@ function ActivityDashboard({ discordId }: { discordId: string }) {
   );
 }
 
-
-
 function RpHubDashboard({
   discordId,
   selectedCharacterId,
@@ -4843,8 +4826,6 @@ function RpHubDashboard({
     </RequireDiscord>
   );
 }
-
-
 
 function CompanionDashboard({
   discordId,
@@ -5426,7 +5407,6 @@ function MissionBoardDashboard({
   );
 }
 
-
 function isOriginTraitFreeSkillRequest(request: any) {
   const raw = request?.raw || {};
   const haystack = [
@@ -5924,7 +5904,6 @@ function StaffQueue({ discordId }: { discordId: string }) {
     denied: requests.filter((request) => request.status === "denied").length,
   };
 
-
   useEffect(() => {
     loadSkillOverrideOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5977,7 +5956,6 @@ function StaffQueue({ discordId }: { discordId: string }) {
       setMessage(error?.message || "Could not grant skill override.");
     }
   }
-
 
   useEffect(() => {
     loadStaffResourceOptions();
@@ -6049,7 +6027,6 @@ function StaffQueue({ discordId }: { discordId: string }) {
       setMessage(error?.message || "Could not grant resources.");
     }
   }
-
 
   useEffect(() => {
     loadTraitBenefitOptions();
@@ -6128,7 +6105,6 @@ function StaffQueue({ discordId }: { discordId: string }) {
     }
   }
 
-
   return (
     <RequireDiscord discordId={discordId}>
       <section className="request-workflow-page">
@@ -6193,7 +6169,6 @@ function StaffQueue({ discordId }: { discordId: string }) {
             <p>{staffConfirmation}</p>
           </div>
         ) : null}
-
 
         <div className="card discord-lore-role-backfill-card" style={{ display: "none" }}>
           <div className="card-title-row">
@@ -6385,7 +6360,8 @@ function StaffQueue({ discordId }: { discordId: string }) {
               >
                 <option value="xp">XP</option>
                 <option value="currency">Currency</option>
-              </select>
+                                <option value="trait_grant_only">Grant / Remove Trait Only</option>
+</select>
             </label>
 
             {resourceForm.grant_type === "currency" ? (
@@ -6405,6 +6381,12 @@ function StaffQueue({ discordId }: { discordId: string }) {
                   ))}
                 </select>
               </label>
+
+        {resourceForm.currency_id === "trait_grant_only" ? (
+          <div className="request-note-block">
+            <StaffTraitGrantCard discordId={discordId} />
+          </div>
+        ) : null}
             ) : null}
 
             <label>
@@ -6439,9 +6421,6 @@ function StaffQueue({ discordId }: { discordId: string }) {
             </div>
           </div>
         </div>
-
-        
-
 
         <div className="card staff-maintenance-card">
           <div className="card-title-row">
@@ -6881,8 +6860,6 @@ function StaffQueue({ discordId }: { discordId: string }) {
   );
 }
 
-
-
 function DerivedStatsCalculator() {
   const [stats, setStats] = useState<CoreStats>({ strength: 50, dexterity: 50, stamina: 50, magic_affinity: 50, mana: 50 });
   const [result, setResult] = useState<any>(null);
@@ -7079,38 +7056,6 @@ function StaffTraitGrantCard({ discordId }: { discordId: string }) {
           {working ? "Working..." : mode === "grant" ? "Grant Trait" : "Remove Trait"}
         </button>
       </div>
-    </div>
-  );
-}
-
-function StaffTraitGrantActionBox({ discordId }: { discordId: string }) {
-  const [selectedAction, setSelectedAction] = useState("");
-
-  return (
-    <div className="card">
-      <div className="card-title-row">
-        <div>
-          <span className="activity-type-label">Staff Actions</span>
-          <h3>Action Box</h3>
-          <p className="muted-text">Choose a staff utility to open. Trait-only grants live here instead of as a separate always-visible panel.</p>
-        </div>
-      </div>
-
-      <label>
-        <span>Staff Action</span>
-        <select value={selectedAction} onChange={(event) => setSelectedAction(event.target.value)}>
-          <option value="">Select an action</option>
-          <option value="trait-grants">Grant / Remove Trait Only</option>
-        </select>
-      </label>
-
-      {selectedAction === "trait-grants" ? (
-        <div className="request-note-block">
-          <StaffTraitGrantCard discordId={discordId} />
-        </div>
-      ) : (
-        <p className="muted-text">Pick an action above to open its tool.</p>
-      )}
     </div>
   );
 }
