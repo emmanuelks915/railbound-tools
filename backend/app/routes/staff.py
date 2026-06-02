@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from postgrest.exceptions import APIError
 
 from app.models import StaffActionRequest
@@ -308,4 +308,178 @@ def deny_shop_item(
         "ok": True,
         "item": item,
         "message": "Shop listing denied.",
+    }\n\n@router.get("/trait-grants/options")
+def staff_trait_grant_options(actor_discord_id: int | None = Depends(actor_from_header)):
+    require_staff(actor_discord_id)
+    sb = get_supabase()
+    gid = get_guild_id()
+
+    characters = _staff_trait_rows(
+        sb.table("characters")
+        .select("character_id,name,user_id,is_active,status")
+        .eq("guild_id", gid)
+        .order("name")
+        .limit(800)
+        .execute()
+    )
+
+    traits = _staff_trait_rows(
+        sb.table("traits")
+        .select("trait_id,slug,name,category,tier,is_active")
+        .eq("guild_id", gid)
+        .order("category")
+        .order("name")
+        .limit(1200)
+        .execute()
+    )
+
+    active_traits = [
+        trait for trait in traits
+        if trait.get("is_active") is None or trait.get("is_active") is True
+    ]
+
+    return {"characters": characters, "traits": active_traits}
+
+
+@router.post("/trait-grants/grant")
+def staff_grant_trait(payload: dict = Body(default={}), actor_discord_id: int | None = Depends(actor_from_header)):
+    staff_id = actor_discord_id
+    require_staff(staff_id)
+
+    sb = get_supabase()
+    gid = get_guild_id()
+
+    character_id = _staff_clean_text(payload.get("character_id"), 80)
+    reason = _staff_clean_text(payload.get("reason") or payload.get("staff_note"), 1000)
+
+    if not character_id:
+        raise HTTPException(status_code=400, detail="Choose an OC.")
+    if not reason:
+        raise HTTPException(status_code=400, detail="Staff reason is required.")
+
+    character = _character_for_staff_trait_grant(sb, gid, character_id)
+    trait = _resolve_trait_for_staff_grant(sb, gid, payload)
+    trait_id = str(trait.get("trait_id"))
+
+    existing = _staff_trait_rows(
+        sb.table("character_traits")
+        .select("*")
+        .eq("guild_id", gid)
+        .eq("character_id", character_id)
+        .eq("trait_id", trait_id)
+        .limit(1)
+        .execute()
+    )
+
+    if existing:
+        return {
+            "ok": True,
+            "already_owned": True,
+            "message": f"{character.get('name') or 'OC'} already has {trait.get('name') or trait.get('slug') or 'that trait'}.",
+            "character": character,
+            "trait": trait,
+            "row": existing[0],
+        }
+
+    insert_row = {"guild_id": gid, "character_id": character_id, "trait_id": trait_id}
+
+    try:
+        result = sb.table("character_traits").insert(insert_row).execute()
+    except APIError as e:
+        raise_clean_api_error(e)
+
+    rows = _staff_trait_rows(result)
+    row = rows[0] if rows else insert_row
+
+    _log_staff_trait_grant(
+        sb,
+        {
+            "guild_id": gid,
+            "character_id": character_id,
+            "trait_id": trait_id,
+            "action": "grant",
+            "staff_discord_id": int(staff_id) if staff_id is not None else None,
+            "reason": reason,
+        },
+    )
+
+    try:
+        send_staff_activity_webhook(
+            title="Trait Granted",
+            description=f"{character.get('name') or character_id} was granted {trait.get('name') or trait.get('slug')}.",
+            fields={"OC": character.get("name") or character_id, "Trait": trait.get("name") or trait.get("slug") or trait_id, "Reason": reason},
+        )
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "message": f"Granted {trait.get('name') or trait.get('slug') or 'trait'} to {character.get('name') or 'OC'}.",
+        "character": character,
+        "trait": trait,
+        "row": row,
     }
+
+
+@router.post("/trait-grants/remove")
+def staff_remove_trait(payload: dict = Body(default={}), actor_discord_id: int | None = Depends(actor_from_header)):
+    staff_id = actor_discord_id
+    require_staff(staff_id)
+
+    sb = get_supabase()
+    gid = get_guild_id()
+
+    character_id = _staff_clean_text(payload.get("character_id"), 80)
+    reason = _staff_clean_text(payload.get("reason") or payload.get("staff_note"), 1000)
+
+    if not character_id:
+        raise HTTPException(status_code=400, detail="Choose an OC.")
+    if not reason:
+        raise HTTPException(status_code=400, detail="Staff reason is required.")
+
+    character = _character_for_staff_trait_grant(sb, gid, character_id)
+    trait = _resolve_trait_for_staff_grant(sb, gid, payload)
+    trait_id = str(trait.get("trait_id"))
+
+    try:
+        result = (
+            sb.table("character_traits")
+            .delete()
+            .eq("guild_id", gid)
+            .eq("character_id", character_id)
+            .eq("trait_id", trait_id)
+            .execute()
+        )
+    except APIError as e:
+        raise_clean_api_error(e)
+
+    rows = _staff_trait_rows(result)
+
+    _log_staff_trait_grant(
+        sb,
+        {
+            "guild_id": gid,
+            "character_id": character_id,
+            "trait_id": trait_id,
+            "action": "remove",
+            "staff_discord_id": int(staff_id) if staff_id is not None else None,
+            "reason": reason,
+        },
+    )
+
+    try:
+        send_staff_activity_webhook(
+            title="Trait Removed",
+            description=f"{trait.get('name') or trait.get('slug')} was removed from {character.get('name') or character_id}.",
+            fields={"OC": character.get("name") or character_id, "Trait": trait.get("name") or trait.get("slug") or trait_id, "Reason": reason},
+        )
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "message": f"Removed {trait.get('name') or trait.get('slug') or 'trait'} from {character.get('name') or 'OC'}.",
+        "character": character,
+        "trait": trait,
+        "removed": rows,
+    }\n

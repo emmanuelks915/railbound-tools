@@ -286,7 +286,7 @@ return (
       {tab === "companion" && <CompanionDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "register" && <OCRegistrationDashboard discordId={discordId} jump={setTab} />}
       {tab === "registry" && <OCRegistry discordId={discordId} />}
-      {tab === "staff" && <StaffOnly discordId={discordId}><StaffQueue discordId={discordId} /></StaffOnly>}
+      {tab === "staff" && <StaffOnly discordId={discordId}><section className="request-workflow-page"><StaffTraitGrantCard discordId={discordId} /><StaffQueue discordId={discordId} /></section></StaffOnly>}
       {tab === "beast_skills" && <BeastSkillCatalogDashboard discordId={discordId} />}
       {tab === "combat" && <DerivedStatsCalculator />}
     </main>
@@ -6920,3 +6920,165 @@ function DerivedStatsCalculator() {
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
+
+function StaffTraitGrantCard({ discordId }: { discordId: string }) {
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [traits, setTraits] = useState<any[]>([]);
+  const [characterId, setCharacterId] = useState("");
+  const [traitId, setTraitId] = useState("");
+  const [reason, setReason] = useState("");
+  const [mode, setMode] = useState<"grant" | "remove">("grant");
+  const [search, setSearch] = useState("");
+  const [message, setMessage] = useState("");
+  const [working, setWorking] = useState(false);
+
+  async function loadOptions() {
+    setMessage("");
+    try {
+      const data = await apiFetch("/api/staff/trait-grants/options", {}, discordId);
+      setCharacters(data.characters || []);
+      setTraits(data.traits || []);
+    } catch (error: any) {
+      setMessage(error.message || "Could not load trait grant options.");
+    }
+  }
+
+  useEffect(() => {
+    if (discordId) loadOptions().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId]);
+
+  async function submitTraitAction() {
+    setMessage("");
+
+    if (!characterId || !traitId) {
+      setMessage("Choose an OC and a trait.");
+      return;
+    }
+
+    if (!reason.trim()) {
+      setMessage("Staff reason is required.");
+      return;
+    }
+
+    setWorking(true);
+
+    try {
+      const endpoint = mode === "grant" ? "/api/staff/trait-grants/grant" : "/api/staff/trait-grants/remove";
+      const data = await apiFetch(
+        endpoint,
+        {
+          method: "POST",
+          body: JSON.stringify({ character_id: characterId, trait_id: traitId, reason }),
+        },
+        discordId
+      );
+
+      setMessage(data.message || (mode === "grant" ? "Trait granted." : "Trait removed."));
+      setReason("");
+    } catch (error: any) {
+      setMessage(error.message || "Could not update trait.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function traitLabel(trait: any) {
+    const bits = [
+      trait.name || trait.slug || "Trait",
+      trait.category,
+      trait.tier !== undefined && trait.tier !== null ? `Tier ${trait.tier}` : "",
+    ].filter(Boolean);
+
+    return bits.join(" / ");
+  }
+
+  const filteredTraits = traits.filter((trait) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+
+    return [trait.name, trait.slug, trait.category, trait.tier]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(q);
+  });
+
+  return (
+    <div className="card">
+      <div className="card-title-row">
+        <div>
+          <span className="activity-type-label">Staff Trait Tools</span>
+          <h3>Grant / Remove Trait Only</h3>
+          <p className="muted-text">
+            Use this when staff needs to grant a trait by itself without granting a skill or running the trait-benefit workflow.
+          </p>
+        </div>
+        <button className="ghost" onClick={loadOptions} disabled={working}>
+          Refresh Options
+        </button>
+      </div>
+
+      {message ? <p className="message">{message}</p> : null}
+
+      <div className="request-actions-panel">
+        <label>
+          <span>Action</span>
+          <select value={mode} onChange={(event) => setMode(event.target.value as "grant" | "remove")}>
+            <option value="grant">Grant Trait</option>
+            <option value="remove">Remove Trait</option>
+          </select>
+        </label>
+
+        <label>
+          <span>OC</span>
+          <select value={characterId} onChange={(event) => setCharacterId(event.target.value)}>
+            <option value="">Select an OC</option>
+            {characters.map((character: any) => (
+              <option key={character.character_id} value={character.character_id}>
+                {character.name || character.character_id}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <span>Search Traits</span>
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search trait name, slug, category..."
+          />
+        </label>
+
+        <label>
+          <span>Trait</span>
+          <select value={traitId} onChange={(event) => setTraitId(event.target.value)}>
+            <option value="">Select a trait</option>
+            {filteredTraits.map((trait: any) => (
+              <option key={trait.trait_id} value={trait.trait_id}>
+                {traitLabel(trait)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <span>Staff Reason</span>
+          <textarea
+            rows={3}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Required. Example: staff-approved reward, correction, hidden trait approval, sheet cleanup."
+          />
+        </label>
+      </div>
+
+      <div className="actions">
+        <button onClick={submitTraitAction} disabled={working || !characterId || !traitId || !reason.trim()}>
+          {working ? "Working..." : mode === "grant" ? "Grant Trait" : "Remove Trait"}
+        </button>
+      </div>
+    </div>
+  );
+}
