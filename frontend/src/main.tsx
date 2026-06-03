@@ -6896,7 +6896,15 @@ function DerivedStatsCalculator() {
 
 createRoot(document.getElementById("root")!).render(<App />);
 
-function StaffTraitGrantCard({ discordId, selectedCharacterId, embedded = false }: { discordId: string; selectedCharacterId?: string; embedded?: boolean }) {
+function StaffTraitGrantCard({
+  discordId,
+  selectedCharacterId,
+  embedded = false,
+}: {
+  discordId: string;
+  selectedCharacterId?: string;
+  embedded?: boolean;
+}) {
   const [characters, setCharacters] = useState<any[]>([]);
   const [traits, setTraits] = useState<any[]>([]);
   const [characterId, setCharacterId] = useState(selectedCharacterId || "");
@@ -6909,6 +6917,7 @@ function StaffTraitGrantCard({ discordId, selectedCharacterId, embedded = false 
 
   async function loadOptions() {
     setMessage("");
+
     try {
       const data = await apiFetch("/api/staff/trait-grants/options", {}, discordId);
       setCharacters(data.characters || []);
@@ -6919,7 +6928,9 @@ function StaffTraitGrantCard({ discordId, selectedCharacterId, embedded = false 
   }
 
   useEffect(() => {
-    if (discordId) loadOptions().catch(() => {});
+    if (discordId) {
+      loadOptions().catch(() => {});
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discordId]);
 
@@ -6930,7 +6941,9 @@ function StaffTraitGrantCard({ discordId, selectedCharacterId, embedded = false 
   async function submitTraitAction() {
     setMessage("");
 
-    if (!characterId || !traitId) {
+    const targetCharacterId = selectedCharacterId || characterId;
+
+    if (!targetCharacterId || !traitId) {
       setMessage("Choose an OC and a trait.");
       return;
     }
@@ -6948,7 +6961,11 @@ function StaffTraitGrantCard({ discordId, selectedCharacterId, embedded = false 
         endpoint,
         {
           method: "POST",
-          body: JSON.stringify({ character_id: characterId, trait_id: traitId, reason }),
+          body: JSON.stringify({
+            character_id: targetCharacterId,
+            trait_id: traitId,
+            reason,
+          }),
         },
         discordId
       );
@@ -6972,8 +6989,13 @@ function StaffTraitGrantCard({ discordId, selectedCharacterId, embedded = false 
     return bits.join(" / ");
   }
 
+  const selectedCharacterName =
+    characters.find((character: any) => character.character_id === (selectedCharacterId || characterId))?.name ||
+    "Selected Staff Action Center OC";
+
   const filteredTraits = traits.filter((trait) => {
     const q = search.trim().toLowerCase();
+
     if (!q) return true;
 
     return [trait.name, trait.slug, trait.category, trait.tier]
@@ -6993,6 +7015,7 @@ function StaffTraitGrantCard({ discordId, selectedCharacterId, embedded = false 
             Use this when staff needs to grant a trait by itself without granting a skill or running the trait-benefit workflow.
           </p>
         </div>
+
         <button className="ghost" onClick={loadOptions} disabled={working}>
           Refresh Options
         </button>
@@ -7008,13 +7031,13 @@ function StaffTraitGrantCard({ discordId, selectedCharacterId, embedded = false 
             <option value="remove">Remove Trait</option>
           </select>
         </label>
+
         {selectedCharacterId ? (
           <div>
             <span>OC</span>
-            <strong>{characters.find((character: any) => character.character_id === selectedCharacterId)?.name || "Selected OC"}</strong>
+            <strong>{selectedCharacterName}</strong>
           </div>
         ) : (
-        {!embedded ? (
           <label>
             <span>OC</span>
             <select value={characterId} onChange={(event) => setCharacterId(event.target.value)}>
@@ -7026,12 +7049,6 @@ function StaffTraitGrantCard({ discordId, selectedCharacterId, embedded = false 
               ))}
             </select>
           </label>
-        ) : (
-          <div>
-            <span>OC</span>
-            <strong>{characters.find((character: any) => character.character_id === characterId)?.name || "Selected Staff Action Center OC"}</strong>
-          </div>
-        )}
         )}
 
         <label>
@@ -7067,10 +7084,14 @@ function StaffTraitGrantCard({ discordId, selectedCharacterId, embedded = false 
       </div>
 
       <div className="actions">
-        <button onClick={submitTraitAction} disabled={working || !characterId || !traitId || !reason.trim()}>
+        <button
+          onClick={submitTraitAction}
+          disabled={working || !(selectedCharacterId || characterId) || !traitId || !reason.trim()}
+        >
           {working ? "Working..." : mode === "grant" ? "Grant Trait" : "Remove Trait"}
         </button>
       </div>
     </div>
   );
 }
+
