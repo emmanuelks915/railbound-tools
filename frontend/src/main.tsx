@@ -6898,10 +6898,10 @@ function DerivedStatsCalculator() {
 
 createRoot(document.getElementById("root")!).render(<App />);
 
-function StaffTraitGrantCard({ discordId }: { discordId: string }) {
+function StaffTraitGrantCard({ discordId, selectedCharacterId }: { discordId: string; selectedCharacterId?: string }) {
   const [characters, setCharacters] = useState<any[]>([]);
   const [traits, setTraits] = useState<any[]>([]);
-  const [characterId, setCharacterId] = useState("");
+  const [characterId, setCharacterId] = useState(selectedCharacterId || "");
   const [traitId, setTraitId] = useState("");
   const [reason, setReason] = useState("");
   const [mode, setMode] = useState<"grant" | "remove">("grant");
@@ -6924,6 +6924,10 @@ function StaffTraitGrantCard({ discordId }: { discordId: string }) {
     if (discordId) loadOptions().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discordId]);
+
+  useEffect(() => {
+    setCharacterId(selectedCharacterId || "");
+  }, [selectedCharacterId]);
 
   async function submitTraitAction() {
     setMessage("");
@@ -7006,18 +7010,24 @@ function StaffTraitGrantCard({ discordId }: { discordId: string }) {
             <option value="remove">Remove Trait</option>
           </select>
         </label>
-
-        <label>
-          <span>OC</span>
-          <select value={characterId} onChange={(event) => setCharacterId(event.target.value)}>
-            <option value="">Select an OC</option>
-            {characters.map((character: any) => (
-              <option key={character.character_id} value={character.character_id}>
-                {character.name || character.character_id}
-              </option>
-            ))}
-          </select>
-        </label>
+        {selectedCharacterId ? (
+          <div>
+            <span>OC</span>
+            <strong>{characters.find((character: any) => character.character_id === selectedCharacterId)?.name || "Selected OC"}</strong>
+          </div>
+        ) : (
+          <label>
+            <span>OC</span>
+            <select value={characterId} onChange={(event) => setCharacterId(event.target.value)}>
+              <option value="">Select an OC</option>
+              {characters.map((character: any) => (
+                <option key={character.character_id} value={character.character_id}>
+                  {character.name || character.character_id}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label>
           <span>Search Traits</span>
