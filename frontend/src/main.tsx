@@ -6458,10 +6458,8 @@ function StaffQueue({ discordId }: { discordId: string }) {
             </label>
 
         {maintenanceForm.action === "trait_grant_only" ? (
-          <div className="request-note-block">
-            <StaffTraitGrantCard discordId={discordId} />
-          </div>
-        ) : null}
+              <StaffTraitGrantCard discordId={discordId} selectedCharacterId={maintenanceForm.character_id} embedded />
+            ) : null}
 
             {maintenanceForm.action === "grant_resources" ? (
               <>
@@ -6898,7 +6896,7 @@ function DerivedStatsCalculator() {
 
 createRoot(document.getElementById("root")!).render(<App />);
 
-function StaffTraitGrantCard({ discordId, selectedCharacterId }: { discordId: string; selectedCharacterId?: string }) {
+function StaffTraitGrantCard({ discordId, selectedCharacterId, embedded = false }: { discordId: string; selectedCharacterId?: string; embedded?: boolean }) {
   const [characters, setCharacters] = useState<any[]>([]);
   const [traits, setTraits] = useState<any[]>([]);
   const [characterId, setCharacterId] = useState(selectedCharacterId || "");
@@ -6986,7 +6984,7 @@ function StaffTraitGrantCard({ discordId, selectedCharacterId }: { discordId: st
   });
 
   return (
-    <div className="card">
+    <div className={embedded ? "staff-trait-grant-inline" : "card"}>
       <div className="card-title-row">
         <div>
           <span className="activity-type-label">Staff Trait Tools</span>
@@ -7016,6 +7014,7 @@ function StaffTraitGrantCard({ discordId, selectedCharacterId }: { discordId: st
             <strong>{characters.find((character: any) => character.character_id === selectedCharacterId)?.name || "Selected OC"}</strong>
           </div>
         ) : (
+        {!embedded ? (
           <label>
             <span>OC</span>
             <select value={characterId} onChange={(event) => setCharacterId(event.target.value)}>
@@ -7027,6 +7026,12 @@ function StaffTraitGrantCard({ discordId, selectedCharacterId }: { discordId: st
               ))}
             </select>
           </label>
+        ) : (
+          <div>
+            <span>OC</span>
+            <strong>{characters.find((character: any) => character.character_id === characterId)?.name || "Selected Staff Action Center OC"}</strong>
+          </div>
+        )}
         )}
 
         <label>
