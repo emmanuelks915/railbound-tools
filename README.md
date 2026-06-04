@@ -1,30 +1,30 @@
-# OC Registry Guild Filter v1
+# Repair Staff Trait Grant Component v4
 
-Adds a player-facing filter to the OC Registry that uses the existing `affiliation` field as a mercenary guild filter.
-
-## Why
-
-Keystone does not currently track mercenary guild in a dedicated column, but most players put it in `affiliation`.
-
-## What changes
-
-The Citizen Registry gets a dropdown:
+This fixes the build error:
 
 ```txt
-All guilds / affiliations
-No affiliation listed
-<unique affiliation values pulled from the registry>
+Unexpected token at {!embedded ? (
 ```
 
-The roster then only shows OCs whose `affiliation` matches the selected guild/affiliation.
+Instead of trying to repair the broken JSX fragment, this patch rewrites the entire `StaffTraitGrantCard` component with a clean known-good version.
+
+## What it does
+
+```txt
+- replaces broken StaffTraitGrantCard component
+- keeps Grant / Remove Trait Only inside Staff Action Center
+- passes maintenanceForm.character_id into the trait tool
+- removes duplicate OC picker when embedded
+- removes request-note-block wrapper when embedded
+```
 
 ## Run
 
 ```powershell
 cd C:\Users\emman\OneDrive\Documents\railbound-tools-starter
 
-Expand-Archive -Path "$env:USERPROFILE\Downloads\oc_registry_guild_filter_v1_patch.zip" -DestinationPath . -Force
-python patch_oc_registry_guild_filter_v1.py
+Expand-Archive -Path "$env:USERPROFILE\Downloads\repair_staff_trait_grant_component_v4_patch.zip" -DestinationPath . -Force
+python patch_repair_staff_trait_grant_component_v4.py
 ```
 
 Then:
@@ -39,6 +39,6 @@ Commit:
 ```powershell
 cd ..
 git add frontend/src/main.tsx
-git commit -m "Add OC registry guild filter"
+git commit -m "Repair staff trait grant component"
 git push
 ```
