@@ -6458,7 +6458,7 @@ function StaffQueue({ discordId }: { discordId: string }) {
             </label>
 
         {maintenanceForm.action === "trait_grant_only" ? (
-              <StaffTraitGrantCard discordId={discordId} selectedCharacterId={maintenanceForm.character_id} embedded />
+              <StaffTraitGrantCard discordId={discordId} selectedCharacterId={maintenanceForm.character_id} embedded fallbackCharacters={maintenanceOptions.characters || resourceCharacters} fallbackTraits={maintenanceOptions.traits || traitBenefitTraits} />
             ) : null}
 
             {maintenanceForm.action === "grant_resources" ? (
@@ -6900,13 +6900,17 @@ function StaffTraitGrantCard({
   discordId,
   selectedCharacterId,
   embedded = false,
+  fallbackCharacters = [],
+  fallbackTraits = [],
 }: {
   discordId: string;
   selectedCharacterId?: string;
   embedded?: boolean;
+  fallbackCharacters?: any[];
+  fallbackTraits?: any[];
 }) {
-  const [characters, setCharacters] = useState<any[]>([]);
-  const [traits, setTraits] = useState<any[]>([]);
+  const [characters, setCharacters] = useState<any[]>(fallbackCharacters || []);
+  const [traits, setTraits] = useState<any[]>(fallbackTraits || []);
   const [characterId, setCharacterId] = useState(selectedCharacterId || "");
   const [traitId, setTraitId] = useState("");
   const [reason, setReason] = useState("");
@@ -6920,10 +6924,19 @@ function StaffTraitGrantCard({
 
     try {
       const data = await apiFetch("/api/staff/trait-grants/options", {}, discordId);
-      setCharacters(data.characters || []);
-      setTraits(data.traits || []);
+      const loadedCharacters = Array.isArray(data.characters) && data.characters.length > 0 ? data.characters : fallbackCharacters;
+      const loadedTraits = Array.isArray(data.traits) && data.traits.length > 0 ? data.traits : fallbackTraits;
+
+      setCharacters(loadedCharacters || []);
+      setTraits(loadedTraits || []);
     } catch (error: any) {
-      setMessage(error.message || "Could not load trait grant options.");
+      setCharacters(fallbackCharacters || []);
+      setTraits(fallbackTraits || []);
+      setMessage(
+        (fallbackTraits || []).length > 0
+          ? "Using Staff Action Center trait options."
+          : error.message || "Could not load trait grant options."
+      );
     }
   }
 
@@ -6937,6 +6950,16 @@ function StaffTraitGrantCard({
   useEffect(() => {
     setCharacterId(selectedCharacterId || "");
   }, [selectedCharacterId]);
+
+  useEffect(() => {
+    if (fallbackCharacters?.length) {
+      setCharacters(fallbackCharacters);
+    }
+
+    if (fallbackTraits?.length) {
+      setTraits(fallbackTraits);
+    }
+  }, [fallbackCharacters, fallbackTraits]);
 
   async function submitTraitAction() {
     setMessage("");
@@ -7062,7 +7085,19 @@ function StaffTraitGrantCard({
 
         <label>
           <span>Trait</span>
-          <select value={traitId} onChange={(event) => setTraitId(event.target.value)}>
+          <select
+            value={traitId}
+            onChange={(event) => {
+              const nextTraitId = event.target.value;
+              const selectedTrait = traits.find((trait: any) => String(trait.trait_id) === String(nextTraitId));
+
+              setTraitId(nextTraitId);
+
+              if (selectedTrait) {
+                setSearch(traitLabel(selectedTrait));
+              }
+            }}
+          >
             <option value="">Select a trait</option>
             {filteredTraits.map((trait: any) => (
               <option key={trait.trait_id} value={trait.trait_id}>
@@ -7071,6 +7106,10 @@ function StaffTraitGrantCard({
             ))}
           </select>
         </label>
+
+        {traits.length === 0 ? (
+          <p className="muted-text">No traits loaded yet. Click Refresh Options or clear the search field.</p>
+        ) : null}
 
         <label>
           <span>Staff Reason</span>
