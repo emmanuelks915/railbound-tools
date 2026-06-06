@@ -154,6 +154,8 @@ def _stock(row: dict[str, Any]) -> int | float | None:
 
 
 def _is_active(row: dict[str, Any]) -> bool:
+    if row.get("enabled") is not None:
+        return bool(row.get("enabled"))
     if row.get("is_active") is not None:
         return bool(row.get("is_active"))
     if row.get("active") is not None:
@@ -232,7 +234,15 @@ def get_market_overview(
 
     if active_only:
         shop_rows = [row for row in shop_rows if _is_active(row)]
-        item_rows = [row for row in item_rows if _is_active(row)]
+        item_rows = [
+            row for row in item_rows
+            if _is_active(row)
+            and bool(row.get("purchasable", True))
+            and (
+                not bool(row.get("requires_approval"))
+                or str(row.get("review_status") or "").lower() == "approved"
+            )
+        ]
 
     shops_by_id = {_shop_id(row): row for row in shop_rows if _shop_id(row)}
     currency_ids = {str(row.get("currency_id")) for row in item_rows if row.get("currency_id")}

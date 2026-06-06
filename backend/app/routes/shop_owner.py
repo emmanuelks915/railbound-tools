@@ -157,13 +157,17 @@ def _clean(value: Any, max_len: int = 500) -> str | None:
 
 
 def _normalize_shop(row: dict[str, Any]) -> dict[str, Any]:
+    enabled_value = row.get("enabled")
+    is_active = bool(enabled_value) if enabled_value is not None else True
     return {
         "shop_id": _shop_id(row),
         "name": row.get("name") or row.get("shop_name") or "Unnamed Shop",
         "description": row.get("description") or row.get("blurb") or row.get("details"),
         "owner_discord_id": _owner_id(row),
-        "status": row.get("status") or ("Open" if row.get("is_active", True) else "Closed"),
-        "is_active": bool(row.get("is_active", True)) if row.get("is_active") is not None else str(row.get("status") or "").lower() not in {"closed", "archived", "inactive"},
+        "owner_character_id": row.get("owner_character_id"),
+        "status": "Open" if is_active else "Closed",
+        "is_active": is_active,
+        "enabled": is_active,
         "image_url": row.get("image_url") or row.get("banner_url"),
         "channel_id": row.get("channel_id"),
         "raw": row,
@@ -195,69 +199,30 @@ def create_my_shop(
 ):
     actor = _require_login(actor_discord_id)
     sb = get_supabase()
-
     name = _clean(payload.get("name") or payload.get("shop_name"), 120)
     if not name:
-        raise HTTPException(status_code=400, detail="Shop name is required.")
-
-    if not is_staff(actor):
-        existing = _safe_rows(
-            sb.table("shops")
-            .select("*")
-            .eq("guild_id", get_guild_id())
-            .eq("owner_discord_id", str(actor))
-            .limit(1)
-        )
-
-        if not existing:
-            existing = _safe_rows(
-                sb.table("shops")
-                .select("*")
-                .eq("guild_id", get_guild_id())
-                .eq("user_id", str(actor))
-                .limit(1)
-            )
-
-        if existing:
-            raise HTTPException(status_code=400, detail="You already have a shop assigned to your account.")
-
-    base_payload: dict[str, Any] = {
+        raise HTTPException(status_code=400, detail="Storefront name is required.")
+    enabled = _bool(payload.get("enabled") if "enabled" in payload else payload.get("is_active"), True)
+    base_payload = {
         "guild_id": get_guild_id(),
         "name": name,
         "description": _clean(payload.get("description"), 1000),
-        "status": _clean(payload.get("status"), 80) or "Open",
-        "is_active": _bool(payload.get("is_active"), True),
-        "owner_discord_id": str(actor),
-        "user_id": str(actor),
+        "enabled": enabled,
+        "is_forum": False,
+        "treasury_cut_bps": int(_number(payload.get("treasury_cut_bps"), 0)),
+        "owner_discord_id": int(actor),
     }
-
+    if payload.get("owner_character_id"):
+        base_payload["owner_character_id"] = str(payload.get("owner_character_id"))
     if payload.get("image_url"):
         base_payload["image_url"] = _clean(payload.get("image_url"), 800)
-
-    insert_attempts: list[dict[str, Any]] = [
+    insert_attempts = [
         base_payload,
-        {k: v for k, v in base_payload.items() if k != "owner_discord_id"},
-        {k: v for k, v in base_payload.items() if k != "user_id"},
-        {
-            "guild_id": get_guild_id(),
-            "shop_name": name,
-            "description": base_payload.get("description"),
-            "status": base_payload.get("status"),
-            "is_active": base_payload.get("is_active"),
-            "owner_discord_id": str(actor),
-        },
-        {
-            "guild_id": get_guild_id(),
-            "name": name,
-            "description": base_payload.get("description"),
-            "status": base_payload.get("status"),
-            "is_active": base_payload.get("is_active"),
-        },
+        {k: v for k, v in base_payload.items() if k not in {"owner_character_id"}},
+        {k: v for k, v in base_payload.items() if k not in {"owner_discord_id", "owner_character_id"}},
     ]
-
-    last_error: Exception | None = None
-    rows: list[dict[str, Any]] = []
-
+    last_error = None
+    rows = []
     for attempt in insert_attempts:
         try:
             rows = _as_list(sb.table("shops").insert(attempt).execute())
@@ -266,28 +231,10 @@ def create_my_shop(
         except Exception as exc:
             last_error = exc
             rows = []
-
     if not rows:
-        raise HTTPException(status_code=400, detail=f"Could not create shop. {last_error}")
-
+        raise HTTPException(status_code=400, detail=f"Could not create storefront. {last_error}")
     shop = rows[0]
-
-    log_activity(
-        event_type="shop_created",
-        label=f"Shop created: {shop.get('name') or shop.get('shop_name') or name}",
-        status="created",
-        actor_discord_id=actor,
-        source="shop_owner_tools",
-        details={
-            "shop_id": shop.get("shop_id") or shop.get("id"),
-            "name": shop.get("name") or shop.get("shop_name") or name,
-        },
-        webhook_title="🏪 Shop Created",
-        webhook_description=f"{shop.get('name') or shop.get('shop_name') or name} was created.",
-    )
-
-    return {"shop": _normalize_shop(shop), "message": "Shop created."}
-
+    return {"shop": _normalize_shop(shop), "message": "Storefront created."}
 
 @router.get("/shops")
 def get_my_shops(actor_discord_id: int | None = Depends(actor_from_header)):
@@ -357,49 +304,32 @@ def update_shop(
     actor = _require_login(actor_discord_id)
     sb = get_supabase()
     shop, id_column = _load_shop(sb, shop_id)
-
     if not _can_manage_shop(shop, actor):
-        raise HTTPException(status_code=403, detail="You can only manage your own shop.")
-
-    update_payload: dict[str, Any] = {}
-
+        raise HTTPException(status_code=403, detail="You can only manage your own storefront.")
+    update_payload = {}
     for source_key, dest_key, max_len in [
         ("name", "name", 120),
         ("description", "description", 1000),
         ("image_url", "image_url", 800),
-        ("status", "status", 80),
+        ("item_type", "item_type", 80),
     ]:
         if source_key in payload:
             update_payload[dest_key] = _clean(payload.get(source_key), max_len)
-
-    if "is_active" in payload:
-        update_payload["is_active"] = _bool(payload.get("is_active"), True)
-
+    if "enabled" in payload:
+        update_payload["enabled"] = _bool(payload.get("enabled"), True)
+    elif "is_active" in payload:
+        update_payload["enabled"] = _bool(payload.get("is_active"), True)
+    if "owner_character_id" in payload:
+        update_payload["owner_character_id"] = str(payload.get("owner_character_id")) if payload.get("owner_character_id") else None
     if not update_payload:
-        raise HTTPException(status_code=400, detail="No shop fields provided.")
-
-    rows = _as_list(
-        sb.table("shops")
-        .update(update_payload)
-        .eq(id_column, shop_id)
-        .execute()
-    )
-
+        raise HTTPException(status_code=400, detail="No storefront fields provided.")
+    try:
+        rows = _as_list(sb.table("shops").update(update_payload).eq(id_column, shop_id).execute())
+    except Exception:
+        fallback = {k: v for k, v in update_payload.items() if k not in {"owner_character_id"}}
+        rows = _as_list(sb.table("shops").update(fallback).eq(id_column, shop_id).execute())
     updated = rows[0] if rows else {**shop, **update_payload}
-
-    log_activity(
-        event_type="shop_updated",
-        label=f"Shop updated: {updated.get('name') or shop.get('name') or 'Shop'}",
-        status="updated",
-        actor_discord_id=actor,
-        source="shop_owner_tools",
-        details={"shop_id": shop_id, "updated_fields": list(update_payload.keys())},
-        webhook_title="🏪 Shop Updated",
-        webhook_description=f"{updated.get('name') or shop.get('name') or 'Shop'} was updated.",
-    )
-
-    return {"shop": _normalize_shop(updated), "message": "Shop updated."}
-
+    return {"shop": _normalize_shop(updated), "message": "Storefront updated."}
 
 @router.post("/shops/{shop_id}/items")
 def create_shop_item(
@@ -428,10 +358,20 @@ def create_shop_item(
         "stock": int(_number(payload.get("stock"), 0)),
         "requires_approval": _bool(payload.get("requires_approval"), False),
         "is_active": _bool(payload.get("is_active"), True),
+        "purchasable": _bool(payload.get("purchasable"), True),
+        "review_status": "approved" if not _bool(payload.get("requires_approval"), False) else "PENDING_STAFF_REVIEW",
+        "item_type": _clean(payload.get("item_type"), 80) or _clean(payload.get("category"), 80) or "item",
+        "grants_qty": int(_number(payload.get("grants_qty"), 1)),
     }
 
     if payload.get("currency_id"):
         insert_payload["currency_id"] = str(payload.get("currency_id"))
+    else:
+        currencies = _safe_rows(sb.table("currencies").select("*").eq("guild_id", get_guild_id()).limit(1))
+        if not currencies:
+            currencies = _safe_rows(sb.table("currencies").select("*").limit(1))
+        if currencies:
+            insert_payload["currency_id"] = str(currencies[0].get("currency_id") or currencies[0].get("id"))
 
     if payload.get("image_url"):
         insert_payload["image_url"] = _clean(payload.get("image_url"), 800)

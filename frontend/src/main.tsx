@@ -1925,7 +1925,7 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
         <div className="card shop-owner-hero">
           <div>
             <span className="activity-type-label">Owner Tools</span>
-            <h2>Manage Shop</h2>
+            <h2>Manage Storefronts</h2>
             <p className="muted-text">
               Edit your storefront, create items, update prices/stock, and activate or hide listings.
             </p>
@@ -1937,9 +1937,9 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
 
         <div className="card shop-owner-picker">
           <label>
-            <span>Choose Shop</span>
+            <span>Choose Storefront</span>
             <select value={selectedShopId} onChange={(event) => setSelectedShopId(event.target.value)}>
-              <option value="">Select a shop</option>
+              <option value="">Select a storefront</option>
               {shops.map((shop) => (
                 <option value={shop.shop_id} key={shop.shop_id}>
                   {shop.name}
@@ -1951,7 +1951,7 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
           {shops.length === 0 ? (
             <div className="shop-create-empty-state">
               <div>
-                <strong>No shop found yet.</strong>
+                <strong>No storefront found yet.</strong>
                 <p className="muted-text">
                   If you bought a shop owner token, create your storefront here. Staff can still review activity through the audit log.
                 </p>
@@ -1966,7 +1966,7 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
           <div className="card shop-create-card">
             <div className="card-title-row">
               <div>
-                <h3>Create Your Storefront</h3>
+                <h3>Create New Storefront</h3>
                 <p className="muted-text">
                   This is where shop owner token holders make their first store.
                 </p>
@@ -1975,7 +1975,7 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
 
             <div className="shop-owner-form">
               <label>
-                <span>Shop Name</span>
+                <span>Storefront Name</span>
                 <input
                   value={createShopForm.name}
                   onChange={(event) => setCreateShopForm((current) => ({ ...current, name: event.target.value }))}
@@ -2043,7 +2043,7 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
 
                 <div className="shop-owner-form">
                   <label>
-                    <span>Shop Name</span>
+                    <span>Storefront Name</span>
                     <input
                       value={shopForm.name}
                       onChange={(event) => setShopForm((current) => ({ ...current, name: event.target.value }))}
