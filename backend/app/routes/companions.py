@@ -73,7 +73,7 @@ def _int(p,k,d=5):
     except Exception: return d
 @router.get("/eligibility")
 def companion_eligibility(actor_discord_id: int | None = Depends(actor_from_header)):
-    actor = _require_login(actor_discord_id)
+    actor = _actor(actor_discord_id)
     sb = get_supabase()
 
     if is_staff(actor):
@@ -84,7 +84,7 @@ def companion_eligibility(actor_discord_id: int | None = Depends(actor_from_head
             "reason": "Staff can always access the Companion tab for Loyal Companion support.",
         }
 
-    character_rows = _safe_rows(
+    character_rows = _safe(
         sb.table("characters")
         .select("*")
         .eq("guild_id", get_guild_id())
@@ -93,7 +93,7 @@ def companion_eligibility(actor_discord_id: int | None = Depends(actor_from_head
     )
 
     if not character_rows:
-        character_rows = _safe_rows(
+        character_rows = _safe(
             sb.table("characters")
             .select("*")
             .eq("user_id", str(actor))
@@ -108,9 +108,9 @@ def companion_eligibility(actor_discord_id: int | None = Depends(actor_from_head
             continue
 
         guild_id = int(character.get("guild_id") or get_guild_id())
-        traits = _trait_rows(sb, cid, guild_id)
+        traits = _traits(sb, cid, guild_id)
 
-        if _has_loyal_companion(traits):
+        if _eligible(traits):
             eligible_characters.append({
                 "character_id": cid,
                 "name": character.get("name"),
