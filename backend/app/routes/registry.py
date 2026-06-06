@@ -712,24 +712,163 @@ def _public_skill_rows(sb, character_ids: list[str]) -> dict[str, list[dict[str,
 
 
 def _public_trait_rows(sb, character_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
-    rows = _first_nonempty_source(
-        sb,
-        character_ids,
-        [
-            ("character_traits", "character_id"),
-            ("oc_traits", "character_id"),
-            ("traits", "character_id"),
-        ],
+    owned_rows: list[dict[str, Any]] = []
+
+    # Ownership tables usually store only character_id + trait_id. The public registry
+    # needs to resolve those IDs through the trait catalog before rendering names.
+    for table in ("character_traits", "oc_traits"):
+        owned_rows.extend(_safe_select_for_ids(sb, table, "character_id", character_ids))
+
+    if not owned_rows:
+        legacy_rows = _safe_select_for_ids(sb, "traits", "character_id", character_ids)
+        cleaned = []
+        for row in legacy_rows:
+            cleaned.append(
+                {
+                    "character_id": str(row.get("character_id") or row.get("oc_id") or ""),
+                    "trait_id": row.get("trait_id"),
+                    "slug": row.get("slug") or row.get("trait_slug") or row.get("trait_key"),
+                    "name": row.get("name") or row.get("trait_name") or row.get("trait_key") or "Trait",
+                    "description": row.get("description") or row.get("summary"),
+                    "type": row.get("tier") or row.get("type") or row.get("trait_type"),
+                    "tier": row.get("tier"),
+                    "category": row.get("category") or row.get("trait_type"),
+                    "cost": row.get("cost") or row.get("point_value"),
+                }
+            )
+        return _group_by_character(cleaned)
+
+    trait_ids = list(
+        dict.fromkeys(
+            str(row.get("trait_id"))
+            for row in owned_rows
+            if row.get("trait_id")
+        )
+    )
+    slugs = list(
+        dict.fromkeys(
+            str(row.get(key))
+            for row in owned_rows
+            for key in ("slug", "trait_slug", "trait_key")
+            if row.get(key)
+        )
     )
 
+    trait_by_id: dict[str, dict[str, Any]] = {}
+    trait_by_slug: dict[str, dict[str, Any]] = {}
+
+    def remember_trait(row: dict[str, Any]) -> None:
+        if row.get("trait_id"):
+            trait_by_id[str(row.get("trait_id"))] = row
+
+        for key in ("slug", "trait_slug", "trait_key"):
+            value = row.get(key)
+            if value:
+                trait_by_slug[str(value)] = row
+
+    if trait_ids:
+        catalog_rows = _safe_execute(
+            sb.table("traits")
+            .select("*")
+            .eq("guild_id", get_guild_id())
+            .in_("trait_id", trait_ids)
+            .limit(1000)
+        )
+
+        if not catalog_rows:
+            catalog_rows = _safe_execute(
+                sb.table("traits")
+                .select("*")
+                .in_("trait_id", trait_ids)
+                .limit(1000)
+            )
+
+        for trait in catalog_rows:
+            remember_trait(trait)
+
+    if slugs:
+        catalog_rows = _safe_execute(
+            sb.table("traits")
+            .select("*")
+            .eq("guild_id", get_guild_id())
+            .in_("slug", slugs)
+            .limit(1000)
+        )
+
+        if not catalog_rows:
+            catalog_rows = _safe_execute(
+                sb.table("traits")
+                .select("*")
+                .in_("slug", slugs)
+                .limit(1000)
+            )
+
+        trait_key_rows = _safe_execute(
+            sb.table("traits")
+            .select("*")
+            .eq("guild_id", get_guild_id())
+            .in_("trait_key", slugs)
+            .limit(1000)
+        )
+
+        for trait in [*catalog_rows, *trait_key_rows]:
+            remember_trait(trait)
+
     cleaned = []
-    for row in rows:
+    seen: set[tuple[str, str]] = set()
+
+    for row in owned_rows:
+        cid = str(row.get("character_id") or row.get("oc_id") or "")
+        if not cid:
+            continue
+
+        definition = None
+        trait_id = str(row.get("trait_id")) if row.get("trait_id") else ""
+
+        if trait_id:
+            definition = trait_by_id.get(trait_id)
+
+        if not definition:
+            for key in ("slug", "trait_slug", "trait_key"):
+                value = row.get(key)
+                if value and str(value) in trait_by_slug:
+                    definition = trait_by_slug[str(value)]
+                    break
+
+        source = definition or row
+        slug = (
+            source.get("slug")
+            or source.get("trait_slug")
+            or source.get("trait_key")
+            or row.get("slug")
+            or row.get("trait_slug")
+            or row.get("trait_key")
+        )
+        name = (
+            source.get("name")
+            or source.get("display_name")
+            or row.get("trait_name")
+            or slug
+            or "Trait"
+        )
+        marker = str(source.get("trait_id") or trait_id or slug or name)
+        dedupe_key = (cid, marker)
+
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+
         cleaned.append(
             {
-                "character_id": str(row.get("character_id") or row.get("oc_id") or ""),
-                "name": row.get("name") or row.get("trait_name") or row.get("trait_key") or "Trait",
-                "description": row.get("description") or row.get("summary"),
-                "type": row.get("type") or row.get("trait_type"),
+                "character_id": cid,
+                "trait_id": source.get("trait_id") or row.get("trait_id"),
+                "slug": slug,
+                "name": name,
+                "description": source.get("description") or source.get("summary") or row.get("description"),
+                "type": source.get("tier") or source.get("trait_type") or source.get("type") or row.get("type"),
+                "tier": source.get("tier"),
+                "category": source.get("category") or source.get("trait_type"),
+                "cost": source.get("cost") or source.get("point_value"),
             }
         )
 
