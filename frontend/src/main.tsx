@@ -1651,6 +1651,14 @@ function InventoryDashboard({
 function ShopOwnerDashboard({ discordId }: { discordId: string }) {
   const [shops, setShops] = useState<any[]>([]);
   const [selectedShopId, setSelectedShopId] = useState("");
+
+  const [newShopForm, setNewShopForm] = useState({
+    name: "",
+    description: "",
+    image_url: "",
+    enabled: true,
+  });
+
   const [shopData, setShopData] = useState<any>({ shop: null, items: [], currencies: [] });
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1962,8 +1970,7 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
 
         {message ? <p className="message">{message}</p> : null}
 
-        {shops.length === 0 ? (
-          <div className="card shop-create-card">
+        <div className="card shop-create-card">
             <div className="card-title-row">
               <div>
                 <h3>Create New Storefront</h3>
