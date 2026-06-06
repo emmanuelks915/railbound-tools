@@ -4856,6 +4856,7 @@ function CompanionDashboard({
   const [skillRequestForm, setSkillRequestForm] = useState<any>({ skill_key: "", note: "" });
   const [catalogSkills, setCatalogSkills] = useState<any[]>([]);
   const [showSkillPicker, setShowSkillPicker] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState("");
   const [skillMessage, setSkillMessage] = useState("");
 
@@ -4893,6 +4894,7 @@ function CompanionDashboard({
         discordId
       );
       setMessage(result.message || "LC Unit saved.");
+      setEditing(false);
       await loadCompanion(selectedCharacterId);
     } catch (error: any) {
       setMessage(error.message || "Could not save LC Unit.");
@@ -4937,30 +4939,31 @@ function CompanionDashboard({
   const rules = data?.type_rules || {};
   const wallet = data?.wallet || {};
   const beastSkillRequests: any[] = data?.beast_skill_requests || [];
+  const beast = data?.beast || {};
   const isStaff = Boolean(permissions?.is_staff);
 
-  const acquiredSkillKeys = new Set(
-    beastSkillRequests
-      .filter((r: any) => ["approved", "accepted"].includes(String(r.status || "").toLowerCase()))
-      .map((r: any) => r.skill_key)
+  const acquiredRequests = beastSkillRequests.filter(
+    (r: any) => ["approved", "accepted"].includes(String(r.status || "").toLowerCase())
   );
-  const pendingSkillKeys = new Set(
-    beastSkillRequests
-      .filter((r: any) => String(r.status || "").toLowerCase() === "pending")
-      .map((r: any) => r.skill_key)
+  const pendingRequests = beastSkillRequests.filter(
+    (r: any) => String(r.status || "").toLowerCase() === "pending"
   );
-
+  const acquiredSkillKeys = new Set(acquiredRequests.map((r: any) => r.skill_key));
+  const pendingSkillKeys = new Set(pendingRequests.map((r: any) => r.skill_key));
   const availableSkills = catalogSkills.filter(
     (s: any) => !acquiredSkillKeys.has(s.skill_key) && !pendingSkillKeys.has(s.skill_key)
   );
 
   const statLabels: [string, string][] = [
-    ["strength", "STR"],
-    ["dexterity", "DEX"],
-    ["stamina", "STA"],
-    ["magic_affinity", "MAG"],
-    ["mana", "MNA"],
+    ["strength", "Strength"],
+    ["dexterity", "Dexterity"],
+    ["stamina", "Stamina"],
+    ["magic_affinity", "Magic Affinity"],
+    ["mana", "Mana"],
   ];
+
+  const beastTypeLabel = (t: string) =>
+    t === "combat" ? "Combat" : t === "mount" ? "Mount" : "Utility";
 
   return (
     <RequireDiscord discordId={discordId}>
@@ -4968,14 +4971,10 @@ function CompanionDashboard({
         <div className="card request-workflow-hero">
           <div>
             <span className="activity-type-label">Loyal Companion</span>
-            <h2>LC Unit</h2>
-            <p className="muted-text">
-              The official Keystone sheet for your OC's Source Beast. Track its identity, bond, stats, and skills — all tied directly to your OC.
-            </p>
+            <h2>Companion</h2>
+            <p className="muted-text">Your OC's Source Beast — identity, stats, and skills all in one place.</p>
           </div>
-          <button className="ghost" onClick={() => loadCompanion()}>
-            <RefreshCw size={16} /> Refresh
-          </button>
+          <button className="ghost" onClick={() => loadCompanion()}><RefreshCw size={16} /> Refresh</button>
         </div>
 
         <CharacterSelect discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />
@@ -4989,157 +4988,173 @@ function CompanionDashboard({
         ) : null}
 
         {data?.eligible ? (
-          <>
-            {/* Identity */}
-            <div className="card">
-              <span className="activity-type-label">Identity</span>
-              <h3>Companion profile</h3>
-              <div className="request-actions-panel">
-                <label><span>Beast name</span><input value={form.beast_name || ""} onChange={(e) => setForm((c: any) => ({ ...c, beast_name: e.target.value }))} placeholder="Vespera, Ricardo, Nero…" /></label>
-                <label><span>Beast type</span>
-                  <select value={form.beast_type || "utility"} onChange={(e) => setForm((c: any) => ({ ...c, beast_type: e.target.value }))}>
-                    <option value="combat">Combat</option>
-                    <option value="mount">Mount</option>
-                    <option value="utility">Utility</option>
-                  </select>
-                </label>
-                <label><span>Image URL</span><input value={form.image_url || ""} onChange={(e) => setForm((c: any) => ({ ...c, image_url: e.target.value }))} placeholder="Optional portrait link" /></label>
-                <label><span>Description / appearance</span><textarea rows={4} value={form.description || ""} onChange={(e) => setForm((c: any) => ({ ...c, description: e.target.value }))} placeholder="What does the beast look like? How does it carry itself?" /></label>
-                <label><span>Bond notes</span><textarea rows={3} value={form.bond_notes || ""} onChange={(e) => setForm((c: any) => ({ ...c, bond_notes: e.target.value }))} placeholder="How did your OC encounter this beast? What connects them?" /></label>
-              </div>
-            </div>
+          <section className="grid oc-dashboard-grid">
 
-            {/* Stat Sync */}
             <div className="card">
-              <span className="activity-type-label">Stat sync</span>
-              <h3>Base + modified stats</h3>
-              <p className="muted-text">
-                Final stat = base + 10% of your OC's matching stat (passive modifier, auto-calculated).
-                {!isStaff ? " Base stats are set by staff — ask staff to invest XP into your beast's base stats." : " As staff you can edit base stats directly below."}
+              <div className="card-title-row">
+                <h2>Beast Dashboard</h2>
+                <button className="ghost" onClick={() => setEditing(!editing)}>
+                  {editing ? <><X size={14} /> Cancel</> : <><Save size={14} /> Edit</>}
+                </button>
+              </div>
+
+              {!editing ? (
+                <>
+                  <h3>{beast.beast_name || "Unnamed Beast"}</h3>
+                  <div className="stat-strip"><span>Type</span><strong>{beastTypeLabel(beast.beast_type || "utility")}</strong></div>
+                  <div className="stat-strip"><span>Beast XP</span><strong>{beast.xp ?? 0}</strong></div>
+                  {beast.description ? <p className="muted-text" style={{ marginTop: "0.75rem", fontSize: "0.85rem" }}>{beast.description}</p> : null}
+                  {beast.bond_notes ? <p className="muted-text" style={{ marginTop: "0.5rem", fontSize: "0.85rem", fontStyle: "italic" }}>"{beast.bond_notes}"</p> : null}
+                </>
+              ) : (
+                <div className="request-actions-panel">
+                  <label><span>Beast name</span><input value={form.beast_name || ""} onChange={(e) => setForm((c: any) => ({ ...c, beast_name: e.target.value }))} placeholder="Vespera, Ricardo, Nero…" /></label>
+                  <label><span>Beast type</span>
+                    <select value={form.beast_type || "utility"} onChange={(e) => setForm((c: any) => ({ ...c, beast_type: e.target.value }))}>
+                      <option value="combat">Combat</option>
+                      <option value="mount">Mount</option>
+                      <option value="utility">Utility</option>
+                    </select>
+                  </label>
+                  <label><span>Image URL</span><input value={form.image_url || ""} onChange={(e) => setForm((c: any) => ({ ...c, image_url: e.target.value }))} placeholder="Optional portrait link" /></label>
+                  <label><span>Description</span><textarea rows={3} value={form.description || ""} onChange={(e) => setForm((c: any) => ({ ...c, description: e.target.value }))} placeholder="Appearance and behavior" /></label>
+                  <label><span>Bond notes</span><textarea rows={2} value={form.bond_notes || ""} onChange={(e) => setForm((c: any) => ({ ...c, bond_notes: e.target.value }))} placeholder="How did your OC encounter this beast?" /></label>
+                  <label><span>Notes</span><textarea rows={2} value={form.notes || ""} onChange={(e) => setForm((c: any) => ({ ...c, notes: e.target.value }))} placeholder="Staff or sheet notes" /></label>
+                  <div className="actions"><button onClick={saveCompanion}><Save size={16} /> Save</button></div>
+                </div>
+              )}
+
+              <h3 style={{ marginTop: "1.25rem" }}>Beast Stats</h3>
+              <p className="muted-text" style={{ fontSize: "0.8rem", marginBottom: "0.5rem" }}>
+                Final = base + 10% of OC stat.{!isStaff ? " Base stats are set by staff." : ""}
               </p>
-              <div className="request-meta-grid">
+              <div className="mini-stat-grid">
                 {statLabels.map(([key, label]) => (
-                  <div key={key}>
+                  <div key={key} className="mini-stat">
                     <span>{label}</span>
-                    {isStaff
-                      ? <input type="number" min="0" value={form[`base_${key}`] ?? 5} onChange={(e) => setForm((c: any) => ({ ...c, [`base_${key}`]: Number(e.target.value) }))} />
-                      : <strong>{computed[key]?.base ?? form[`base_${key}`] ?? 5}</strong>
-                    }
-                    <strong>→ {computed[key]?.final ?? "—"} <small className="muted-text">(+{computed[key]?.modifier ?? 0})</small></strong>
+                    <strong>{computed[key]?.final ?? "—"}</strong>
+                    <small className="muted-text" style={{ fontSize: "0.7rem" }}>{computed[key]?.base ?? 5}+{computed[key]?.modifier ?? 0}</small>
                   </div>
                 ))}
               </div>
+
               {isStaff ? (
-                <div className="request-actions-panel" style={{ marginTop: "1rem" }}>
-                  <label><span>Beast XP (staff-managed)</span><input type="number" min="0" value={form.xp ?? 0} onChange={(e) => setForm((c: any) => ({ ...c, xp: Number(e.target.value) }))} /></label>
-                  <div className="actions"><button onClick={saveBaseStats}><Save size={16} /> Update base stats</button></div>
-                </div>
+                <>
+                  <h3 style={{ marginTop: "1.25rem" }}>Edit Base Stats</h3>
+                  <div className="mini-stat-grid">
+                    {statLabels.map(([key, label]) => (
+                      <div key={key} className="mini-stat">
+                        <span>{label}</span>
+                        <input type="number" min="0" style={{ width: "100%", textAlign: "center" }}
+                          value={form[`base_${key}`] ?? 5}
+                          onChange={(e) => setForm((c: any) => ({ ...c, [`base_${key}`]: Number(e.target.value) }))} />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="request-actions-panel" style={{ marginTop: "0.75rem" }}>
+                    <label><span>Beast XP</span><input type="number" min="0" value={form.xp ?? 0} onChange={(e) => setForm((c: any) => ({ ...c, xp: Number(e.target.value) }))} /></label>
+                    <div className="actions"><button onClick={saveBaseStats}><Save size={16} /> Update base stats</button></div>
+                  </div>
+                </>
               ) : null}
             </div>
 
-            {/* Beast Skills */}
-            <div className="card">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
-                <div>
-                  <span className="activity-type-label">Beast skills</span>
-                  <h3 style={{ margin: "4px 0 0" }}>Skills &amp; XP</h3>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div className="muted-text" style={{ fontSize: "0.75rem" }}>OC XP available</div>
-                  <strong style={{ fontSize: "1.1rem" }}>{wallet.available_xp ?? "—"} XP</strong>
-                </div>
-              </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
 
-              {beastSkillRequests.length === 0 ? (
-                <p className="muted-text">No beast skills yet. Request one below to get started.</p>
-              ) : (
-                <div className="request-card-list" style={{ marginBottom: "1rem" }}>
-                  {beastSkillRequests.map((req: any) => {
-                    const status = String(req.status || "pending").toLowerCase();
-                    const pillClass = status === "approved" || status === "accepted" ? "approved" : status === "denied" ? "denied" : "pending";
-                    return (
-                      <div className="card request-review-card" key={req.request_id || req.id || req.skill_key}>
-                        <div className="request-review-top">
-                          <div>
-                            <span className="activity-type-label">Beast Skill</span>
-                            <h3>{req.skill_name || req.skill_key}</h3>
-                            <p className="muted-text">{req.cost ? `${req.cost} XP` : "Free"}{req.submitter_note ? ` · ${req.submitter_note}` : ""}</p>
-                          </div>
-                          <em className={`request-status-pill ${pillClass}`}>{pillClass === "approved" ? "Acquired" : pillClass === "denied" ? "Denied" : "Pending"}</em>
-                        </div>
-                        {req.staff_note ? <p className="muted-text"><strong>Staff note:</strong> {req.staff_note}</p> : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {skillMessage ? <p className="message">{skillMessage}</p> : null}
-
-              {!showSkillPicker ? (
-                <button onClick={() => { setShowSkillPicker(true); setSkillMessage(""); }}>
-                  <Plus size={16} /> Request beast skill
-                </button>
-              ) : (
-                <div className="request-actions-panel" style={{ marginTop: "0.5rem" }}>
-                  <label>
-                    <span>Select skill</span>
-                    <select value={skillRequestForm.skill_key} onChange={(e) => setSkillRequestForm((c: any) => ({ ...c, skill_key: e.target.value }))}>
-                      <option value="">— choose a skill —</option>
-                      {availableSkills.map((s: any) => (
-                        <option key={s.skill_key} value={s.skill_key}>
-                          {s.name} · {s.beast_skill_type} T{s.tier} · {s.cost} XP
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {skillRequestForm.skill_key ? (
-                    <div className="card" style={{ background: "var(--color-bg-secondary)" }}>
-                      {(() => {
-                        const skill = catalogSkills.find((s: any) => s.skill_key === skillRequestForm.skill_key);
-                        if (!skill) return null;
-                        return (
-                          <>
-                            <p><strong>{skill.name}</strong> — {skill.beast_skill_type} · Tier {skill.tier} · {skill.cost} XP</p>
-                            {skill.description ? <p className="muted-text">{skill.description}</p> : null}
-                            {skill.effects ? <p><strong>Effect:</strong> {skill.effects}</p> : null}
-                          </>
-                        );
-                      })()}
-                    </div>
-                  ) : null}
-                  <label><span>Note to staff (optional)</span><input value={skillRequestForm.note} onChange={(e) => setSkillRequestForm((c: any) => ({ ...c, note: e.target.value }))} placeholder="Any context you want staff to know" /></label>
-                  <div className="actions">
-                    <button onClick={requestBeastSkill}><Send size={16} /> Submit request</button>
-                    <button className="ghost" onClick={() => { setShowSkillPicker(false); setSkillMessage(""); setSkillRequestForm({ skill_key: "", note: "" }); }}>Cancel</button>
+              <div className="card oc-skills-card">
+                <div className="card-title-row">
+                  <div>
+                    <h2>Beast Skills</h2>
+                    <p className="muted-text">Skills your companion has or has requested.</p>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <span className="pill good">{acquiredRequests.length} acquired</span>
+                    <div className="muted-text" style={{ fontSize: "0.75rem", marginTop: "4px" }}>{wallet.available_xp ?? "—"} XP available</div>
                   </div>
                 </div>
-              )}
-            </div>
 
-            {/* Role Rules */}
-            <div className="card">
-              <span className="activity-type-label">Role rules</span>
-              <h3>Skill limits for {form.beast_type || "utility"} type</h3>
-              <div className="request-meta-grid">
-                <div><span>Combat tier max</span><strong>{rules.combat ?? "—"}</strong></div>
-                <div><span>Mount tier max</span><strong>{rules.mount ?? "—"}</strong></div>
-                <div><span>Utility tier max</span><strong>{rules.utility ?? "—"}</strong></div>
-                <div><span>Own-type cap</span><strong>{rules.own_type_skill_cap_per_tier ?? 3} / tier</strong></div>
-                <div><span>Non-type cap</span><strong>{rules.non_type_skill_cap_per_tier ?? 2} / tier</strong></div>
-              </div>
-            </div>
+                {acquiredRequests.length > 0 ? (
+                  <div className="owned-skill-group">
+                    <div className="owned-skill-group-heading"><h3>Acquired</h3><span>{acquiredRequests.length}</span></div>
+                    <div className="owned-skill-list">
+                      {acquiredRequests.map((req: any) => (
+                        <div className="owned-skill-row" key={req.request_id || req.skill_key}>
+                          <div><strong>{req.skill_name || req.skill_key}</strong></div>
+                          <div className="owned-skill-meta"><span>Beast Skill</span><span>{req.cost ?? 0} XP</span></div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="muted-text" style={{ marginTop: "0.5rem" }}>No beast skills acquired yet.</p>
+                )}
 
-            {/* Notes + Save */}
-            <div className="card">
-              <span className="activity-type-label">Notes</span>
-              <h3>Staff &amp; sheet notes</h3>
-              <div className="request-actions-panel">
-                <label><span>Notes</span><textarea rows={4} value={form.notes || ""} onChange={(e) => setForm((c: any) => ({ ...c, notes: e.target.value }))} placeholder="Sheet notes, staff observations, or companion details." /></label>
+                {pendingRequests.length > 0 ? (
+                  <div className="oc-pending-skills">
+                    <h3>Pending Requests</h3>
+                    <div className="owned-skill-list">
+                      {pendingRequests.map((req: any) => (
+                        <div className="owned-skill-row pending" key={req.request_id || req.skill_key}>
+                          <div><strong>{req.skill_name || req.skill_key}</strong></div>
+                          <div className="owned-skill-meta"><span>Pending</span><span>{req.cost ?? 0} XP</span></div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {skillMessage ? <p className="message" style={{ marginTop: "0.75rem" }}>{skillMessage}</p> : null}
+
+                {!showSkillPicker ? (
+                  <div style={{ marginTop: "1rem" }}>
+                    <button onClick={() => { setShowSkillPicker(true); setSkillMessage(""); }}>
+                      <Plus size={16} /> Request beast skill
+                    </button>
+                  </div>
+                ) : (
+                  <div className="request-actions-panel" style={{ marginTop: "0.75rem" }}>
+                    <label>
+                      <span>Select skill</span>
+                      <select value={skillRequestForm.skill_key} onChange={(e) => setSkillRequestForm((c: any) => ({ ...c, skill_key: e.target.value }))}>
+                        <option value="">— choose a skill —</option>
+                        {availableSkills.map((s: any) => (
+                          <option key={s.skill_key} value={s.skill_key}>{s.name} · {s.beast_skill_type} T{s.tier} · {s.cost} XP</option>
+                        ))}
+                      </select>
+                    </label>
+                    {skillRequestForm.skill_key ? (() => {
+                      const skill = catalogSkills.find((s: any) => s.skill_key === skillRequestForm.skill_key);
+                      return skill ? (
+                        <div className="card">
+                          <p><strong>{skill.name}</strong> — {skill.beast_skill_type} · Tier {skill.tier} · {skill.cost} XP</p>
+                          {skill.description ? <p className="muted-text">{skill.description}</p> : null}
+                          {skill.effects ? <p><strong>Effect:</strong> {skill.effects}</p> : null}
+                        </div>
+                      ) : null;
+                    })() : null}
+                    <label><span>Note to staff (optional)</span><input value={skillRequestForm.note} onChange={(e) => setSkillRequestForm((c: any) => ({ ...c, note: e.target.value }))} placeholder="Any context for staff" /></label>
+                    <div className="actions">
+                      <button onClick={requestBeastSkill}><Send size={16} /> Submit request</button>
+                      <button className="ghost" onClick={() => { setShowSkillPicker(false); setSkillMessage(""); setSkillRequestForm({ skill_key: "", note: "" }); }}>Cancel</button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="actions"><button onClick={saveCompanion}><Save size={16} /> Save LC Unit</button></div>
+
+              <div className="card">
+                <h2>Role Rules</h2>
+                <p className="muted-text">Skill tier limits for a <strong>{beastTypeLabel(beast.beast_type || "utility")}</strong> type beast.</p>
+                <div className="summary vertical" style={{ marginTop: "0.75rem" }}>
+                  <div><span>Combat tier max</span><strong>{rules.combat ?? "—"}</strong></div>
+                  <div><span>Mount tier max</span><strong>{rules.mount ?? "—"}</strong></div>
+                  <div><span>Utility tier max</span><strong>{rules.utility ?? "—"}</strong></div>
+                  <div><span>Own-type cap</span><strong>{rules.own_type_skill_cap_per_tier ?? 3} / tier</strong></div>
+                  <div><span>Non-type cap</span><strong>{rules.non_type_skill_cap_per_tier ?? 2} / tier</strong></div>
+                </div>
+              </div>
+
             </div>
-          </>
+          </section>
         ) : null}
       </section>
     </RequireDiscord>
