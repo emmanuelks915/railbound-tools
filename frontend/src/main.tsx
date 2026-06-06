@@ -6860,13 +6860,17 @@ function StaffQueue({ discordId }: { discordId: string }) {
                 <label><span>Description</span><textarea rows={2} value={maintenanceForm.custom_description} onChange={(event) => setMaintenanceForm((current) => ({ ...current, custom_description: event.target.value }))} placeholder="Optional staff-facing note/description." /></label>
               </>
             ) : null}
+            {maintenanceForm.action !== "trait_grant_only" ? (
 
             <label>
               <span>Staff Reason</span>
               <textarea rows={3} value={maintenanceForm.reason} onChange={(event) => setMaintenanceForm((current) => ({ ...current, reason: event.target.value }))} placeholder="Required. Example: correcting discounted cost, wrong skill assigned, restricted lore approval." />
             </label>
+            ) : null}
+            {maintenanceForm.action !== "trait_grant_only" ? (
 
             <div className="actions"><button onClick={runMaintenanceAction}><ShieldCheck size={16} /> Run Selected Action</button></div>
+            ) : null}
           </div>
         </div>
 
