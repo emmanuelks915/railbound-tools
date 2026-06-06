@@ -310,7 +310,7 @@ def deny_shop_item(
         "message": "Shop listing denied.",
     }
 
-# --- Staff Trait Grant Helpers ---
+# --- Staff Trait Grant Helpers v3 ---
 
 def _staff_trait_rows(value):
     """Return Supabase rows without relying on sb_data being imported in this module."""
@@ -333,6 +333,84 @@ def _staff_trait_rows(value):
 def _staff_clean_text(value, max_len: int = 500) -> str:
     """Normalize staff form text safely."""
     return str(value or "").strip()[:max_len]
+
+
+def _staff_norm(value) -> str:
+    return str(value or "").strip().lower()
+
+
+def _resolve_trait_for_staff_grant(sb, guild_id: int, payload: dict):
+    trait_id = _staff_clean_text(payload.get("trait_id"), 80)
+    trait_slug = _staff_clean_text(payload.get("trait_slug") or payload.get("slug"), 180)
+    trait_search = _staff_clean_text(payload.get("trait_search") or payload.get("search") or payload.get("trait_name"), 240)
+
+    if trait_id:
+        rows = _staff_trait_rows(
+            sb.table("traits")
+            .select("*")
+            .eq("trait_id", trait_id)
+            .limit(1)
+            .execute()
+        )
+        if rows:
+            return rows[0]
+
+    if trait_slug:
+        rows = _staff_trait_rows(
+            sb.table("traits")
+            .select("*")
+            .eq("slug", trait_slug)
+            .limit(1)
+            .execute()
+        )
+        if rows:
+            return rows[0]
+
+    if trait_search:
+        all_traits = _staff_trait_rows(
+            sb.table("traits")
+            .select("*")
+            .limit(2000)
+            .execute()
+        )
+        needle = _staff_norm(trait_search)
+
+        for trait in all_traits:
+            display = " / ".join([
+                str(trait.get("name") or trait.get("display_name") or trait.get("slug") or "").strip(),
+                str(trait.get("category") or trait.get("trait_type") or "").strip(),
+                f"Tier {trait.get('tier')}" if trait.get("tier") is not None else "",
+            ]).strip(" /")
+
+            if _staff_norm(display) == needle:
+                return trait
+
+        for trait in all_traits:
+            candidates = [
+                trait.get("name"),
+                trait.get("display_name"),
+                trait.get("slug"),
+                trait.get("trait_slug"),
+                trait.get("trait_key"),
+            ]
+            if any(_staff_norm(candidate) == needle for candidate in candidates):
+                return trait
+
+    raise HTTPException(status_code=400, detail="Choose a trait from the dropdown.")
+
+
+def _character_for_staff_trait_grant(sb, guild_id: int, character_id: str):
+    rows = _staff_trait_rows(
+        sb.table("characters")
+        .select("*")
+        .eq("character_id", character_id)
+        .limit(1)
+        .execute()
+    )
+    if rows:
+        return rows[0]
+
+    raise HTTPException(status_code=404, detail="OC not found.")
 
 @router.get("/trait-grants/options")
 def staff_trait_grant_options(actor_discord_id: int | None = Depends(actor_from_header)):
@@ -439,17 +517,20 @@ def staff_grant_trait(payload: dict = Body(default={}), actor_discord_id: int | 
 
     if not character_id:
         raise HTTPException(status_code=400, detail="Choose an OC.")
+
     if not reason:
         raise HTTPException(status_code=400, detail="Staff reason is required.")
 
     character = _character_for_staff_trait_grant(sb, gid, character_id)
     trait = _resolve_trait_for_staff_grant(sb, gid, payload)
-    trait_id = str(trait.get("trait_id"))
+    trait_id = str(trait.get("trait_id") or "")
+
+    if not trait_id:
+        raise HTTPException(status_code=400, detail="Resolved trait has no trait_id.")
 
     existing = _staff_trait_rows(
         sb.table("character_traits")
         .select("*")
-        .eq("guild_id", gid)
         .eq("character_id", character_id)
         .eq("trait_id", trait_id)
         .limit(1)
@@ -460,43 +541,33 @@ def staff_grant_trait(payload: dict = Body(default={}), actor_discord_id: int | 
         return {
             "ok": True,
             "already_owned": True,
-            "message": f"{character.get('name') or 'OC'} already has {trait.get('name') or trait.get('slug') or 'that trait'}.",
+            "message": f"{character.get('name') or 'OC'} already has {trait.get('name') or trait.get('display_name') or trait.get('slug') or 'that trait'}.",
             "character": character,
             "trait": trait,
             "row": existing[0],
         }
 
-    insert_row = {"guild_id": gid, "character_id": character_id, "trait_id": trait_id}
+    insert_row = {
+        "guild_id": gid,
+        "character_id": character_id,
+        "trait_id": trait_id,
+    }
 
     try:
         result = sb.table("character_traits").insert(insert_row).execute()
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=f"Could not grant trait: {e}")
 
     rows = _staff_trait_rows(result)
     row = rows[0] if rows else insert_row
 
-    _log_staff_trait_grant(
-        sb,
-        {
-            "guild_id": gid,
-            "character_id": character_id,
-            "trait_id": trait_id,
-            "action": "grant",
-            "staff_discord_id": int(staff_id) if staff_id is not None else None,
-            "reason": reason,
-        },
-    )
-
-
     return {
         "ok": True,
-        "message": f"Granted {trait.get('name') or trait.get('slug') or 'trait'} to {character.get('name') or 'OC'}.",
+        "message": f"Granted {trait.get('name') or trait.get('display_name') or trait.get('slug') or 'trait'} to {character.get('name') or 'OC'}.",
         "character": character,
         "trait": trait,
         "row": row,
     }
-
 
 @router.post("/trait-grants/remove")
 def staff_remove_trait(payload: dict = Body(default={}), actor_discord_id: int | None = Depends(actor_from_header)):
@@ -511,43 +582,33 @@ def staff_remove_trait(payload: dict = Body(default={}), actor_discord_id: int |
 
     if not character_id:
         raise HTTPException(status_code=400, detail="Choose an OC.")
+
     if not reason:
         raise HTTPException(status_code=400, detail="Staff reason is required.")
 
     character = _character_for_staff_trait_grant(sb, gid, character_id)
     trait = _resolve_trait_for_staff_grant(sb, gid, payload)
-    trait_id = str(trait.get("trait_id"))
+    trait_id = str(trait.get("trait_id") or "")
+
+    if not trait_id:
+        raise HTTPException(status_code=400, detail="Resolved trait has no trait_id.")
 
     try:
         result = (
             sb.table("character_traits")
             .delete()
-            .eq("guild_id", gid)
             .eq("character_id", character_id)
             .eq("trait_id", trait_id)
             .execute()
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=f"Could not remove trait: {e}")
 
     rows = _staff_trait_rows(result)
 
-    _log_staff_trait_grant(
-        sb,
-        {
-            "guild_id": gid,
-            "character_id": character_id,
-            "trait_id": trait_id,
-            "action": "remove",
-            "staff_discord_id": int(staff_id) if staff_id is not None else None,
-            "reason": reason,
-        },
-    )
-
-
     return {
         "ok": True,
-        "message": f"Removed {trait.get('name') or trait.get('slug') or 'trait'} from {character.get('name') or 'OC'}.",
+        "message": f"Removed {trait.get('name') or trait.get('display_name') or trait.get('slug') or 'trait'} from {character.get('name') or 'OC'}.",
         "character": character,
         "trait": trait,
         "removed": rows,
