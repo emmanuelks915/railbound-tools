@@ -310,6 +310,30 @@ def deny_shop_item(
         "message": "Shop listing denied.",
     }
 
+# --- Staff Trait Grant Helpers ---
+
+def _staff_trait_rows(value):
+    """Return Supabase rows without relying on sb_data being imported in this module."""
+    if value is None:
+        return []
+
+    data = getattr(value, "data", None)
+    if data is None and isinstance(value, dict):
+        data = value.get("data")
+
+    if isinstance(data, list):
+        return data
+
+    if data is None:
+        return []
+
+    return [data] if isinstance(data, dict) else []
+
+
+def _staff_clean_text(value, max_len: int = 500) -> str:
+    """Normalize staff form text safely."""
+    return str(value or "").strip()[:max_len]
+
 @router.get("/trait-grants/options")
 def staff_trait_grant_options(actor_discord_id: int | None = Depends(actor_from_header)):
     require_staff(actor_discord_id)
