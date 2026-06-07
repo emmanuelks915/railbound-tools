@@ -185,9 +185,15 @@ def _inventory_rows(sb, character_id: str) -> list[dict[str, Any]]:
         description = None
 
         if iid:
-            meta_rows = _safe_rows(
-                sb.table("items").select("name,item_class,description").eq("item_id", iid).limit(1)
-            )
+            try:
+                meta_resp = sb.table("items").select("name,item_class,description").eq("item_id", iid).limit(1).execute()
+                meta_rows = getattr(meta_resp, "data", None) or []
+                if not isinstance(meta_rows, list):
+                    meta_rows = []
+            except Exception as exc:
+                meta_rows = []
+                import logging
+                logging.getLogger(__name__).error(f"items lookup failed for {iid}: {exc}")
             if meta_rows:
                 name = meta_rows[0].get("name") or name
                 item_class = meta_rows[0].get("item_class") or item_class
