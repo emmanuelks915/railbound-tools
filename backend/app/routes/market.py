@@ -496,8 +496,8 @@ def _deduct_wallet(sb, *, character_id: str, currency_id: str, amount: int, acto
 
 
 def _grant_inventory(sb, *, character_id: str, item_id: str, qty: int, actor: int,
-                     context: str, note: str) -> bool:
-    """Grant inventory via apply_inventory_delta RPC. Returns True on success."""
+                     context: str, note: str) -> tuple[bool, str]:
+    """Grant inventory via apply_inventory_delta RPC. Returns (success, error_message)."""
     try:
         sb.rpc("apply_inventory_delta", {
             "p_guild_id": get_guild_id(),
@@ -508,9 +508,9 @@ def _grant_inventory(sb, *, character_id: str, item_id: str, qty: int, actor: in
             "p_context": context,
             "p_note": note,
         }).execute()
-        return True
-    except Exception:
-        return False
+        return True, ""
+    except Exception as exc:
+        return False, str(exc)
 
 
 @router.post("/items/{item_id}/request")
@@ -617,11 +617,12 @@ def request_market_item(
 
     # 4. Instant fulfillment — grant inventory immediately if no approval needed
     inv_granted = False
+    inv_error = ""
     if not requires_approval and character_id:
         grants_item_id = item.get("grants_item_id")
         grants_qty = int(item.get("grants_qty") or 1)
         if grants_item_id and grants_qty > 0:
-            inv_granted = _grant_inventory(
+            inv_granted, inv_error = _grant_inventory(
                 sb,
                 character_id=character_id,
                 item_id=str(grants_item_id),
@@ -630,6 +631,8 @@ def request_market_item(
                 context="shop_fulfill_instant",
                 note=f"order={order_id[:8]} shop_item={str(item_id)[:8]}",
             )
+        elif not grants_item_id:
+            inv_error = f"grants_item_id not set on shop item {str(item_id)[:8]}"
 
     log_activity(
         event_type="market_item_purchased",
@@ -651,15 +654,14 @@ def request_market_item(
         message = f"Order submitted for {item_name} ×{quantity}. Awaiting staff approval."
     elif inv_granted:
         message = f"Purchase complete! {item_name} ×{quantity} delivered to inventory."
-    elif not character_id:
-        message = f"Purchase complete! No character was selected so inventory was not granted automatically — ask staff to deliver."
     else:
-        message = f"Purchase complete! Item will be delivered shortly (grants_item_id not configured on this item)."
+        message = f"Purchase complete! Inventory grant failed: {inv_error or 'unknown error'}"
 
     return {
         "order": order_row,
         "message": message,
         "inv_granted": inv_granted,
+        "inv_error": inv_error,
         "requires_approval": requires_approval,
     }
 
