@@ -119,42 +119,40 @@ def _normalize_item(row: dict[str, Any], source: str) -> dict[str, Any]:
 
 
 def _enrich_with_item_names(sb, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """For rows that have item_id but no name, look up names from the items table."""
-    needs_name = [r for r in rows if not _item_name(r).replace("Unnamed Item", "").strip() and r.get("item_id")]
-    if not needs_name:
+    """For rows that have item_id, always look up name/class from the items table.
+    inventory_entries only stores item_id+qty so enrichment is always needed."""
+    if not rows:
         return rows
 
-    # Fetch each item individually using eq() — avoids in_() which may not be available
+    # Build lookup for all unique item_ids in these rows
     item_lookup: dict[str, dict[str, Any]] = {}
-    for row in needs_name:
+    for row in rows:
         iid = str(row.get("item_id") or "")
         if not iid or iid in item_lookup:
             continue
-        for id_col in ("item_id", "id"):
-            try:
-                found = _safe_rows(
-                    sb.table("items")
-                    .select("item_id,id,name,item_class,description")
-                    .eq(id_col, iid)
-                    .limit(1)
-                )
-                if found:
-                    key = str(found[0].get("item_id") or found[0].get("id") or "")
-                    if key:
-                        item_lookup[key] = found[0]
-                    break
-            except Exception:
-                pass
+        try:
+            found = _safe_rows(
+                sb.table("items")
+                .select("item_id,name,item_class,description")
+                .eq("item_id", iid)
+                .limit(1)
+            )
+            if found:
+                item_lookup[iid] = found[0]
+        except Exception:
+            pass
 
     enriched = []
     for row in rows:
         iid = str(row.get("item_id") or "")
-        if iid and iid in item_lookup and not _item_name(row).replace("Unnamed Item", "").strip():
+        if iid and iid in item_lookup:
             meta = item_lookup[iid]
-            row = {**row,
-                   "name": meta.get("name") or "Unnamed Item",
-                   "item_type": meta.get("item_class") or row.get("item_type"),
-                   "description": row.get("description") or meta.get("description")}
+            row = {
+                **row,
+                "name": meta.get("name") or row.get("name") or "Unnamed Item",
+                "item_type": meta.get("item_class") or row.get("item_type") or "Item",
+                "description": row.get("description") or meta.get("description"),
+            }
         enriched.append(row)
     return enriched
 
