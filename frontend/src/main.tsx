@@ -1908,6 +1908,10 @@ function BrowseView({
 
   async function buyItem(item: ShopItem) {
     const qty = quantities[item.item_id] || 1;
+    if (!selectedCharacterId) {
+      setMsg({ text: "No character selected — go to the OC tab and select your active character first.", type: "err" });
+      return;
+    }
     try {
       const result = await apiFetch(
         `/api/market/items/${item.item_id}/request`,
@@ -1915,7 +1919,7 @@ function BrowseView({
           method: "POST",
           body: JSON.stringify({
             quantity: qty,
-            character_id: selectedCharacterId || null,
+            character_id: selectedCharacterId,
             note: notes[item.item_id] || "",
           }),
         },
@@ -1944,6 +1948,15 @@ function BrowseView({
           </div>
         ))}
       </div>
+
+      {/* Character indicator */}
+      {!selectedCharacterId && (
+        <div style={{ fontSize: 13, padding: "8px 12px", borderRadius: "var(--border-radius-md)", marginBottom: 12,
+          background: "var(--color-background-warning)", color: "var(--color-text-warning)",
+          border: "0.5px solid var(--color-border-warning)" }}>
+          ⚠️ No character selected — go to the <strong>OC</strong> tab and select your active character before buying.
+        </div>
+      )}
 
       {/* Filters */}
       <div className="card" style={{ padding: 14, marginBottom: "1rem", display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
@@ -2062,10 +2075,14 @@ function StorefrontsView({ shops, discordId, selectedCharacterId }: { shops: Sho
 
   async function buyFromStore(item: ShopItem) {
     const qty = quantities[item.item_id] || 1;
+    if (!selectedCharacterId) {
+      setMsg({ text: "No character selected — go to the OC tab and select your active character first.", type: "err" });
+      return;
+    }
     try {
       const result = await apiFetch(
         `/api/market/items/${item.item_id}/request`,
-        { method: "POST", body: JSON.stringify({ quantity: qty, character_id: selectedCharacterId || null }) },
+        { method: "POST", body: JSON.stringify({ quantity: qty, character_id: selectedCharacterId }) },
         discordId
       );
       setMsg({ text: result.message || "Done.", type: "ok" });
