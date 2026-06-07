@@ -161,10 +161,10 @@ def _inventory_rows(sb, character_id: str) -> list[dict[str, Any]]:
     all_items: list[dict[str, Any]] = []
     seen: set[str] = set()
 
-    # --- inventory_entries: join with items table directly ---
+    # Step 1: fetch inventory_entries rows
     inv_rows = _safe_rows(
         sb.table("inventory_entries")
-        .select("*, items(item_id, name, item_class, description)")
+        .select("*")
         .eq("guild_id", get_guild_id())
         .eq("character_id", character_id)
         .limit(500)
@@ -172,31 +172,42 @@ def _inventory_rows(sb, character_id: str) -> list[dict[str, Any]]:
     if not inv_rows:
         inv_rows = _safe_rows(
             sb.table("inventory_entries")
-            .select("*, items(item_id, name, item_class, description)")
+            .select("*")
             .eq("character_id", character_id)
             .limit(500)
         )
 
+    # Step 2: for each row, fetch the item name separately
     for row in inv_rows:
-        # Supabase returns joined table as a nested dict under the table name
-        item_meta = row.get("items") or {}
-        if isinstance(item_meta, list):
-            item_meta = item_meta[0] if item_meta else {}
+        iid = str(row.get("item_id") or "")
+        name = "Unnamed Item"
+        item_class = "Item"
+        description = None
+
+        if iid:
+            meta_rows = _safe_rows(
+                sb.table("items").select("name,item_class,description").eq("item_id", iid).limit(1)
+            )
+            if meta_rows:
+                name = meta_rows[0].get("name") or name
+                item_class = meta_rows[0].get("item_class") or item_class
+                description = meta_rows[0].get("description")
+
         flat = {
             **row,
-            "name": item_meta.get("name") or row.get("name") or "Unnamed Item",
-            "item_type": item_meta.get("item_class") or row.get("item_type") or "Item",
-            "description": item_meta.get("description") or row.get("description"),
+            "name": name,
+            "item_type": item_class,
+            "description": description,
             "quantity": row.get("qty") or row.get("quantity") or 1,
         }
         item = _normalize_item(flat, "inventory_entries")
-        key = f"inventory_entries:{flat.get('item_id')}:{flat.get('character_id')}"
+        key = f"inv:{iid}:{character_id}"
         if key in seen:
             continue
         seen.add(key)
         all_items.append(item)
 
-    # --- fallback tables for other schemas ---
+    # Fallback tables if inventory_entries had nothing
     if not all_items:
         for table, column in [
             ("character_inventory", "character_id"),
@@ -209,9 +220,7 @@ def _inventory_rows(sb, character_id: str) -> list[dict[str, Any]]:
                 sb.table(table).select("*").eq("guild_id", get_guild_id()).eq(column, character_id).limit(500)
             )
             if not rows:
-                rows = _safe_rows(
-                    sb.table(table).select("*").eq(column, character_id).limit(500)
-                )
+                rows = _safe_rows(sb.table(table).select("*").eq(column, character_id).limit(500))
             for row in rows:
                 item = _normalize_item(row, table)
                 key = item["inventory_id"] or f"{table}:{item['name']}:{item['type']}:{item['quantity']}"
