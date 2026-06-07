@@ -481,6 +481,52 @@ def create_shop_item(
 
     raise HTTPException(status_code=400, detail=f"Could not create item: {last_error}")
 
+@router.delete("/items/{item_id}")
+def delete_shop_item(
+    item_id: str,
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    actor = _require_login(actor_discord_id)
+    sb = get_supabase()
+
+    item_rows = _as_list(
+        sb.table("shop_items")
+        .select("*")
+        .eq("item_id", item_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not item_rows:
+        raise HTTPException(status_code=404, detail="Item not found.")
+
+    item = item_rows[0]
+    shop_id = item.get("shop_id")
+
+    if not shop_id:
+        raise HTTPException(status_code=400, detail="This item is not attached to a storefront.")
+
+    shop, _ = _load_shop(sb, str(shop_id))
+
+    if not _can_manage_shop(shop, actor):
+        raise HTTPException(status_code=403, detail="You can only delete items from your own storefront.")
+
+    try:
+        deleted_rows = _as_list(
+            sb.table("shop_items")
+            .delete()
+            .eq("item_id", item_id)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not delete item: {exc}")
+
+    return {
+        "ok": True,
+        "message": f"Deleted {item.get('name') or 'item'}.",
+        "deleted": deleted_rows or [item],
+    }
+
 @router.patch("/items/{item_id}")
 def update_shop_item(
     item_id: str,

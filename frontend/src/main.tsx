@@ -1885,7 +1885,45 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
     });
   }
 
-  async function saveItem() {
+  
+  async function deleteItem(item: any = null) {
+    const selected = item || editingItem || itemForm || createItemForm || {};
+    const itemId = selected?.item_id || selected?.id;
+    const itemName = selected?.name || "this item";
+
+    if (!itemId) {
+      setShopMessage("Choose an item to delete first.");
+      return;
+    }
+
+    if (!window.confirm(`Delete ${itemName} permanently? This cannot be undone.`)) return;
+
+    setSaving(true);
+    setShopMessage("");
+
+    try {
+      const data = await apiFetch(
+        `/api/shop-owner/items/${itemId}`,
+        { method: "DELETE" },
+        discordId
+      );
+
+      setShopMessage(data.message || "Item deleted.");
+      await loadShopOwnerData();
+
+      if (typeof cancelEditItem === "function") {
+        cancelEditItem();
+      } else if (typeof setEditingItem === "function") {
+        setEditingItem(null);
+      }
+    } catch (error: any) {
+      setShopMessage(error.message || "Could not delete item.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+async function saveItem() {
     if (!selectedShopId) return;
 
     setSaving(true);
@@ -2264,6 +2302,15 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
                   <button onClick={saveItem} disabled={saving}>
                     <Save size={16} /> {saving ? "Saving..." : editingItemId ? "Save Item" : "Create Item"}
                   </button>
+
+                <button
+                  type="button"
+                  className="danger-button"
+                  onClick={() => deleteItem()}
+                  disabled={saving}
+                >
+                  Delete Item
+                </button>
                 </div>
               </div>
             </div>
