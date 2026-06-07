@@ -446,36 +446,38 @@ def request_market_item(
     character_id = payload.get("character_id")
     note = payload.get("note")
 
-    order_payload = {
-        "guild_id": get_guild_id(),
-        "item_id": item_id,
-        "quantity": quantity,
-        "user_id": str(actor),
-        "status": "pending" if bool(item.get("requires_approval") or item.get("needs_approval")) else "approved",
-    }
+    requires_approval = bool(item.get("requires_approval") or item.get("needs_approval"))
+    order_status = "pending" if requires_approval else "approved"
 
-    if character_id:
-        order_payload["character_id"] = str(character_id)
-
-    if note:
-        order_payload["note"] = str(note)
-
+    # Try column name variants — the table uses buyer_discord_id
     order_row = None
-    try:
-        inserted = _as_list(sb.table("shop_orders").insert(order_payload).execute())
-        if inserted:
-            order_row = inserted[0]
-    except Exception:
-        fallback = {
+    last_exc = None
+    for buyer_col in ("buyer_discord_id", "discord_id", "user_id"):
+        payload: dict[str, Any] = {
             "guild_id": get_guild_id(),
             "item_id": item_id,
             "quantity": quantity,
-            "user_id": str(actor),
-            "status": order_payload["status"],
+            buyer_col: str(actor),
+            "status": order_status,
         }
-        inserted = _as_list(sb.table("shop_orders").insert(fallback).execute())
-        if inserted:
-            order_row = inserted[0]
+        if character_id:
+            payload["character_id"] = str(character_id)
+        if note:
+            payload["note"] = str(note)
+        try:
+            inserted = _as_list(sb.table("shop_orders").insert(payload).execute())
+            if inserted:
+                order_row = inserted[0]
+                order_payload = payload
+                break
+        except Exception as exc:
+            last_exc = exc
+            continue
+
+    if order_row is None:
+        raise HTTPException(status_code=400, detail=f"Could not create order: {last_exc}")
+
+    order_payload = {**payload, "status": order_status}
 
     log_activity(
         event_type="market_item_requested",
