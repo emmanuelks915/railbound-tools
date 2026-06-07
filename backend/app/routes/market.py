@@ -442,6 +442,8 @@ def request_market_item(
         raise HTTPException(status_code=404, detail="Shop item not found.")
 
     item = item_rows[0]
+    # TEMP DEBUG — remove after confirming column names
+    raise HTTPException(status_code=400, detail=f"DEBUG item keys: {list(item.keys())} | shop_id={item.get('shop_id')} | store_id={item.get('store_id')}")
     quantity = max(1, int(_number(payload.get("quantity"), 1)))
     character_id = payload.get("character_id")
     note = payload.get("note")
