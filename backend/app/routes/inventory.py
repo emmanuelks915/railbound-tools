@@ -186,7 +186,7 @@ def _inventory_rows(sb, character_id: str) -> list[dict[str, Any]]:
 
         if iid:
             try:
-                meta_resp = sb.table("items").select("name,item_class,description").eq("item_id", iid).limit(1).execute()
+                meta_resp = sb.table("items").select("name,item_class").eq("item_id", iid).limit(1).execute()
                 meta_rows = getattr(meta_resp, "data", None) or []
                 if not isinstance(meta_rows, list):
                     meta_rows = []
