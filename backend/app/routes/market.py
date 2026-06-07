@@ -531,7 +531,7 @@ def request_market_item(
     note = payload.get("note")
 
     requires_approval = bool(item.get("requires_approval") or item.get("needs_approval"))
-    order_status = "pending" if requires_approval else "approved"
+    order_status = "PENDING" if requires_approval else "APPROVED"
 
     order_payload = _build_order_payload(
         sb, item, item_id, actor, quantity, order_status, character_id, note
