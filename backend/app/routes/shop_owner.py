@@ -910,7 +910,7 @@ def approve_shop_order(
     if not _can_manage_shop(shop, actor):
         raise HTTPException(status_code=403, detail="You can only approve orders for your own shop.")
 
-    updated = _update_order_status(sb, order_id, "approved", actor, payload.get("note") or payload.get("staff_note"))
+    updated = _update_order_status(sb, order_id, "APPROVED", actor, payload.get("note") or payload.get("staff_note"))
 
     log_activity(
         event_type="shop_order_approved",
@@ -945,7 +945,7 @@ def deny_shop_order(
     if not _can_manage_shop(shop, actor):
         raise HTTPException(status_code=403, detail="You can only deny orders for your own shop.")
 
-    updated = _update_order_status(sb, order_id, "denied", actor, reason)
+    updated = _update_order_status(sb, order_id, "DENIED", actor, reason)
 
     log_activity(
         event_type="shop_order_denied",
@@ -964,13 +964,40 @@ def deny_shop_order(
 
 
 def _insert_inventory_item(sb, order: dict[str, Any], item: dict[str, Any], quantity: int) -> dict[str, Any] | None:
-    character_id = order.get("character_id") or order.get("oc_id")
+    # character_id stored as buyer_character_id on web-created orders
+    character_id = (
+        order.get("buyer_character_id")
+        or order.get("character_id")
+        or order.get("oc_id")
+    )
     if not character_id:
         return None
 
-    item_name = item.get("name") or item.get("item_name") or "Shop Item"
     item_uuid = str(item.get("item_id") or item.get("shop_item_id") or item.get("id") or "")
+    item_name = item.get("name") or item.get("item_name") or "Shop Item"
+    actor = int(order.get("buyer_discord_id") or order.get("discord_id") or 0)
 
+    # Use the same RPC Keystone uses: apply_inventory_delta
+    rpc_payload = {
+        "p_guild_id": get_guild_id(),
+        "p_character_id": str(character_id),
+        "p_item_id": item_uuid,
+        "p_delta": quantity,
+        "p_actor_discord_id": actor,
+        "p_context": "shop_purchase",
+        "p_note": f"Shop order fulfilled: {item_name} x{quantity}",
+    }
+    try:
+        res = _as_list(sb.rpc("apply_inventory_delta", rpc_payload).execute())
+        return res[0] if res else {"ok": True}
+    except Exception as rpc_exc:
+        rpc_err = str(rpc_exc)
+        if "INSUFFICIENT_QTY" in rpc_err:
+            raise HTTPException(status_code=400, detail="Insufficient quantity in inventory.")
+        if "DELTA_ZERO" in rpc_err:
+            raise HTTPException(status_code=400, detail="Quantity must be greater than zero.")
+
+    # Fallback: direct table insert
     payloads = [
         {
             "guild_id": get_guild_id(),
@@ -978,13 +1005,6 @@ def _insert_inventory_item(sb, order: dict[str, Any], item: dict[str, Any], quan
             "item_id": item_uuid,
             "item_name": item_name,
             "name": item_name,
-            "quantity": quantity,
-            "source": "market",
-        },
-        {
-            "guild_id": get_guild_id(),
-            "character_id": str(character_id),
-            "item_name": item_name,
             "quantity": quantity,
             "source": "market",
         },
@@ -1056,7 +1076,7 @@ def fulfill_shop_order(
 
     updated_item = _decrease_stock(sb, item, quantity)
     inventory_row = _insert_inventory_item(sb, order, item, quantity)
-    updated_order = _update_order_status(sb, order_id, "fulfilled", actor, payload.get("note") or payload.get("staff_note"))
+    updated_order = _update_order_status(sb, order_id, "FULFILLED", actor, payload.get("note") or payload.get("staff_note"))
 
     log_activity(
         event_type="shop_order_fulfilled",
