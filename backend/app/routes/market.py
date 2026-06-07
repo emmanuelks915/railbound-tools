@@ -688,9 +688,17 @@ def get_market_orders(
         )
 
     if status != "all":
-        rows = [row for row in rows if str(row.get("status") or "pending").lower() == status.lower()]
+        # PAID = approval-required order awaiting staff action (treated as pending)
+        pending_aliases = {"pending", "paid"}
+        def _status_match(row_status: str, filter_status: str) -> bool:
+            rs = row_status.lower()
+            fs = filter_status.lower()
+            if fs == "pending":
+                return rs in pending_aliases
+            return rs == fs
+        rows = [row for row in rows if _status_match(str(row.get("status") or "pending"), status)]
 
     if not staff:
-        rows = [row for row in rows if str(row.get("user_id") or row.get("discord_id") or "") == str(actor)]
+        rows = [row for row in rows if str(row.get("buyer_discord_id") or row.get("user_id") or row.get("discord_id") or "") == str(actor)]
 
     return {"orders": rows, "is_staff": staff}

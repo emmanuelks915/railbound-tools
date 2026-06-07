@@ -2599,6 +2599,7 @@ function OrdersView({ discordId, isStaff }: { discordId: string; isStaff: boolea
 
   const statusVariant: Record<string, "default" | "warn" | "success" | "danger" | "info" | "muted"> = {
     pending: "warn",
+    paid: "warn",
     approved: "success",
     denied: "danger",
     fulfilled: "info",
@@ -2620,7 +2621,7 @@ function OrdersView({ discordId, isStaff }: { discordId: string; isStaff: boolea
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Status</span>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="pending">Pending</option>
+            <option value="pending">Pending / Awaiting Approval</option>
             <option value="approved">Approved</option>
             <option value="denied">Denied</option>
             <option value="fulfilled">Fulfilled</option>
@@ -2650,7 +2651,7 @@ function OrdersView({ discordId, isStaff }: { discordId: string; isStaff: boolea
               </div>
               <Badge label={order.status} variant={statusVariant[order.status] || "default"} />
               <div style={{ display: "flex", gap: 4 }}>
-                {order.status === "pending" && (
+                {(order.status === "pending" || order.status === "PENDING" || order.status === "PAID" || order.status === "paid") && (
                   <>
                     <button
                       className="ghost"
@@ -2670,7 +2671,7 @@ function OrdersView({ discordId, isStaff }: { discordId: string; isStaff: boolea
                     </button>
                   </>
                 )}
-                {order.status === "approved" && (
+                {(order.status === "approved" || order.status === "APPROVED") && (
                   <button
                     className="ghost"
                     onClick={() => act(order, "fulfill")}
