@@ -342,27 +342,73 @@ def create_shop_item(
     shop, _ = _load_shop(sb, shop_id)
 
     if not _can_manage_shop(shop, actor):
-        raise HTTPException(status_code=403, detail="You can only manage your own shop.")
+        raise HTTPException(status_code=403, detail="You can only manage your own storefront.")
 
     name = _clean(payload.get("name") or payload.get("item_name"), 160)
     if not name:
         raise HTTPException(status_code=400, detail="Item name is required.")
+
+    category_value = _clean(payload.get("category"), 80)
+    item_type_value = _clean(payload.get("item_type"), 80) or category_value or "item"
 
     insert_payload: dict[str, Any] = {
         "guild_id": get_guild_id(),
         "shop_id": shop_id,
         "name": name,
         "description": _clean(payload.get("description"), 1000),
-        "category": _clean(payload.get("category"), 80) or "General",
         "price": _number(payload.get("price"), 0),
         "stock": int(_number(payload.get("stock"), 0)),
         "requires_approval": _bool(payload.get("requires_approval"), False),
         "is_active": _bool(payload.get("is_active"), True),
         "purchasable": _bool(payload.get("purchasable"), True),
         "review_status": "approved" if not _bool(payload.get("requires_approval"), False) else "PENDING_STAFF_REVIEW",
-        "item_type": _clean(payload.get("item_type"), 80) or _clean(payload.get("category"), 80) or "item",
+        "item_type": item_type_value,
         "grants_qty": int(_number(payload.get("grants_qty"), 1)),
     }
+
+    # Live databases have varied here. Do not rely on category being present.
+    # Use category as item_class when available; if the DB has category, the
+    # schema-safe insert below can still accept it later if we add it back.
+    if category_value:
+        insert_payload["item_class"] = category_value
+
+    optional_text_fields = [
+        ("image_url", "image_url", 800),
+        ("recipe_link", "recipe_link", 800),
+        ("unique_owner", "unique_owner", 160),
+        ("stat_limits", "stat_limits", 1000),
+        ("special_effects", "special_effects", 2000),
+        ("usage_information", "usage_information", 2000),
+        ("staff_change_summary", "staff_change_summary", 1000),
+        ("owner_change_notes", "owner_change_notes", 1000),
+    ]
+
+    for source_key, dest_key, max_len in optional_text_fields:
+        if payload.get(source_key):
+            insert_payload[dest_key] = _clean(payload.get(source_key), max_len)
+
+    optional_int_fields = [
+        "max_per_order",
+        "max_per_user_per_day",
+        "max_per_day",
+        "max_per_week",
+        "max_per_user",
+        "weight",
+        "cc",
+    ]
+
+    for key in optional_int_fields:
+        if payload.get(key) not in (None, ""):
+            insert_payload[key] = int(_number(payload.get(key), 0))
+
+    if payload.get("weight_unit"):
+        insert_payload["weight_unit"] = _clean(payload.get("weight_unit"), 40)
+
+    if payload.get("tag"):
+        insert_payload["tag"] = _clean(payload.get("tag"), 120)
+
+    if payload.get("grants_item_id"):
+        insert_payload["grants_item_id"] = str(payload.get("grants_item_id"))
 
     if payload.get("currency_id"):
         insert_payload["currency_id"] = str(payload.get("currency_id"))
@@ -373,43 +419,50 @@ def create_shop_item(
         if currencies:
             insert_payload["currency_id"] = str(currencies[0].get("currency_id") or currencies[0].get("id"))
 
-    if payload.get("image_url"):
-        insert_payload["image_url"] = _clean(payload.get("image_url"), 800)
+    def _missing_column_from_error(error: Exception) -> str | None:
+        message = str(error)
+        marker = "Could not find the '"
+        if marker not in message:
+            return None
 
-    try:
-        rows = _as_list(sb.table("shop_items").insert(insert_payload).execute())
-    except Exception:
-        # Fallback for older schemas that use item_name instead of name/category.
-        fallback = {
-            "guild_id": get_guild_id(),
-            "shop_id": shop_id,
-            "item_name": name,
-            "description": insert_payload["description"],
-            "price": insert_payload["price"],
-            "stock": insert_payload["stock"],
-            "requires_approval": insert_payload["requires_approval"],
-            "is_active": insert_payload["is_active"],
-        }
-        if insert_payload.get("currency_id"):
-            fallback["currency_id"] = insert_payload["currency_id"]
-        rows = _as_list(sb.table("shop_items").insert(fallback).execute())
+        after = message.split(marker, 1)[1]
+        if "'" not in after:
+            return None
 
-    item = rows[0] if rows else insert_payload
+        return after.split("'", 1)[0]
 
-    log_activity(
-        event_type="shop_item_created",
-        label=f"Shop item created: {name}",
-        status="created",
-        actor_discord_id=actor,
-        source="shop_owner_tools",
-        amount=insert_payload.get("price"),
-        details={"shop_id": shop_id, "item": insert_payload},
-        webhook_title="🧾 Shop Item Created",
-        webhook_description=f"{name} was added to {shop.get('name') or 'a shop'}.",
-    )
+    attempt_payload = dict(insert_payload)
+    last_error: Exception | None = None
 
-    return {"item": _normalize_item(item), "message": "Item created."}
+    for _ in range(20):
+        try:
+            rows = _as_list(sb.table("shop_items").insert(attempt_payload).execute())
+            item = rows[0] if rows else attempt_payload
 
+            log_activity(
+                event_type="shop_item_created",
+                label=f"Shop item created: {name}",
+                status="created",
+                actor_discord_id=actor,
+                source="shop_owner_tools",
+                amount=attempt_payload.get("price"),
+                details={"shop_id": shop_id, "item": attempt_payload},
+                webhook_title="🧾 Shop Item Created",
+                webhook_description=f"{name} was added to {shop.get('name') or 'a storefront'}.",
+            )
+
+            return {"item": _normalize_item(item), "message": "Item created."}
+        except Exception as exc:
+            last_error = exc
+            missing_column = _missing_column_from_error(exc)
+
+            if missing_column and missing_column in attempt_payload:
+                attempt_payload.pop(missing_column, None)
+                continue
+
+            break
+
+    raise HTTPException(status_code=400, detail=f"Could not create item: {last_error}")
 
 @router.patch("/items/{item_id}")
 def update_shop_item(
