@@ -1665,6 +1665,14 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
   const [shopForm, setShopForm] = useState({
     name: "",
     description: "",
+    item_type: "item",
+    item_class: "",
+    cc: "",
+    durability: "",
+    stat_limits: "",
+    special_effects: "",
+    usage_information: "",
+    recipe_link: "",
     image_url: "",
     status: "Open",
     is_active: true,
@@ -2189,7 +2197,47 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
                     />
                   </label>
 
-                  <label className="shop-owner-check">
+                                  <div className="form-grid two">
+                  <label>
+                    <span>Item Type</span>
+                    <select value={shopForm.item_type || "item"} onChange={(event) => setShopForm((current) => ({ ...current, item_type: event.target.value }))}>
+                      <option value="item">Item</option>
+                      <option value="material">Material</option>
+                      <option value="consumable">Consumable</option>
+                      <option value="equipment">Equipment</option>
+                      <option value="service">Service</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Item Class</span>
+                    <input value={shopForm.item_class || ""} onChange={(event) => setShopForm((current) => ({ ...current, item_class: event.target.value }))} placeholder="Light armor, relic, tool, medicine..." />
+                  </label>
+                  <label>
+                    <span>CC</span>
+                    <input type="number" value={shopForm.cc || ""} onChange={(event) => setShopForm((current) => ({ ...current, cc: event.target.value }))} placeholder="How much carry capacity this takes" />
+                  </label>
+                  <label>
+                    <span>Durability</span>
+                    <input value={shopForm.durability || ""} onChange={(event) => setShopForm((current) => ({ ...current, durability: event.target.value }))} placeholder="Example: 10/10, fragile, sturdy..." />
+                  </label>
+                </div>
+                <label>
+                  <span>Stat Limits</span>
+                  <textarea rows={3} value={shopForm.stat_limits || ""} onChange={(event) => setShopForm((current) => ({ ...current, stat_limits: event.target.value }))} placeholder="Requirements to activate or equip this item. Example: Strength 40+, Mana 25+." />
+                </label>
+                <label>
+                  <span>Special Effects</span>
+                  <textarea rows={3} value={shopForm.special_effects || ""} onChange={(event) => setShopForm((current) => ({ ...current, special_effects: event.target.value }))} placeholder="Special effects, bonuses, restrictions, charges, cooldowns, etc." />
+                </label>
+                <label>
+                  <span>Usage Information</span>
+                  <textarea rows={3} value={shopForm.usage_information || ""} onChange={(event) => setShopForm((current) => ({ ...current, usage_information: event.target.value }))} placeholder="How the item is used, activated, equipped, consumed, or requested in RP." />
+                </label>
+                <label>
+                  <span>Recipe Link</span>
+                  <input value={shopForm.recipe_link || ""} onChange={(event) => setShopForm((current) => ({ ...current, recipe_link: event.target.value }))} placeholder="Link to crafting recipe, if any." />
+                </label>
+<label className="shop-owner-check">
                     <input
                       type="checkbox"
                       checked={itemForm.requires_approval}
