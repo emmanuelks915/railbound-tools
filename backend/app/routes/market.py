@@ -449,26 +449,49 @@ def request_market_item(
     requires_approval = bool(item.get("requires_approval") or item.get("needs_approval"))
     order_status = "pending" if requires_approval else "approved"
 
-    # Try column name variants — the table uses buyer_discord_id
+    # Probe the table schema by fetching one existing row so we know the real column names.
+    # The table was historically written by the bot, so we can't assume column names.
+    sample_rows = _safe_rows(sb.table("shop_orders").select("*").limit(1))
+    sample = sample_rows[0] if sample_rows else {}
+
+    # Detect buyer column
+    buyer_col = "buyer_discord_id"
+    for candidate in ("buyer_discord_id", "discord_id", "user_id", "buyer_id", "player_discord_id"):
+        if candidate in sample:
+            buyer_col = candidate
+            break
+
+    # Detect item column
+    item_col = "item_id"
+    for candidate in ("item_id", "shop_item_id"):
+        if candidate in sample:
+            item_col = candidate
+            break
+
+    base_payload: dict[str, Any] = {
+        "guild_id": get_guild_id(),
+        item_col: item_id,
+        "quantity": quantity,
+        buyer_col: str(actor),
+        "status": order_status,
+    }
+    if character_id:
+        for cand in ("character_id", "oc_id"):
+            if not sample or cand in sample:
+                base_payload[cand] = str(character_id)
+                break
+    if note:
+        base_payload["note"] = str(note)
+
     order_row = None
     last_exc = None
-    for buyer_col in ("buyer_discord_id", "discord_id", "user_id"):
-        payload: dict[str, Any] = {
-            "guild_id": get_guild_id(),
-            "item_id": item_id,
-            "quantity": quantity,
-            buyer_col: str(actor),
-            "status": order_status,
-        }
-        if character_id:
-            payload["character_id"] = str(character_id)
-        if note:
-            payload["note"] = str(note)
+    # Try full payload, then minimal fallback without optional fields
+    for attempt in [base_payload, {k: v for k, v in base_payload.items() if k in {"guild_id", item_col, "quantity", buyer_col, "status"}}]:
         try:
-            inserted = _as_list(sb.table("shop_orders").insert(payload).execute())
+            inserted = _as_list(sb.table("shop_orders").insert(attempt).execute())
             if inserted:
                 order_row = inserted[0]
-                order_payload = payload
+                order_payload = attempt
                 break
         except Exception as exc:
             last_exc = exc
@@ -477,7 +500,7 @@ def request_market_item(
     if order_row is None:
         raise HTTPException(status_code=400, detail=f"Could not create order: {last_exc}")
 
-    order_payload = {**payload, "status": order_status}
+    order_payload = {**base_payload, "status": order_status}
 
     log_activity(
         event_type="market_item_requested",
