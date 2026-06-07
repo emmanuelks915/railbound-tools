@@ -4,7 +4,33 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routes import characters, combat, dashboard, inventory, shops, skills, staff, xp, rp, activity, auth, registry, oc_registration, oc_balances, oc_management, activity_log, permissions, request_workflow, market, shop_owner, character_self, companions, discord_roles, staff_maintenance, missions, source_beast_skills
+from app.routes import (
+    characters,
+    combat,
+    dashboard,
+    inventory,
+    skills,
+    staff,
+    xp,
+    rp,
+    activity,
+    auth,
+    registry,
+    oc_registration,
+    oc_balances,
+    oc_management,
+    activity_log,
+    permissions,
+    request_workflow,
+    market,
+    shop_owner,
+    character_self,
+    companions,
+    discord_roles,
+    staff_maintenance,
+    missions,
+    source_beast_skills,
+)
 
 settings = get_settings()
 
@@ -28,7 +54,7 @@ app.include_router(xp.router)
 app.include_router(staff.router)
 app.include_router(combat.router)
 app.include_router(inventory.router)
-app.include_router(shops.router)
+# shops.router removed — legacy /api/shops replaced by /api/market + /api/shop-owner
 app.include_router(skills.router)
 app.include_router(rp.router)
 app.include_router(activity.router)

@@ -1,21 +1,23 @@
-# Repair Staff Trait Grant Component v4
+# Add Shop Item Delete v1
 
-This fixes the build error:
+Adds true permanent deletion for shop items.
+
+## Backend
+
+Adds:
 
 ```txt
-Unexpected token at {!embedded ? (
+DELETE /api/shop-owner/items/{item_id}
 ```
 
-Instead of trying to repair the broken JSX fragment, this patch rewrites the entire `StaffTraitGrantCard` component with a clean known-good version.
+It checks that the logged-in user can manage the item’s storefront before deleting.
 
-## What it does
+## Frontend
+
+Adds a **Delete Item** button while editing an item.
 
 ```txt
-- replaces broken StaffTraitGrantCard component
-- keeps Grant / Remove Trait Only inside Staff Action Center
-- passes maintenanceForm.character_id into the trait tool
-- removes duplicate OC picker when embedded
-- removes request-note-block wrapper when embedded
+Edit Item → Delete Item → confirmation prompt → item removed from shop_items
 ```
 
 ## Run
@@ -23,8 +25,8 @@ Instead of trying to repair the broken JSX fragment, this patch rewrites the ent
 ```powershell
 cd C:\Users\emman\OneDrive\Documents\railbound-tools-starter
 
-Expand-Archive -Path "$env:USERPROFILE\Downloads\repair_staff_trait_grant_component_v4_patch.zip" -DestinationPath . -Force
-python patch_repair_staff_trait_grant_component_v4.py
+Expand-Archive -Path "$env:USERPROFILE\Downloads\add_shop_item_delete_v1_patch.zip" -DestinationPath . -Force
+python patch_add_shop_item_delete_v1.py
 ```
 
 Then:
@@ -38,7 +40,7 @@ Commit:
 
 ```powershell
 cd ..
-git add frontend/src/main.tsx
-git commit -m "Repair staff trait grant component"
+git add backend/app/routes/shop_owner.py frontend/src/main.tsx
+git commit -m "Add shop item deletion"
 git push
 ```

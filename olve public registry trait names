@@ -1,0 +1,181 @@
+[1mdiff --git a/backend/app/routes/registry.py b/backend/app/routes/registry.py[m
+[1mindex ad2d522..d24e1e2 100644[m
+[1m--- a/backend/app/routes/registry.py[m
+[1m+++ b/backend/app/routes/registry.py[m
+[36m@@ -712,24 +712,163 @@[m [mdef _public_skill_rows(sb, character_ids: list[str]) -> dict[str, list[dict[str,[m
+ [m
+ [m
+ def _public_trait_rows(sb, character_ids: list[str]) -> dict[str, list[dict[str, Any]]]:[m
+[31m-    rows = _first_nonempty_source([m
+[31m-        sb,[m
+[31m-        character_ids,[m
+[31m-        [[m
+[31m-            ("character_traits", "character_id"),[m
+[31m-            ("oc_traits", "character_id"),[m
+[31m-            ("traits", "character_id"),[m
+[31m-        ],[m
+[32m+[m[32m    owned_rows: list[dict[str, Any]] = [][m
+[32m+[m
+[32m+[m[32m    # Ownership tables usually store only character_id + trait_id. The public registry[m
+[32m+[m[32m    # needs to resolve those IDs through the trait catalog before rendering names.[m
+[32m+[m[32m    for table in ("character_traits", "oc_traits"):[m
+[32m+[m[32m        owned_rows.extend(_safe_select_for_ids(sb, table, "character_id", character_ids))[m
+[32m+[m
+[32m+[m[32m    if not owned_rows:[m
+[32m+[m[32m        legacy_rows = _safe_select_for_ids(sb, "traits", "character_id", character_ids)[m
+[32m+[m[32m        cleaned = [][m
+[32m+[m[32m        for row in legacy_rows:[m
+[32m+[m[32m            cleaned.append([m
+[32m+[m[32m                {[m
+[32m+[m[32m                    "character_id": str(row.get("character_id") or row.get("oc_id") or ""),[m
+[32m+[m[32m                    "trait_id": row.get("trait_id"),[m
+[32m+[m[32m                    "slug": row.get("slug") or row.get("trait_slug") or row.get("trait_key"),[m
+[32m+[m[32m                    "name": row.get("name") or row.get("trait_name") or row.get("trait_key") or "Trait",[m
+[32m+[m[32m                    "description": row.get("description") or row.get("summary"),[m
+[32m+[m[32m                    "type": row.get("tier") or row.get("type") or row.get("trait_type"),[m
+[32m+[m[32m                    "tier": row.get("tier"),[m
+[32m+[m[32m                    "category": row.get("category") or row.get("trait_type"),[m
+[32m+[m[32m                    "cost": row.get("cost") or row.get("point_value"),[m
+[32m+[m[32m                }[m
+[32m+[m[32m            )[m
+[32m+[m[32m        return _group_by_character(cleaned)[m
+[32m+[m
+[32m+[m[32m    trait_ids = list([m
+[32m+[m[32m        dict.fromkeys([m
+[32m+[m[32m            str(row.get("trait_id"))[m
+[32m+[m[32m            for row in owned_rows[m
+[32m+[m[32m            if row.get("trait_id")[m
+[32m+[m[32m        )[m
+[32m+[m[32m    )[m
+[32m+[m[32m    slugs = list([m
+[32m+[m[32m        dict.fromkeys([m
+[32m+[m[32m            str(row.get(key))[m
+[32m+[m[32m            for row in owned_rows[m
+[32m+[m[32m            for key in ("slug", "trait_slug", "trait_key")[m
+[32m+[m[32m            if row.get(key)[m
+[32m+[m[32m        )[m
+     )[m
+ [m
+[32m+[m[32m    trait_by_id: dict[str, dict[str, Any]] = {}[m
+[32m+[m[32m    trait_by_slug: dict[str, dict[str, Any]] = {}[m
+[32m+[m
+[32m+[m[32m    def remember_trait(row: dict[str, Any]) -> None:[m
+[32m+[m[32m        if row.get("trait_id"):[m
+[32m+[m[32m            trait_by_id[str(row.get("trait_id"))] = row[m
+[32m+[m
+[32m+[m[32m        for key in ("slug", "trait_slug", "trait_key"):[m
+[32m+[m[32m            value = row.get(key)[m
+[32m+[m[32m            if value:[m
+[32m+[m[32m                trait_by_slug[str(value)] = row[m
+[32m+[m
+[32m+[m[32m    if trait_ids:[m
+[32m+[m[32m        catalog_rows = _safe_execute([m
+[32m+[m[32m            sb.table("traits")[m
+[32m+[m[32m            .select("*")[m
+[32m+[m[32m            .eq("guild_id", get_guild_id())[m
+[32m+[m[32m            .in_("trait_id", trait_ids)[m
+[32m+[m[32m            .limit(1000)[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m        if not catalog_rows:[m
+[32m+[m[32m            catalog_rows = _safe_execute([m
+[32m+[m[32m                sb.table("traits")[m
+[32m+[m[32m                .select("*")[m
+[32m+[m[32m                .in_("trait_id", trait_ids)[m
+[32m+[m[32m                .limit(1000)[m
+[32m+[m[32m            )[m
+[32m+[m
+[32m+[m[32m        for trait in catalog_rows:[m
+[32m+[m[32m            remember_trait(trait)[m
+[32m+[m
+[32m+[m[32m    if slugs:[m
+[32m+[m[32m        catalog_rows = _safe_execute([m
+[32m+[m[32m            sb.table("traits")[m
+[32m+[m[32m            .select("*")[m
+[32m+[m[32m            .eq("guild_id", get_guild_id())[m
+[32m+[m[32m            .in_("slug", slugs)[m
+[32m+[m[32m            .limit(1000)[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m        if not catalog_rows:[m
+[32m+[m[32m            catalog_rows = _safe_execute([m
+[32m+[m[32m                sb.table("traits")[m
+[32m+[m[32m                .select("*")[m
+[32m+[m[32m                .in_("slug", slugs)[m
+[32m+[m[32m                .limit(1000)[m
+[32m+[m[32m            )[m
+[32m+[m
+[32m+[m[32m        trait_key_rows = _safe_execute([m
+[32m+[m[32m            sb.table("traits")[m
+[32m+[m[32m            .select("*")[m
+[32m+[m[32m            .eq("guild_id", get_guild_id())[m
+[32m+[m[32m            .in_("trait_key", slugs)[m
+[32m+[m[32m            .limit(1000)[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m        for trait in [*catalog_rows, *trait_key_rows]:[m
+[32m+[m[32m            remember_trait(trait)[m
+[32m+[m
+     cleaned = [][m
+[31m-    for row in rows:[m
+[32m+[m[32m    seen: set[tuple[str, str]] = set()[m
+[32m+[m
+[32m+[m[32m    for row in owned_rows:[m
+[32m+[m[32m        cid = str(row.get("character_id") or row.get("oc_id") or "")[m
+[32m+[m[32m        if not cid:[m
+[32m+[m[32m            continue[m
+[32m+[m
+[32m+[m[32m        definition = None[m
+[32m+[m[32m        trait_id = str(row.get("trait_id")) if row.get("trait_id") else ""[m
+[32m+[m
+[32m+[m[32m        if trait_id:[m
+[32m+[m[32m            definition = trait_by_id.get(trait_id)[m
+[32m+[m
+[32m+[m[32m        if not definition:[m
+[32m+[m[32m            for key in ("slug", "trait_slug", "trait_key"):[m
+[32m+[m[32m                value = row.get(key)[m
+[32m+[m[32m                if value and str(value) in trait_by_slug:[m
+[32m+[m[32m                    definition = trait_by_slug[str(value)][m
+[32m+[m[32m                    break[m
+[32m+[m
+[32m+[m[32m        source = definition or row[m
+[32m+[m[32m        slug = ([m
+[32m+[m[32m            source.get("slug")[m
+[32m+[m[32m            or source.get("trait_slug")[m
+[32m+[m[32m            or source.get("trait_key")[m
+[32m+[m[32m            or row.get("slug")[m
+[32m+[m[32m            or row.get("trait_slug")[m
+[32m+[m[32m            or row.get("trait_key")[m
+[32m+[m[32m        )[m
+[32m+[m[32m        name = ([m
+[32m+[m[32m            source.get("name")[m
+[32m+[m[32m            or source.get("display_name")[m
+[32m+[m[32m            or row.get("trait_name")[m
+[32m+[m[32m            or slug[m
+[32m+[m[32m            or "Trait"[m
+[32m+[m[32m        )[m
+[32m+[m[32m        marker = str(source.get("trait_id") or trait_id or slug or name)[m
+[32m+[m[32m        dedupe_key = (cid, marker)[m
+[32m+[m
+[32m+[m[32m        if dedupe_key in seen:[m
+[32m+[m[32m            continue[m
+[32m+[m[32m        seen.add(dedupe_key)[m
+[32m+[m
+         cleaned.append([m
+             {[m
+[31m-                "character_id": str(row.get("character_id") or row.get("oc_id") or ""),[m
+[31m-                "name": row.get("name") or row.get("trait_name") or row.get("trait_key") or "Trait",[m
+[31m-                "description": row.get("description") or row.get("summary"),[m
+[31m-                "type": row.get("type") or row.get("trait_type"),[m
+[32m+[m[32m                "character_id": cid,[m
+[32m+[m[32m                "trait_id": source.get("trait_id") or row.get("trait_id"),[m
+[32m+[m[32m                "slug": slug,[m
+[32m+[m[32m                "name": name,[m
+[32m+[m[32m                "description": source.get("description") or source.get("summary") or row.get("description"),[m
+[32m+[m[32m                "type": source.get("tier") or source.get("trait_type") or source.get("type") or row.get("type"),[m
+[32m+[m[32m                "tier": source.get("tier"),[m
+[32m+[m[32m                "category": source.get("category") or source.get("trait_type"),[m
+[32m+[m[32m                "cost": source.get("cost") or source.get("point_value"),[m
+             }[m
+         )[m
+ [m

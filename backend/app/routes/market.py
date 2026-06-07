@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
 from app.permissions import is_staff
 from app.security import actor_from_header
@@ -52,6 +52,13 @@ def _number(value: Any, default: int | float = 0) -> int | float:
         return int(amount) if amount.is_integer() else round(amount, 2)
     except Exception:
         return default
+
+
+def _clean(value: Any, max_len: int = 500) -> str | None:
+    if value is None:
+        return None
+    cleaned = str(value).strip()
+    return cleaned[:max_len] if cleaned else None
 
 
 def _currency_lookup(sb, currency_ids: set[str]) -> dict[str, dict[str, Any]]:
@@ -133,9 +140,14 @@ def _item_description(row: dict[str, Any]) -> str | None:
 
 
 def _item_category(row: dict[str, Any]) -> str:
-    for key in ("category", "item_type", "type", "rarity"):
+    for key in ("category", "item_class", "item_type", "type", "rarity"):
+        val = row.get(key)
+        if val and str(val).lower() not in {"item", "material", "consumable", "equipment", "service", "role", "currency"}:
+            return str(val)
+    # Fall back to item_type if no human-readable category found
+    for key in ("category", "item_class", "item_type", "type"):
         if row.get(key):
-            return str(row.get(key))
+            return str(row.get(key)).title()
     return "General"
 
 
@@ -176,17 +188,19 @@ def _normalize_shop(row: dict[str, Any], items: list[dict[str, Any]]) -> dict[st
     sid = _shop_id(row)
     shop_items = [item for item in items if str(item.get("shop_id") or item.get("store_id") or "") == sid]
     active_items = [item for item in shop_items if _is_active(item)]
+    owner_id = _shop_owner(row)
 
     return {
         "shop_id": sid,
         "name": row.get("name") or row.get("shop_name") or "Unnamed Shop",
         "description": row.get("description") or row.get("blurb") or row.get("details"),
-        "owner_discord_id": _shop_owner(row),
+        "owner_discord_id": owner_id,
+        "shop_type": "player" if owner_id else "npc",
         "status": row.get("status") or ("Open" if _is_active(row) else "Closed"),
         "is_active": _is_active(row),
         "channel_id": row.get("channel_id"),
         "thread_id": row.get("thread_id"),
-        "image_url": row.get("image_url") or row.get("banner_url"),
+        "image_url": row.get("image_url") or row.get("banner_url") or row.get("shop_banner_url"),
         "item_count": len(active_items),
         "raw": row,
     }
@@ -277,7 +291,12 @@ def get_market_overview(
             ]).lower()
         ]
 
-    categories = sorted({item.get("category") or "General" for item in [_normalize_item(row, shops_by_id, currencies) for row in item_rows]})
+    all_item_rows = _load_items(sb)
+    categories = sorted({
+        _item_category(row)
+        for row in all_item_rows
+        if _item_category(row)
+    })
 
     return {
         "shops": shops,
@@ -291,6 +310,112 @@ def get_market_overview(
         },
         "is_staff": is_staff(int(actor_discord_id)) if actor_discord_id is not None else False,
     }
+
+
+@router.post("/shops")
+def create_npc_shop(
+    payload: dict[str, Any] = Body(...),
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    """Staff-only: create an NPC storefront (no owner_discord_id)."""
+    actor = _require_staff(actor_discord_id)
+    sb = get_supabase()
+
+    name = _clean(payload.get("name") or payload.get("shop_name"), 120)
+    if not name:
+        raise HTTPException(status_code=400, detail="Storefront name is required.")
+
+    base_payload: dict[str, Any] = {
+        "guild_id": get_guild_id(),
+        "name": name,
+        "description": _clean(payload.get("description"), 1000),
+        "enabled": True,
+        "is_forum": False,
+        "treasury_cut_bps": 0,
+    }
+
+    if payload.get("image_url"):
+        base_payload["image_url"] = _clean(payload.get("image_url"), 800)
+
+    last_error = None
+    rows = []
+    for attempt in [base_payload, {k: v for k, v in base_payload.items() if k not in {"is_forum", "treasury_cut_bps"}}]:
+        try:
+            rows = _as_list(sb.table("shops").insert(attempt).execute())
+            if rows:
+                break
+        except Exception as exc:
+            last_error = exc
+
+    if not rows:
+        raise HTTPException(status_code=400, detail=f"Could not create NPC storefront: {last_error}")
+
+    shop = rows[0]
+
+    log_activity(
+        event_type="npc_shop_created",
+        label=f"NPC shop created: {name}",
+        status="created",
+        actor_discord_id=actor,
+        source="market_staff",
+        details={"shop_id": _shop_id(shop), "name": name},
+        webhook_title="🏪 NPC Shop Created",
+        webhook_description=f'"{name}" was added as an NPC storefront.',
+    )
+
+    return {
+        "shop": _normalize_shop(shop, []),
+        "message": f'NPC shop "{name}" created.',
+    }
+
+
+@router.patch("/shops/{shop_id}")
+def update_shop(
+    shop_id: str,
+    payload: dict[str, Any] = Body(...),
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    """Staff can update any shop; players can update their own."""
+    actor = _require_login(actor_discord_id)
+    sb = get_supabase()
+
+    # Load shop
+    shop = None
+    for col in ("shop_id", "id"):
+        rows = _safe_rows(sb.table("shops").select("*").eq(col, shop_id).limit(1))
+        if rows:
+            shop = rows[0]
+            break
+
+    if not shop:
+        raise HTTPException(status_code=404, detail="Shop not found.")
+
+    owner_id = _shop_owner(shop)
+    if not is_staff(actor) and (not owner_id or str(actor) != str(owner_id)):
+        raise HTTPException(status_code=403, detail="You can only edit your own shop.")
+
+    update: dict[str, Any] = {}
+    if "name" in payload:
+        update["name"] = _clean(payload["name"], 120)
+    if "description" in payload:
+        update["description"] = _clean(payload["description"], 1000)
+    if "image_url" in payload:
+        update["image_url"] = _clean(payload["image_url"], 800)
+    if "status" in payload:
+        status_val = str(payload["status"]).strip()
+        update["enabled"] = status_val.lower() == "open"
+        update["status"] = status_val
+    if "is_active" in payload:
+        update["enabled"] = bool(payload["is_active"])
+
+    if not update:
+        raise HTTPException(status_code=400, detail="No fields to update.")
+
+    id_col = "shop_id" if shop.get("shop_id") else "id"
+    rows = _safe_rows(sb.table("shops").update(update).eq(id_col, shop_id).execute())
+    updated = rows[0] if rows else {**shop, **update}
+
+    return {"shop": _normalize_shop(updated, []), "message": "Shop updated."}
 
 
 @router.post("/items/{item_id}/request")
@@ -341,7 +466,6 @@ def request_market_item(
         if inserted:
             order_row = inserted[0]
     except Exception:
-        # Some schemas use shop_item_id or different optional columns. Fall back minimal.
         fallback = {
             "guild_id": get_guild_id(),
             "item_id": item_id,
