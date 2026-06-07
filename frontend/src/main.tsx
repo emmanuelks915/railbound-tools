@@ -2188,6 +2188,7 @@ function ManageView({ discordId, isStaff }: { discordId: string; isStaff: boolea
 
   // item form
   const [showItemForm, setShowItemForm] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [itemMsg, setItemMsg] = useState({ text: "", type: "ok" as "ok" | "err" });
   const [itemForm, setItemForm] = useState({
@@ -2310,11 +2311,25 @@ function ManageView({ discordId, isStaff }: { discordId: string; isStaff: boolea
     const item = shopData.items.find((i) => i.item_id === editingItemId);
     if (!window.confirm(`Delete "${item?.name || "this item"}" permanently?`)) return;
     try {
-      await apiFetch(`/api/shop-owner/items/${editingItemId}`, { method: "DELETE" }, discordId);
+      const result = await apiFetch(`/api/shop-owner/items/${editingItemId}`, { method: "DELETE" }, discordId);
       setShowItemForm(false);
+      if (result.soft_deleted) {
+        setShopMsg({ text: result.message, type: "ok" });
+      }
       await loadShop(selectedShopId);
     } catch (e: any) {
       setItemMsg({ text: e.message || "Could not delete.", type: "err" });
+    }
+  }
+
+  async function forceDeleteItem(item: ShopItem) {
+    if (!window.confirm(`Force delete "${item.name}"? This will permanently remove it and all its order history. This cannot be undone.`)) return;
+    try {
+      await apiFetch(`/api/shop-owner/items/${item.item_id}/force-delete`, { method: "DELETE" }, discordId);
+      await loadShop(selectedShopId);
+      setShopMsg({ text: `"${item.name}" permanently deleted.`, type: "ok" });
+    } catch (e: any) {
+      setShopMsg({ text: e.message || "Could not force delete.", type: "err" });
     }
   }
 
@@ -2386,20 +2401,27 @@ function ManageView({ discordId, isStaff }: { discordId: string; isStaff: boolea
 
           {/* Items list */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 500 }}>Items ({shopData.items.length})</h3>
-            <button onClick={openAddItem}>
-              <Plus size={14} /> Add item
-            </button>
+            <h3 style={{ fontSize: 15, fontWeight: 500 }}>Items ({shopData.items.filter(i => i.is_active || showArchived).length})</h3>
+            <div style={{ display: "flex", gap: 6 }}>
+              {shopData.items.some(i => !i.is_active) && (
+                <button className="ghost" onClick={() => setShowArchived(a => !a)} style={{ fontSize: 12 }}>
+                  <Eye size={12} /> {showArchived ? "Hide archived" : `Show archived (${shopData.items.filter(i => !i.is_active).length})`}
+                </button>
+              )}
+              <button onClick={openAddItem}>
+                <Plus size={14} /> Add item
+              </button>
+            </div>
           </div>
 
-          {shopData.items.length === 0 ? (
+          {shopData.items.filter(i => showArchived || i.is_active).length === 0 ? (
             <div className="card" style={{ textAlign: "center", padding: "1.5rem", color: "var(--color-text-secondary)" }}>
               <Package size={28} style={{ marginBottom: 6, opacity: 0.25 }} />
               <p style={{ fontSize: 13 }}>No items yet — add your first one above.</p>
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {shopData.items.map((item) => (
+              {shopData.items.filter(i => showArchived || i.is_active).map((item) => (
                 <div key={item.item_id} className="card" style={{ display: "flex", gap: 12, alignItems: "center", padding: "10px 12px" }}>
                   <ItemImage url={item.image_url} alt={item.name} size="thumb" />
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -2415,6 +2437,16 @@ function ManageView({ discordId, isStaff }: { discordId: string; isStaff: boolea
                     <button className="ghost" onClick={() => toggleItem(item)} style={{ padding: "4px 8px" }} title={item.is_active ? "Hide" : "Show"}>
                       {item.is_active ? <EyeOff size={13} /> : <Eye size={13} />}
                     </button>
+                    {!item.is_active && isStaff && (
+                      <button
+                        className="ghost"
+                        onClick={() => forceDeleteItem(item)}
+                        style={{ padding: "4px 8px", color: "var(--color-text-danger)" }}
+                        title="Force delete (staff only — removes order history)"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

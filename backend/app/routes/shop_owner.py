@@ -564,6 +564,54 @@ def delete_shop_item(
             }
         raise HTTPException(status_code=400, detail=f"Could not delete item: {exc}")
 
+
+@router.delete("/items/{item_id}/force-delete")
+def force_delete_shop_item(
+    item_id: str,
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    """Staff-only: delete an item and its order history so the FK constraint clears."""
+    actor = _require_login(actor_discord_id)
+    if not is_staff(actor):
+        raise HTTPException(status_code=403, detail="Staff only.")
+
+    sb = get_supabase()
+
+    item_rows = _as_list(
+        sb.table("shop_items").select("*").eq("item_id", item_id).limit(1).execute()
+    )
+    if not item_rows:
+        raise HTTPException(status_code=404, detail="Item not found.")
+
+    item = item_rows[0]
+    item_name = item.get("name") or item.get("item_name") or "Item"
+
+    # Delete referencing orders first, then the item
+    try:
+        for col in ("item_id", "shop_item_id"):
+            try:
+                _as_list(sb.table("shop_orders").delete().eq(col, item_id).execute())
+            except Exception:
+                pass
+
+        _as_list(sb.table("shop_items").delete().eq("item_id", item_id).execute())
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Force delete failed: {exc}")
+
+    log_activity(
+        event_type="shop_item_force_deleted",
+        label=f"Shop item force deleted (with order history): {item_name}",
+        status="force_deleted",
+        actor_discord_id=actor,
+        source="shop_owner_tools",
+        details={"item_id": item_id, "item_name": item_name},
+        webhook_title="🗑️ Item Force Deleted",
+        webhook_description=f'"{item_name}" and its order history were permanently deleted by staff.',
+    )
+
+    return {"ok": True, "message": f'"{item_name}" and its order history permanently deleted.'}
+
+
 @router.patch("/items/{item_id}")
 def update_shop_item(
     item_id: str,
