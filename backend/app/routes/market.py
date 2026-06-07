@@ -442,8 +442,6 @@ def request_market_item(
         raise HTTPException(status_code=404, detail="Shop item not found.")
 
     item = item_rows[0]
-    # TEMP DEBUG — remove after confirming column names
-    raise HTTPException(status_code=400, detail=f"DEBUG item keys: {list(item.keys())} | shop_id={item.get('shop_id')} | store_id={item.get('store_id')}")
     quantity = max(1, int(_number(payload.get("quantity"), 1)))
     character_id = payload.get("character_id")
     note = payload.get("note")
@@ -451,50 +449,36 @@ def request_market_item(
     requires_approval = bool(item.get("requires_approval") or item.get("needs_approval"))
     order_status = "pending" if requires_approval else "approved"
 
-    # Probe the table schema by fetching one existing row so we know the real column names.
-    # The table was historically written by the bot, so we can't assume column names.
-    sample_rows = _safe_rows(sb.table("shop_orders").select("*").limit(1))
-    sample = sample_rows[0] if sample_rows else {}
+    # Confirmed column names from live schema inspection:
+    # buyer column = buyer_discord_id, item column = item_id, shop required = shop_id
+    shop_id_val = str(item.get("shop_id") or "")
+    if not shop_id_val:
+        raise HTTPException(status_code=400, detail="Item has no shop_id — cannot create order.")
 
-    # Detect buyer column
-    buyer_col = "buyer_discord_id"
-    for candidate in ("buyer_discord_id", "discord_id", "user_id", "buyer_id", "player_discord_id"):
-        if candidate in sample:
-            buyer_col = candidate
-            break
-
-    # Detect item column
-    item_col = "item_id"
-    for candidate in ("item_id", "shop_item_id"):
-        if candidate in sample:
-            item_col = candidate
-            break
-
-    base_payload: dict[str, Any] = {
+    order_payload: dict[str, Any] = {
         "guild_id": get_guild_id(),
-        item_col: item_id,
-        "shop_id": str(item.get("shop_id") or item.get("store_id") or ""),
+        "item_id": item_id,
+        "shop_id": shop_id_val,
         "quantity": quantity,
-        buyer_col: str(actor),
+        "buyer_discord_id": str(actor),
         "status": order_status,
     }
     if character_id:
-        for cand in ("character_id", "oc_id"):
-            if not sample or cand in sample:
-                base_payload[cand] = str(character_id)
-                break
+        order_payload["character_id"] = str(character_id)
     if note:
-        base_payload["note"] = str(note)
+        order_payload["note"] = str(note)
 
     order_row = None
     last_exc = None
-    # Try full payload, then minimal fallback without optional fields
-    for attempt in [base_payload, {k: v for k, v in base_payload.items() if k in {"guild_id", item_col, "quantity", buyer_col, "status"}}]:
+    # Fallback strips optional fields in case of schema mismatch
+    for attempt in [
+        order_payload,
+        {k: v for k, v in order_payload.items() if k in {"guild_id", "item_id", "shop_id", "quantity", "buyer_discord_id", "status"}},
+    ]:
         try:
             inserted = _as_list(sb.table("shop_orders").insert(attempt).execute())
             if inserted:
                 order_row = inserted[0]
-                order_payload = attempt
                 break
         except Exception as exc:
             last_exc = exc
@@ -502,8 +486,6 @@ def request_market_item(
 
     if order_row is None:
         raise HTTPException(status_code=400, detail=f"Could not create order: {last_exc}")
-
-    order_payload = {**base_payload, "status": order_status}
 
     log_activity(
         event_type="market_item_requested",
