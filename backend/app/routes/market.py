@@ -452,24 +452,18 @@ def _resolve_vendor_company(sb, item: dict[str, Any]) -> str | None:
 
     guild_id = get_guild_id()
 
-    # Find by treasury name pattern
+    # Find by treasury name — fetch all and filter in Python since ilike unavailable
     rows = _safe_rows(
         sb.table("companies")
-        .select("company_id")
+        .select("company_id,name")
         .eq("guild_id", guild_id)
-        .ilike("name", "%treasury%")
-        .limit(1)
+        .limit(50)
     )
-    if rows:
-        return str(rows[0].get("company_id") or "")
-
-    # Fall back to first company in guild
-    rows = _safe_rows(
-        sb.table("companies")
-        .select("company_id")
-        .eq("guild_id", guild_id)
-        .limit(1)
-    )
+    # Prefer name containing "treasury"
+    for row in rows:
+        if "treasury" in str(row.get("name") or "").lower():
+            return str(row.get("company_id") or "")
+    # Fall back to first company
     if rows:
         return str(rows[0].get("company_id") or "")
 
