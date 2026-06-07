@@ -916,19 +916,32 @@ def approve_shop_order(
 
     updated = _update_order_status(sb, order_id, "APPROVED", actor, payload.get("note") or payload.get("staff_note"))
 
+    # Grant inventory on approval — mirrors Keystone's approve flow
+    quantity = int(_number(order.get("quantity") or order.get("qty"), 1))
+    inventory_row = _insert_inventory_item(sb, order, item, quantity)
+
     log_activity(
         event_type="shop_order_approved",
         label=f"Shop order approved: {item.get('name') or item.get('item_name') or 'Item'}",
         status="approved",
         actor_discord_id=actor,
-        character_id=order.get("character_id") or order.get("oc_id"),
+        character_id=order.get("buyer_character_id") or order.get("character_id") or order.get("oc_id"),
         note=payload.get("note") or payload.get("staff_note"),
         source="shop_owner_orders",
-        details={"order_id": order_id, "shop_id": _shop_id(shop), "item_id": order.get("item_id")},
+        details={"order_id": order_id, "shop_id": _shop_id(shop), "item_id": order.get("item_id"),
+                 "inventory_granted": bool(inventory_row)},
         webhook_title="✅ Shop Order Approved",
     )
 
-    return {"order": updated, "message": "Order approved."}
+    msg = "Order approved."
+    if inventory_row:
+        msg += " Inventory delivered."
+    elif not (order.get("buyer_character_id") or order.get("character_id")):
+        msg += " No character attached — inventory not granted automatically."
+    else:
+        msg += " Inventory grant failed — check grants_item_id on the shop item."
+
+    return {"order": updated, "message": msg, "inventory_granted": bool(inventory_row)}
 
 
 @router.post("/orders/{order_id}/deny")
