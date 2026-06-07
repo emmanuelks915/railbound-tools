@@ -124,32 +124,35 @@ def _enrich_with_item_names(sb, rows: list[dict[str, Any]]) -> list[dict[str, An
     if not needs_name:
         return rows
 
-    item_ids = list({str(r["item_id"]) for r in needs_name})
+    # Fetch each item individually using eq() — avoids in_() which may not be available
     item_lookup: dict[str, dict[str, Any]] = {}
-
-    for id_col in ("item_id", "id"):
-        try:
-            found = _safe_rows(
-                sb.table("items")
-                .select("item_id,id,name,item_class,description")
-                .in_(id_col, item_ids)
-                .limit(500)
-            )
-            for r in found:
-                key = str(r.get("item_id") or r.get("id") or "")
-                if key:
-                    item_lookup[key] = r
-            if item_lookup:
-                break
-        except Exception:
-            pass
+    for row in needs_name:
+        iid = str(row.get("item_id") or "")
+        if not iid or iid in item_lookup:
+            continue
+        for id_col in ("item_id", "id"):
+            try:
+                found = _safe_rows(
+                    sb.table("items")
+                    .select("item_id,id,name,item_class,description")
+                    .eq(id_col, iid)
+                    .limit(1)
+                )
+                if found:
+                    key = str(found[0].get("item_id") or found[0].get("id") or "")
+                    if key:
+                        item_lookup[key] = found[0]
+                    break
+            except Exception:
+                pass
 
     enriched = []
     for row in rows:
         iid = str(row.get("item_id") or "")
         if iid and iid in item_lookup and not _item_name(row).replace("Unnamed Item", "").strip():
             meta = item_lookup[iid]
-            row = {**row, "name": meta.get("name") or "Unnamed Item",
+            row = {**row,
+                   "name": meta.get("name") or "Unnamed Item",
                    "item_type": meta.get("item_class") or row.get("item_type"),
                    "description": row.get("description") or meta.get("description")}
         enriched.append(row)
