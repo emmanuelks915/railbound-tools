@@ -270,6 +270,38 @@ def _currency_rows(sb, character_id: str) -> list[dict[str, Any]]:
     return out
 
 
+
+@router.get("/debug/item/{item_id}")
+def debug_item_lookup(
+    item_id: str,
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    """Temporary debug endpoint to diagnose item name lookup."""
+    sb = get_supabase()
+    results = {}
+
+    for id_col in ("item_id", "id"):
+        try:
+            rows = _safe_rows(sb.table("items").select("*").eq(id_col, item_id).limit(1))
+            results[f"items.{id_col}"] = rows
+        except Exception as e:
+            results[f"items.{id_col}_error"] = str(e)
+
+    try:
+        rows = _safe_rows(sb.table("inventory_entries").select("*").eq("item_id", item_id).limit(3))
+        results["inventory_entries"] = rows
+    except Exception as e:
+        results["inventory_entries_error"] = str(e)
+
+    try:
+        rows = _safe_rows(sb.table("items").select("*").eq("guild_id", get_guild_id()).limit(3))
+        results["items_sample"] = rows
+    except Exception as e:
+        results["items_sample_error"] = str(e)
+
+    return results
+
+
 @router.get("/characters/{character_id}")
 def get_character_inventory(
     character_id: str,
