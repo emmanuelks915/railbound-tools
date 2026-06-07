@@ -2302,7 +2302,7 @@ function ManageView({ discordId, isStaff }: { discordId: string; isStaff: boolea
       description: itemForm.description.trim(),
       category: itemForm.category,
       price: parseInt(itemForm.price) || 0,
-      stock: itemForm.stock === "" ? null : parseInt(itemForm.stock),
+      stock: (itemForm.stock === "" || itemForm.stock === null) ? null : (isNaN(parseInt(itemForm.stock)) ? null : parseInt(itemForm.stock)),
       image_url: itemForm.image_url.trim() || null,
       requires_approval: itemForm.requires_approval,
       is_active: itemForm.is_active,
@@ -2496,7 +2496,10 @@ function ManageView({ discordId, isStaff }: { discordId: string; isStaff: boolea
                 </label>
                 <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Stock (blank = unlimited)</span>
-                  <input type="number" min={0} value={itemForm.stock} onChange={(e) => setItemForm((f) => ({ ...f, stock: e.target.value }))} placeholder="∞" />
+                  <input type="text" inputMode="numeric" value={itemForm.stock} onChange={(e) => {
+                    const v = e.target.value.replace(/[^0-9]/g, "");
+                    setItemForm((f) => ({ ...f, stock: v }));
+                  }} placeholder="∞ (leave blank for unlimited)" style={{ width: "100%" }} />
                 </label>
               </div>
               <label style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>

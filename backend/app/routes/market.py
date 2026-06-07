@@ -252,10 +252,6 @@ def get_market_overview(
             row for row in item_rows
             if _is_active(row)
             and bool(row.get("purchasable", True))
-            and (
-                not bool(row.get("requires_approval"))
-                or str(row.get("review_status") or "").lower() == "approved"
-            )
         ]
 
     shops_by_id = {_shop_id(row): row for row in shop_rows if _shop_id(row)}
