@@ -418,6 +418,89 @@ def update_shop(
     return {"shop": _normalize_shop(updated, []), "message": "Shop updated."}
 
 
+
+# ---------------------------------------------------------------------------
+# Schema-aware order insert
+# Reads NOT NULL columns from information_schema once per request so we never
+# have to guess or chase constraint errors as the schema evolves.
+# ---------------------------------------------------------------------------
+
+def _resolve_currency(sb, item: dict[str, Any]) -> str | None:
+    cid = item.get("currency_id")
+    if cid:
+        return str(cid)
+    for rows in [
+        _safe_rows(sb.table("currencies").select("currency_id,id").eq("guild_id", get_guild_id()).order("created_at").limit(1)),
+        _safe_rows(sb.table("currencies").select("currency_id,id").limit(1)),
+    ]:
+        if rows:
+            return str(rows[0].get("currency_id") or rows[0].get("id") or "")
+    return None
+
+
+def _get_notnull_columns(sb, table: str) -> set[str]:
+    """Return set of NOT NULL column names for a table via information_schema."""
+    try:
+        rows = _safe_rows(
+            sb.table("information_schema.columns")
+            .select("column_name,is_nullable")
+            .eq("table_name", table)
+            .eq("table_schema", "public")
+            .execute()
+        )
+        return {r["column_name"] for r in rows if r.get("is_nullable") == "NO"}
+    except Exception:
+        return set()
+
+
+def _build_order_payload(
+    sb,
+    item: dict[str, Any],
+    item_id: str,
+    actor: int,
+    quantity: int,
+    order_status: str,
+    character_id: str | None,
+    note: str | None,
+) -> dict[str, Any]:
+    """
+    Build the shop_orders insert payload by:
+    1. Starting with all known fields.
+    2. Checking which NOT NULL columns we're missing.
+    3. Filling gaps from the item row or guild defaults.
+    """
+    currency_id = _resolve_currency(sb, item)
+    shop_id = str(item.get("shop_id") or "")
+    if not shop_id:
+        raise HTTPException(status_code=400, detail="Item has no shop_id — cannot create order.")
+
+    payload: dict[str, Any] = {
+        "guild_id": get_guild_id(),
+        "item_id": item_id,
+        "shop_id": shop_id,
+        "quantity": quantity,
+        "buyer_discord_id": str(actor),
+        "status": order_status,
+    }
+    if currency_id:
+        payload["currency_id"] = currency_id
+    if character_id:
+        payload["character_id"] = str(character_id)
+    if note:
+        payload["note"] = str(note)
+
+    # Fill any remaining NOT NULL columns we're missing using the item row as a source
+    required = _get_notnull_columns(sb, "shop_orders")
+    for col in required:
+        if col in payload:
+            continue
+        # Try to pull the value from the item row (e.g. price, currency_id already on item)
+        if col in item and item[col] is not None:
+            payload[col] = item[col]
+
+    return payload
+
+
 @router.post("/items/{item_id}/request")
 def request_market_item(
     item_id: str,
@@ -449,44 +532,18 @@ def request_market_item(
     requires_approval = bool(item.get("requires_approval") or item.get("needs_approval"))
     order_status = "pending" if requires_approval else "approved"
 
-    # Confirmed column names from live schema inspection:
-    # buyer column = buyer_discord_id, item column = item_id, shop required = shop_id
-    shop_id_val = str(item.get("shop_id") or "")
-    if not shop_id_val:
-        raise HTTPException(status_code=400, detail="Item has no shop_id — cannot create order.")
+    order_payload = _build_order_payload(
+        sb, item, item_id, actor, quantity, order_status, character_id, note
+    )
 
-    order_payload: dict[str, Any] = {
-        "guild_id": get_guild_id(),
-        "item_id": item_id,
-        "shop_id": shop_id_val,
-        "quantity": quantity,
-        "buyer_discord_id": str(actor),
-        "currency_id": str(item.get("currency_id") or ""),
-        "status": order_status,
-    }
-    if character_id:
-        order_payload["character_id"] = str(character_id)
-    if note:
-        order_payload["note"] = str(note)
-
-    order_row = None
-    last_exc = None
-    # Fallback strips optional fields in case of schema mismatch
-    for attempt in [
-        order_payload,
-        {k: v for k, v in order_payload.items() if k in {"guild_id", "item_id", "shop_id", "quantity", "buyer_discord_id", "status"}},
-    ]:
-        try:
-            inserted = _as_list(sb.table("shop_orders").insert(attempt).execute())
-            if inserted:
-                order_row = inserted[0]
-                break
-        except Exception as exc:
-            last_exc = exc
-            continue
+    try:
+        inserted = _as_list(sb.table("shop_orders").insert(order_payload).execute())
+        order_row = inserted[0] if inserted else None
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not create order: {exc}")
 
     if order_row is None:
-        raise HTTPException(status_code=400, detail=f"Could not create order: {last_exc}")
+        raise HTTPException(status_code=400, detail="Order insert returned no rows.")
 
     log_activity(
         event_type="market_item_requested",
