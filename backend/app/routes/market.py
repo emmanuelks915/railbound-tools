@@ -474,29 +474,30 @@ def _build_order_payload(
     if not shop_id:
         raise HTTPException(status_code=400, detail="Item has no shop_id — cannot create order.")
 
+    unit_price = int(_number(item.get("price") or item.get("cost"), 0))
+    subtotal = unit_price * quantity
+
+    # All NOT NULL columns confirmed from live shop_orders data:
+    # order_id (auto), guild_id, shop_id, buyer_discord_id, currency_id,
+    # subtotal, fee, total, status, requires_approval, quantity, unit_price
     payload: dict[str, Any] = {
         "guild_id": get_guild_id(),
         "item_id": item_id,
         "shop_id": shop_id,
-        "quantity": quantity,
         "buyer_discord_id": str(actor),
+        "currency_id": currency_id or "",
+        "quantity": quantity,
+        "unit_price": unit_price,
+        "subtotal": subtotal,
+        "fee": 0,
+        "total": subtotal,
         "status": order_status,
+        "requires_approval": bool(item.get("requires_approval") or item.get("needs_approval")),
     }
-    if currency_id:
-        payload["currency_id"] = currency_id
     if character_id:
-        payload["character_id"] = str(character_id)
+        payload["buyer_character_id"] = str(character_id)
     if note:
-        payload["note"] = str(note)
-
-    # Fill any remaining NOT NULL columns we're missing using the item row as a source
-    required = _get_notnull_columns(sb, "shop_orders")
-    for col in required:
-        if col in payload:
-            continue
-        # Try to pull the value from the item row (e.g. price, currency_id already on item)
-        if col in item and item[col] is not None:
-            payload[col] = item[col]
+        payload["reason"] = str(note)
 
     return payload
 
