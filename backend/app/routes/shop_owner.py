@@ -964,7 +964,12 @@ def deny_shop_order(
 
 
 def _insert_inventory_item(sb, order: dict[str, Any], item: dict[str, Any], quantity: int) -> dict[str, Any] | None:
-    # character_id stored as buyer_character_id on web-created orders
+    """
+    Grant inventory using the same logic as Keystone:
+    - Uses grants_item_id (the items table UUID) not the shop_items UUID
+    - Multiplies grants_qty * order quantity
+    - Falls back gracefully if grants_item_id is not set
+    """
     character_id = (
         order.get("buyer_character_id")
         or order.get("character_id")
@@ -973,51 +978,44 @@ def _insert_inventory_item(sb, order: dict[str, Any], item: dict[str, Any], quan
     if not character_id:
         return None
 
-    item_uuid = str(item.get("item_id") or item.get("shop_item_id") or item.get("id") or "")
+    # Keystone uses grants_item_id, not the shop_item item_id
+    grants_item_id = item.get("grants_item_id")
+    grants_qty = int(item.get("grants_qty") or 1)
     item_name = item.get("name") or item.get("item_name") or "Shop Item"
     actor = int(order.get("buyer_discord_id") or order.get("discord_id") or 0)
+    shop_item_id_short = str(item.get("item_id") or "")[:8]
+    order_id_short = str(order.get("order_id") or "")[:8]
 
-    # Use the same RPC Keystone uses: apply_inventory_delta
+    if not grants_item_id:
+        # Item has no grants_item_id set — nothing to grant
+        return None
+
+    total_qty = grants_qty * quantity
+
     rpc_payload = {
         "p_guild_id": get_guild_id(),
         "p_character_id": str(character_id),
-        "p_item_id": item_uuid,
-        "p_delta": quantity,
+        "p_item_id": str(grants_item_id),
+        "p_delta": total_qty,
         "p_actor_discord_id": actor,
-        "p_context": "shop_purchase",
-        "p_note": f"Shop order fulfilled: {item_name} x{quantity}",
+        "p_context": "shop_fulfill_approved",
+        "p_note": f"order={order_id_short} shop_item={shop_item_id_short}",
     }
     try:
         res = _as_list(sb.rpc("apply_inventory_delta", rpc_payload).execute())
-        return res[0] if res else {"ok": True}
+        return res[0] if res else {"ok": True, "granted": total_qty}
     except Exception as rpc_exc:
         rpc_err = str(rpc_exc)
         if "INSUFFICIENT_QTY" in rpc_err:
             raise HTTPException(status_code=400, detail="Insufficient quantity in inventory.")
         if "DELTA_ZERO" in rpc_err:
             raise HTTPException(status_code=400, detail="Quantity must be greater than zero.")
+        # RPC failed for other reason — surface it
+        raise HTTPException(status_code=500, detail=f"Inventory grant failed: {rpc_exc}")
 
-    # Fallback: direct table insert
-    payloads = [
-        {
-            "guild_id": get_guild_id(),
-            "character_id": str(character_id),
-            "item_id": item_uuid,
-            "item_name": item_name,
-            "name": item_name,
-            "quantity": quantity,
-            "source": "market",
-        },
-        {
-            "character_id": str(character_id),
-            "item_name": item_name,
-            "quantity": quantity,
-            "source": "market",
-        },
-    ]
-
+    # (unreachable but kept for fallback clarity)
     for table in ("character_inventory", "oc_inventory", "inventory"):
-        for payload in payloads:
+        for payload in [{"character_id": str(character_id), "item_id": str(grants_item_id), "quantity": total_qty, "source": "market"}]:
             try:
                 rows = _as_list(sb.table(table).insert(payload).execute())
                 if rows:
@@ -1101,5 +1099,12 @@ def fulfill_shop_order(
         "order": updated_order,
         "item": updated_item,
         "inventory_row": inventory_row,
-        "message": "Order fulfilled and inventory updated." if inventory_row else "Order fulfilled. Inventory insert was skipped because no OC was attached or no compatible inventory table was found.",
+        "message": (
+            "Order fulfilled and inventory updated."
+            if inventory_row else
+            "Order fulfilled. Inventory was skipped — either no character was attached to this order, "
+            "or this shop item has no grants_item_id set (link it to an item in the Items table in Supabase)."
+        ),
+        "inventory_granted": bool(inventory_row),
+        "grants_item_id": item.get("grants_item_id"),
     }
