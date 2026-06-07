@@ -349,7 +349,20 @@ def create_shop_item(
         raise HTTPException(status_code=400, detail="Item name is required.")
 
     category_value = _clean(payload.get("category"), 80)
-    item_type_value = _clean(payload.get("item_type"), 80) or category_value or "item"
+    raw_item_type = (_clean(payload.get("item_type"), 80) or "item").lower().strip()
+
+    allowed_item_types = {
+        "item",
+        "material",
+        "consumable",
+        "equipment",
+        "service",
+        "role",
+        "currency",
+    }
+
+    # Never use category as item_type. Values like "General" violate the DB check constraint.
+    item_type_value = raw_item_type if raw_item_type in allowed_item_types else "item"
 
     insert_payload: dict[str, Any] = {
         "guild_id": get_guild_id(),
@@ -432,6 +445,10 @@ def create_shop_item(
         return after.split("'", 1)[0]
 
     attempt_payload = dict(insert_payload)
+
+    if str(attempt_payload.get("item_type") or "").lower().strip() not in allowed_item_types:
+        attempt_payload["item_type"] = "item"
+
     last_error: Exception | None = None
 
     for _ in range(20):
