@@ -167,7 +167,6 @@ function App() {
     ["missions", ClipboardList, "Missions"],
     ["companion", Sparkles, "Companion"],
     ["shops", Store, "Shops"],
-    ["shop_owner", Store, "Manage Shop"],
     ["activity", ClipboardList, "Activity"],
     ["staff", ShieldCheck, "Staff"],
     ["beast_skills", Sparkles, "Beast Skills"],
@@ -343,7 +342,8 @@ function canUseTab(permissions: any, tab: Tab) {
   const allowedTabs = permissions?.allowed_tabs || [];
 
   if (!allowedTabs.length) {
-    return !["staff", "qa", "activity"].includes(String(tab));
+    // Not yet loaded — hide staff/restricted tabs, show everything else except shop_owner nav
+    return !["staff", "qa", "activity", "shop_owner"].includes(String(tab));
   }
 
   return allowedTabs.includes(tab);
@@ -534,8 +534,7 @@ function HomeDashboard({
             <button onClick={() => jump("inventory")}><Package size={16} /> Manage Inventory</button>
             <button onClick={() => jump("skills")}><Sparkles size={16} /> Manage Skills</button>
             <button onClick={() => jump("register")}><UserRound size={16} /> Register OC</button>
-            <button onClick={() => jump("shops")}><Store size={16} /> Manage Shops</button>
-            <button onClick={() => jump("shop_owner")}><Store size={16} /> Manage My Shop</button>
+            <button onClick={() => jump("shops")}><Store size={16} /> Shops & Market</button>
             <button onClick={() => jump("staff")}><ShieldCheck size={16} /> Staff Queue</button>
             <button onClick={() => jump("qa")}><ClipboardList size={16} /> QA Checklist</button>
           </div>
@@ -2739,6 +2738,7 @@ export function ShopHubDashboard({
   const [view, setView] = useState<HubView>(initialView);
   const [shops, setShops] = useState<Shop[]>([]);
   const [isStaff, setIsStaff] = useState(false);
+  const permissions = usePermissions(discordId);
 
   async function loadShops() {
     if (!discordId) return;
@@ -2752,12 +2752,13 @@ export function ShopHubDashboard({
   useEffect(() => { loadShops(); }, [discordId]);
   useEffect(() => { setView(initialView); }, [initialView]);
 
+  const canManage = isStaff || permissions?.is_shop_owner;
   const tabs: { key: HubView; label: string }[] = [
     { key: "browse", label: "Browse" },
     { key: "storefronts", label: "Storefronts" },
-    { key: "manage", label: "Manage Shop" },
+    ...(canManage ? [{ key: "manage" as HubView, label: "Manage Shop" }] : []),
     { key: "orders", label: "Orders" },
-    { key: "create", label: "Create" },
+    ...(canManage ? [{ key: "create" as HubView, label: "Create" }] : []),
   ];
 
   return (
