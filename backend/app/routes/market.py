@@ -442,21 +442,37 @@ def _resolve_currency(sb, item: dict[str, Any]) -> str | None:
 
 
 def _resolve_vendor_company(sb, item: dict[str, Any]) -> str | None:
-    """Get the vendor company that receives payment. Falls back to treasury."""
+    """Get the vendor company that receives payment.
+    Priority: item.vendor_company_id → name contains 'treasury' → first company.
+    (No is_treasury column exists in this schema.)
+    """
     vid = item.get("vendor_company_id")
     if vid:
         return str(vid)
-    # Find treasury company
-    for q_extra in [{"is_treasury": True, "is_active": True}, {"is_treasury": True}, {}]:
-        try:
-            q = sb.table("companies").select("company_id").eq("guild_id", get_guild_id())
-            for k, v in q_extra.items():
-                q = q.eq(k, v)
-            rows = _safe_rows(q.ilike("name", "%treasury%").limit(1)) if not q_extra else _safe_rows(q.limit(1))
-            if rows:
-                return str(rows[0].get("company_id") or "")
-        except Exception:
-            pass
+
+    guild_id = get_guild_id()
+
+    # Find by treasury name pattern
+    rows = _safe_rows(
+        sb.table("companies")
+        .select("company_id")
+        .eq("guild_id", guild_id)
+        .ilike("name", "%treasury%")
+        .limit(1)
+    )
+    if rows:
+        return str(rows[0].get("company_id") or "")
+
+    # Fall back to first company in guild
+    rows = _safe_rows(
+        sb.table("companies")
+        .select("company_id")
+        .eq("guild_id", guild_id)
+        .limit(1)
+    )
+    if rows:
+        return str(rows[0].get("company_id") or "")
+
     return None
 
 
