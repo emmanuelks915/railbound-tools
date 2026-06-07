@@ -471,6 +471,7 @@ def request_market_item(
     base_payload: dict[str, Any] = {
         "guild_id": get_guild_id(),
         item_col: item_id,
+        "shop_id": str(item.get("shop_id") or item.get("store_id") or ""),
         "quantity": quantity,
         buyer_col: str(actor),
         "status": order_status,
