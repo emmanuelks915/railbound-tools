@@ -511,6 +511,9 @@ def delete_shop_item(
     if not _can_manage_shop(shop, actor):
         raise HTTPException(status_code=403, detail="You can only delete items from your own storefront.")
 
+    # Try hard delete first. If orders reference this item (FK constraint),
+    # fall back to soft delete — mark it inactive and unpurchasable so it
+    # disappears from the shop but order history stays intact.
     try:
         deleted_rows = _as_list(
             sb.table("shop_items")
@@ -518,14 +521,48 @@ def delete_shop_item(
             .eq("item_id", item_id)
             .execute()
         )
+        return {
+            "ok": True,
+            "message": f"Deleted {item.get('name') or 'item'}.",
+            "deleted": deleted_rows or [item],
+        }
     except Exception as exc:
+        err = str(exc)
+        if "23503" in err or "foreign key" in err.lower() or "shop_orders" in err:
+            # Item has order history — soft delete instead
+            try:
+                _as_list(
+                    sb.table("shop_items")
+                    .update({
+                        "is_active": False,
+                        "purchasable": False,
+                        "stock": 0,
+                    })
+                    .eq("item_id", item_id)
+                    .execute()
+                )
+            except Exception:
+                # Some schemas don't have all three columns — try minimal
+                _as_list(
+                    sb.table("shop_items")
+                    .update({"is_active": False})
+                    .eq("item_id", item_id)
+                    .execute()
+                )
+            log_activity(
+                event_type="shop_item_soft_deleted",
+                label=f"Shop item hidden (has order history): {item.get('name') or 'Item'}",
+                status="soft_deleted",
+                actor_discord_id=actor,
+                source="shop_owner_tools",
+                details={"item_id": item_id},
+            )
+            return {
+                "ok": True,
+                "message": f"{item.get('name') or 'Item'} has order history and was hidden instead of deleted. It won't appear in your shop.",
+                "soft_deleted": True,
+            }
         raise HTTPException(status_code=400, detail=f"Could not delete item: {exc}")
-
-    return {
-        "ok": True,
-        "message": f"Deleted {item.get('name') or 'item'}.",
-        "deleted": deleted_rows or [item],
-    }
 
 @router.patch("/items/{item_id}")
 def update_shop_item(
