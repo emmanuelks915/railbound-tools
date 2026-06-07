@@ -883,14 +883,18 @@ def get_shop_orders(
 def _update_order_status(sb, order_id: str, status: str, actor: int, note: str | None = None) -> dict[str, Any]:
     order, id_column = _load_order(sb, order_id)
 
-    update_payload: dict[str, Any] = {"status": status, "reviewed_by": str(actor)}
-    if status == "approved":
+    # Confirmed columns from live shop_orders schema — no reviewed_by
+    update_payload: dict[str, Any] = {"status": status}
+    if status == "APPROVED":
         update_payload["approved_by"] = str(actor)
-    if status == "denied":
+        update_payload["approved_at"] = "now()"
+    if status == "DENIED":
+        update_payload["denied_by"] = str(actor)
+        update_payload["denied_at"] = "now()"
         update_payload["denial_reason"] = note
-        update_payload["staff_note"] = note
-    if status == "fulfilled":
+    if status == "FULFILLED":
         update_payload["fulfilled_by"] = str(actor)
+        update_payload["fulfilled_at"] = "now()"
 
     rows = _as_list(sb.table("shop_orders").update(update_payload).eq(id_column, order_id).execute())
     return rows[0] if rows else {**order, **update_payload}
