@@ -120,6 +120,7 @@ def _normalize_item(row: dict[str, Any], source: str) -> dict[str, Any]:
 
 def _inventory_rows(sb, character_id: str) -> list[dict[str, Any]]:
     candidates = [
+        ("inventory_entries", "character_id"),  # primary table confirmed from live schema
         ("character_inventory", "character_id"),
         ("oc_inventory", "character_id"),
         ("inventory", "character_id"),
