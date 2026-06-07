@@ -420,9 +420,12 @@ def update_shop(
 
 
 # ---------------------------------------------------------------------------
-# Schema-aware order insert
-# Reads NOT NULL columns from information_schema once per request so we never
-# have to guess or chase constraint errors as the schema evolves.
+# Full purchase flow — mirrors Keystone's _buy_internal exactly:
+# 1. Validate item, stock, character
+# 2. Deduct currency (rpc_apply_company_transaction)
+# 3. Decrement stock
+# 4. Insert order row
+# 5. If no approval required: grant inventory immediately (apply_inventory_delta)
 # ---------------------------------------------------------------------------
 
 def _resolve_currency(sb, item: dict[str, Any]) -> str | None:
@@ -438,68 +441,66 @@ def _resolve_currency(sb, item: dict[str, Any]) -> str | None:
     return None
 
 
-def _get_notnull_columns(sb, table: str) -> set[str]:
-    """Return set of NOT NULL column names for a table via information_schema."""
-    try:
-        rows = _safe_rows(
-            sb.table("information_schema.columns")
-            .select("column_name,is_nullable")
-            .eq("table_name", table)
-            .eq("table_schema", "public")
-            .execute()
-        )
-        return {r["column_name"] for r in rows if r.get("is_nullable") == "NO"}
-    except Exception:
-        return set()
+def _resolve_vendor_company(sb, item: dict[str, Any]) -> str | None:
+    """Get the vendor company that receives payment. Falls back to treasury."""
+    vid = item.get("vendor_company_id")
+    if vid:
+        return str(vid)
+    # Find treasury company
+    for q_extra in [{"is_treasury": True, "is_active": True}, {"is_treasury": True}, {}]:
+        try:
+            q = sb.table("companies").select("company_id").eq("guild_id", get_guild_id())
+            for k, v in q_extra.items():
+                q = q.eq(k, v)
+            rows = _safe_rows(q.ilike("name", "%treasury%").limit(1)) if not q_extra else _safe_rows(q.limit(1))
+            if rows:
+                return str(rows[0].get("company_id") or "")
+        except Exception:
+            pass
+    return None
 
 
-def _build_order_payload(
-    sb,
-    item: dict[str, Any],
-    item_id: str,
-    actor: int,
-    quantity: int,
-    order_status: str,
-    character_id: str | None,
-    note: str | None,
-) -> dict[str, Any]:
-    """
-    Build the shop_orders insert payload by:
-    1. Starting with all known fields.
-    2. Checking which NOT NULL columns we're missing.
-    3. Filling gaps from the item row or guild defaults.
-    """
-    currency_id = _resolve_currency(sb, item)
-    shop_id = str(item.get("shop_id") or "")
-    if not shop_id:
-        raise HTTPException(status_code=400, detail="Item has no shop_id — cannot create order.")
-
-    unit_price = int(_number(item.get("price") or item.get("cost"), 0))
-    subtotal = unit_price * quantity
-
-    # All NOT NULL columns confirmed from live shop_orders data:
-    # order_id (auto), guild_id, shop_id, buyer_discord_id, currency_id,
-    # subtotal, fee, total, status, requires_approval, quantity, unit_price
-    payload: dict[str, Any] = {
-        "guild_id": get_guild_id(),
-        "item_id": item_id,
-        "shop_id": shop_id,
-        "buyer_discord_id": str(actor),
-        "currency_id": currency_id or "",
-        "quantity": quantity,
-        "unit_price": unit_price,
-        "subtotal": subtotal,
-        "fee": 0,
-        "total": subtotal,
-        "status": order_status,
-        "requires_approval": bool(item.get("requires_approval") or item.get("needs_approval")),
+def _deduct_wallet(sb, *, character_id: str, currency_id: str, amount: int, actor: int,
+                   vendor_company_id: str, reason: str) -> None:
+    """Deduct from buyer character wallet → vendor company. Uses rpc_apply_company_transaction."""
+    payload = {
+        "p_guild_id": get_guild_id(),
+        "p_currency_id": currency_id,
+        "p_amount": amount,
+        "p_actor_discord_id": actor,
+        "p_tx_type": "DEPOSIT",
+        "p_from_character_id": character_id,
+        "p_to_company_id": vendor_company_id,
+        "p_reason": reason,
     }
-    if character_id:
-        payload["buyer_character_id"] = str(character_id)
-    if note:
-        payload["reason"] = str(note)
+    try:
+        res = sb.rpc("rpc_apply_company_transaction", payload).execute()
+        data = getattr(res, "data", None) or []
+        if not data:
+            raise RuntimeError("Transaction returned no data")
+    except Exception as exc:
+        msg = str(exc)
+        if "insufficient" in msg.lower() or "INSUFFICIENT" in msg:
+            raise HTTPException(status_code=400, detail="Insufficient funds to complete this purchase.")
+        raise HTTPException(status_code=400, detail=f"Payment failed: {exc}")
 
-    return payload
+
+def _grant_inventory(sb, *, character_id: str, item_id: str, qty: int, actor: int,
+                     context: str, note: str) -> bool:
+    """Grant inventory via apply_inventory_delta RPC. Returns True on success."""
+    try:
+        sb.rpc("apply_inventory_delta", {
+            "p_guild_id": get_guild_id(),
+            "p_character_id": character_id,
+            "p_item_id": item_id,
+            "p_delta": qty,
+            "p_actor_discord_id": actor,
+            "p_context": context,
+            "p_note": note,
+        }).execute()
+        return True
+    except Exception:
+        return False
 
 
 @router.post("/items/{item_id}/request")
@@ -511,31 +512,87 @@ def request_market_item(
     actor = _require_login(actor_discord_id)
     sb = get_supabase()
 
+    # Load item
     item_rows = []
     for column in ("item_id", "shop_item_id", "id"):
-        item_rows = _safe_rows(
-            sb.table("shop_items")
-            .select("*")
-            .eq(column, item_id)
-            .limit(1)
-        )
+        item_rows = _safe_rows(sb.table("shop_items").select("*").eq(column, item_id).limit(1))
         if item_rows:
             break
-
     if not item_rows:
         raise HTTPException(status_code=404, detail="Shop item not found.")
 
     item = item_rows[0]
+    item_name = _item_name(item)
     quantity = max(1, int(_number(payload.get("quantity"), 1)))
-    character_id = payload.get("character_id")
+    character_id = str(payload.get("character_id") or "").strip() or None
     note = payload.get("note")
 
     requires_approval = bool(item.get("requires_approval") or item.get("needs_approval"))
-    order_status = "PENDING" if requires_approval else "APPROVED"
+    unit_price = int(_number(item.get("price") or item.get("cost"), 0))
+    subtotal = unit_price * quantity
 
-    order_payload = _build_order_payload(
-        sb, item, item_id, actor, quantity, order_status, character_id, note
-    )
+    # Validate
+    if unit_price <= 0:
+        raise HTTPException(status_code=400, detail="This item has an invalid price and cannot be purchased.")
+
+    stock = item.get("stock")
+    if stock is not None and int(stock) < quantity:
+        raise HTTPException(status_code=400, detail=f"Not enough stock. Available: {int(stock)}.")
+
+    currency_id = _resolve_currency(sb, item)
+    if not currency_id:
+        raise HTTPException(status_code=400, detail="No currency configured for this item.")
+
+    shop_id = str(item.get("shop_id") or "")
+    if not shop_id:
+        raise HTTPException(status_code=400, detail="Item has no shop_id.")
+
+    vendor_company_id = _resolve_vendor_company(sb, item)
+    if not vendor_company_id:
+        raise HTTPException(status_code=400, detail="No vendor company found to receive payment. Ask staff to configure a treasury company.")
+
+    reason_base = f"shop purchase item={str(item_id)[:8]} qty={quantity} name={item_name}"
+
+    # 1. Deduct currency from buyer wallet → vendor company
+    if character_id:
+        _deduct_wallet(
+            sb,
+            character_id=character_id,
+            currency_id=currency_id,
+            amount=subtotal,
+            actor=actor,
+            vendor_company_id=vendor_company_id,
+            reason=reason_base,
+        )
+
+    # 2. Decrement stock
+    if stock is not None:
+        new_stock = max(0, int(stock) - quantity)
+        try:
+            sb.table("shop_items").update({"stock": new_stock}).eq("item_id", item_id).execute()
+        except Exception:
+            pass
+
+    # 3. Insert order (status PAID if approval needed, FULFILLED if instant)
+    order_status = "PAID" if requires_approval else "FULFILLED"
+    order_payload: dict[str, Any] = {
+        "guild_id": get_guild_id(),
+        "item_id": item_id,
+        "shop_id": shop_id,
+        "buyer_discord_id": str(actor),
+        "currency_id": currency_id,
+        "quantity": quantity,
+        "unit_price": unit_price,
+        "subtotal": subtotal,
+        "fee": 0,
+        "total": subtotal,
+        "status": order_status,
+        "requires_approval": requires_approval,
+        "vendor_company_id": vendor_company_id,
+        "reason": note or reason_base,
+    }
+    if character_id:
+        order_payload["buyer_character_id"] = character_id
 
     try:
         inserted = _as_list(sb.table("shop_orders").insert(order_payload).execute())
@@ -546,24 +603,54 @@ def request_market_item(
     if order_row is None:
         raise HTTPException(status_code=400, detail="Order insert returned no rows.")
 
+    order_id = str(order_row.get("order_id") or "")
+
+    # 4. Instant fulfillment — grant inventory immediately if no approval needed
+    inv_granted = False
+    if not requires_approval and character_id:
+        grants_item_id = item.get("grants_item_id")
+        grants_qty = int(item.get("grants_qty") or 1)
+        if grants_item_id and grants_qty > 0:
+            inv_granted = _grant_inventory(
+                sb,
+                character_id=character_id,
+                item_id=str(grants_item_id),
+                qty=grants_qty * quantity,
+                actor=actor,
+                context="shop_fulfill_instant",
+                note=f"order={order_id[:8]} shop_item={str(item_id)[:8]}",
+            )
+
     log_activity(
-        event_type="market_item_requested",
-        label=f"Market item requested: {_item_name(item)}",
-        status=order_payload["status"],
+        event_type="market_item_purchased",
+        label=f"Shop purchase: {item_name} ×{quantity}",
+        status=order_status,
         actor_discord_id=actor,
         character_id=character_id,
         character_name=None,
         amount=quantity,
         note=note,
         source="market",
-        details={"item_id": item_id, "item_name": _item_name(item), "quantity": quantity},
-        webhook_title="🛒 Market Item Requested",
-        webhook_description=f"{_item_name(item)} ×{quantity}",
+        details={"item_id": item_id, "item_name": item_name, "quantity": quantity,
+                 "subtotal": subtotal, "inv_granted": inv_granted},
+        webhook_title="🛒 Shop Purchase",
+        webhook_description=f"{item_name} ×{quantity} — {subtotal} currency",
     )
 
+    if requires_approval:
+        message = f"Order submitted for {item_name} ×{quantity}. Awaiting staff approval."
+    elif inv_granted:
+        message = f"Purchase complete! {item_name} ×{quantity} delivered to inventory."
+    elif not character_id:
+        message = f"Purchase complete! No character was selected so inventory was not granted automatically — ask staff to deliver."
+    else:
+        message = f"Purchase complete! Item will be delivered shortly (grants_item_id not configured on this item)."
+
     return {
-        "order": order_row or order_payload,
-        "message": "Purchase request submitted." if order_payload["status"] == "pending" else "Purchase recorded.",
+        "order": order_row,
+        "message": message,
+        "inv_granted": inv_granted,
+        "requires_approval": requires_approval,
     }
 
 
