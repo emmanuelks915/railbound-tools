@@ -461,6 +461,7 @@ def request_market_item(
         "shop_id": shop_id_val,
         "quantity": quantity,
         "buyer_discord_id": str(actor),
+        "currency_id": str(item.get("currency_id") or ""),
         "status": order_status,
     }
     if character_id:
