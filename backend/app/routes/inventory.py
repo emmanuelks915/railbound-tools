@@ -118,6 +118,44 @@ def _normalize_item(row: dict[str, Any], source: str) -> dict[str, Any]:
     }
 
 
+def _enrich_with_item_names(sb, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """For rows that have item_id but no name, look up names from the items table."""
+    needs_name = [r for r in rows if not _item_name(r).replace("Unnamed Item", "").strip() and r.get("item_id")]
+    if not needs_name:
+        return rows
+
+    item_ids = list({str(r["item_id"]) for r in needs_name})
+    item_lookup: dict[str, dict[str, Any]] = {}
+
+    for id_col in ("item_id", "id"):
+        try:
+            found = _safe_rows(
+                sb.table("items")
+                .select("item_id,id,name,item_class,description")
+                .in_(id_col, item_ids)
+                .limit(500)
+            )
+            for r in found:
+                key = str(r.get("item_id") or r.get("id") or "")
+                if key:
+                    item_lookup[key] = r
+            if item_lookup:
+                break
+        except Exception:
+            pass
+
+    enriched = []
+    for row in rows:
+        iid = str(row.get("item_id") or "")
+        if iid and iid in item_lookup and not _item_name(row).replace("Unnamed Item", "").strip():
+            meta = item_lookup[iid]
+            row = {**row, "name": meta.get("name") or "Unnamed Item",
+                   "item_type": meta.get("item_class") or row.get("item_type"),
+                   "description": row.get("description") or meta.get("description")}
+        enriched.append(row)
+    return enriched
+
+
 def _inventory_rows(sb, character_id: str) -> list[dict[str, Any]]:
     candidates = [
         ("inventory_entries", "character_id"),  # primary table confirmed from live schema
@@ -147,6 +185,9 @@ def _inventory_rows(sb, character_id: str) -> list[dict[str, Any]]:
                 .eq(column, character_id)
                 .limit(500)
             )
+
+        # Enrich rows that only have item_id (like inventory_entries) with names from items table
+        rows = _enrich_with_item_names(sb, rows)
 
         for row in rows:
             item = _normalize_item(row, table)
