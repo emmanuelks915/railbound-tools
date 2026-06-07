@@ -2034,7 +2034,6 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
               </button>
             </div>
           </div>
-        ) : null}
 
         {shop ? (
           <div className="shop-owner-layout">
