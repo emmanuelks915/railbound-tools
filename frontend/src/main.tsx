@@ -5223,13 +5223,46 @@ function CompanionDashboard({
                     </label>
                     {skillRequestForm.skill_key ? (() => {
                       const skill = catalogSkills.find((s: any) => s.skill_key === skillRequestForm.skill_key);
-                      return skill ? (
-                        <div className="card">
-                          <p><strong>{skill.name}</strong> — {skill.beast_skill_type} · Tier {skill.tier} · {skill.cost} XP</p>
-                          {skill.description ? <p className="muted-text">{skill.description}</p> : null}
-                          {skill.effects ? <p><strong>Effect:</strong> {skill.effects}</p> : null}
+                      if (!skill) return null;
+                      const typeColor = skill.beast_skill_type === "combat" ? "var(--color-text-danger)" : skill.beast_skill_type === "mount" ? "var(--color-text-info)" : "var(--color-text-success)";
+                      const prereqRaw = skill.prerequisites;
+                      const prereqList: string[] = Array.isArray(prereqRaw) ? prereqRaw : typeof prereqRaw === "string" && prereqRaw ? [prereqRaw] : [];
+                      const prereqClean = prereqList.filter((p: string) => p && p.toLowerCase() !== "none" && p.toLowerCase() !== "n/a");
+                      return (
+                        <div className="card" style={{ borderLeft: `3px solid ${typeColor}`, gap: "0.5rem", display: "flex", flexDirection: "column" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "0.5rem" }}>
+                            <div>
+                              <h3 style={{ margin: 0 }}>{skill.name}</h3>
+                              <div style={{ display: "flex", gap: "0.5rem", marginTop: "4px", flexWrap: "wrap" }}>
+                                <span className="activity-type-label" style={{ color: typeColor }}>{skill.beast_skill_type === "combat" ? "Combat" : skill.beast_skill_type === "mount" ? "Mount" : "Utility"}</span>
+                                <span className="activity-type-label">Tier {skill.tier}</span>
+                                {skill.action_type ? <span className="activity-type-label">{skill.action_type}</span> : null}
+                              </div>
+                            </div>
+                            <div style={{ textAlign: "right" }}>
+                              <strong style={{ fontSize: "1.1rem" }}>{skill.cost} XP</strong>
+                              <div className="muted-text" style={{ fontSize: "0.75rem" }}>You have {wallet.available_xp ?? "—"} XP</div>
+                            </div>
+                          </div>
+                          {skill.description ? <p className="muted-text" style={{ margin: 0, fontSize: "0.875rem" }}>{skill.description}</p> : null}
+                          {skill.effects ? (
+                            <div style={{ background: "var(--color-bg-secondary, #f6efe4)", borderRadius: "8px", padding: "0.6rem 0.75rem" }}>
+                              <strong style={{ fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Effect</strong>
+                              <p style={{ margin: "4px 0 0", fontSize: "0.875rem" }}>{skill.effects}</p>
+                            </div>
+                          ) : null}
+                          {prereqClean.length > 0 ? (
+                            <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--color-text-warning, #b45309)" }}>
+                              <strong>Requires:</strong> {prereqClean.join(", ")}
+                            </p>
+                          ) : null}
+                          {skill.chain ? (
+                            <p className="muted-text" style={{ margin: 0, fontSize: "0.8rem" }}>
+                              <strong>Upgrade line:</strong> {skill.chain}
+                            </p>
+                          ) : null}
                         </div>
-                      ) : null;
+                      );
                     })() : null}
                     <label><span>Note to staff (optional)</span><input value={skillRequestForm.note} onChange={(e) => setSkillRequestForm((c: any) => ({ ...c, note: e.target.value }))} placeholder="Any context for staff" /></label>
                     <div className="actions">
