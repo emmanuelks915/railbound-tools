@@ -71,6 +71,16 @@ def _computed(b,s):
 def _int(p,k,d=5):
     try: return max(0,int(p.get(k,d)))
     except Exception: return d
+
+@router.get("/beast-skills/catalog")
+def list_beast_skills_catalog(actor_discord_id: int|None=Depends(actor_from_header)):
+    """Public endpoint — returns all active purchasable beast skills for players."""
+    _actor(actor_discord_id)
+    sb=get_supabase()
+    gid=get_guild_id()
+    rows=_safe(sb.table("source_beast_skill_definitions").select("*").eq("guild_id",gid).eq("is_active",True).eq("is_purchasable",True).order("beast_skill_type").order("tier").order("sort_order").order("name").limit(500))
+    return {"skills": rows}
+
 @router.get("/eligibility")
 def companion_eligibility(actor_discord_id: int | None = Depends(actor_from_header)):
     actor = _actor(actor_discord_id)
