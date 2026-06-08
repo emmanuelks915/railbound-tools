@@ -4858,6 +4858,10 @@ function CompanionDashboard({
   const [showSkillPicker, setShowSkillPicker] = useState(false);
   const [message, setMessage] = useState("");
   const [skillMessage, setSkillMessage] = useState("");
+  const [showStatRequest, setShowStatRequest] = useState(false);
+  const [statRequestForm, setStatRequestForm] = useState<any>({ stat_key: "", target_value: "", note: "" });
+  const [statMessage, setStatMessage] = useState("");
+  const [statCostPreview, setStatCostPreview] = useState<number | null>(null);
 
   async function loadCompanion(characterId = selectedCharacterId) {
     setMessage("");
@@ -4930,6 +4934,41 @@ function CompanionDashboard({
       await loadCompanion(selectedCharacterId);
     } catch (error: any) {
       setMessage(error.message || "Could not update base stats.");
+    }
+  }
+
+  function calcStatCost(current: number, target: number): number {
+    if (target <= current) return 0;
+    const brackets: [number, number][] = [[50,1],[150,2],[250,4],[350,6],[450,8],[550,10],[650,12],[750,14]];
+    let total = 0, pos = current;
+    while (pos < target) {
+      let rate = 14, nextCeiling = target;
+      for (const [ceil, cost] of brackets) {
+        if (pos < ceil) { rate = cost; nextCeiling = Math.min(ceil, target); break; }
+      }
+      total += (nextCeiling - pos) * rate;
+      pos = nextCeiling;
+    }
+    return total;
+  }
+
+  async function requestBeastStat() {
+    setStatMessage("");
+    if (!statRequestForm.stat_key) { setStatMessage("Select a stat first."); return; }
+    if (!statRequestForm.target_value) { setStatMessage("Enter a target value."); return; }
+    try {
+      const result = await apiFetch(
+        `/api/companions/${selectedCharacterId}/stat-request`,
+        { method: "POST", body: JSON.stringify({ ...statRequestForm, target_value: Number(statRequestForm.target_value) }) },
+        discordId
+      );
+      setStatMessage(result.message || "Stat request submitted.");
+      setStatRequestForm({ stat_key: "", target_value: "", note: "" });
+      setShowStatRequest(false);
+      setStatCostPreview(null);
+      await loadCompanion(selectedCharacterId);
+    } catch (error: any) {
+      setStatMessage(error.message || "Could not submit stat request.");
     }
   }
 
