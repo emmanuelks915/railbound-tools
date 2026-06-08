@@ -21,7 +21,7 @@ type CoreStats = {
   mana: number;
 };
 
-type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "missions" | "companion" | "staff" | "beast_skills" | "combat" | "registry" | "register" | "manage_oc" | "qa" | "shop_owner";
+type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "missions" | "companion" | "staff" | "beast_skills" | "combat" | "registry" | "register" | "manage_oc" | "qa" | "shop_owner" | "loadouts";
 
 const STAT_LABELS: Record<keyof CoreStats, string> = {
   strength: "Strength",
@@ -163,6 +163,7 @@ function App() {
     ["planner", Calculator, "XP Planner"],
     ["skills", Sparkles, "Skills"],
     ["inventory", Package, "Inventory"],
+    ["loadouts", Package, "Loadouts"],
     ["rp", ClipboardList, "RP Hub"],
     ["missions", ClipboardList, "Missions"],
     ["companion", Sparkles, "Companion"],
@@ -274,6 +275,7 @@ return (
       {tab === "oc" && <OCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} jump={setTab} />}
       {tab === "manage_oc" && <ManageOCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "inventory" && <InventoryDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "loadouts" && <LoadoutsDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {(tab === "shops" || tab === "shop_owner") && (
         <ShopHubDashboard
           discordId={discordId}
@@ -1427,6 +1429,343 @@ return (
   );
 }
 
+
+// ============================================================
+// LOADOUTS DASHBOARD
+// Full loadout builder with CC tracking, worn/carried sections
+// ============================================================
+
+function LoadoutsDashboard({
+  discordId,
+  selectedCharacterId,
+  setSelectedCharacterId,
+}: {
+  discordId: string;
+  selectedCharacterId: string;
+  setSelectedCharacterId: (id: string) => void;
+}) {
+  const [characters, setCharacters] = useState<any[]>([]);
+  const [localCharId, setLocalCharId] = useState(selectedCharacterId || "");
+  const [loadouts, setLoadouts] = useState<any[]>([]);
+  const [activeLoadoutName, setActiveLoadoutName] = useState("");
+  const [baseCC, setBaseCC] = useState(4);
+  const [strength, setStrength] = useState(0);
+  const [selectedLoadout, setSelectedLoadout] = useState<any | null>(null);
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [view, setView] = useState<"list" | "builder">("list");
+  const [newLoadoutName, setNewLoadoutName] = useState("");
+  const [msg, setMsg] = useState({ text: "", type: "ok" as "ok" | "err" });
+  const [loading, setLoading] = useState(false);
+
+  function flash(text: string, type: "ok" | "err" = "ok") {
+    setMsg({ text, type });
+    setTimeout(() => setMsg({ text: "", type: "ok" }), 4000);
+  }
+
+  async function loadCharacters() {
+    if (!discordId) return;
+    try {
+      const result = await apiFetch("/api/characters/mine", {}, discordId);
+      const rows = Array.isArray(result) ? result : result.characters || result.data || [];
+      setCharacters(rows);
+      if (!localCharId && rows.length > 0) {
+        const id = String(rows[0].character_id || rows[0].id);
+        setLocalCharId(id);
+        setSelectedCharacterId(id);
+      }
+    } catch { /* silent */ }
+  }
+
+  async function loadLoadouts(cid = localCharId) {
+    if (!discordId || !cid) return;
+    setLoading(true);
+    try {
+      const data = await apiFetch(`/api/loadouts/${cid}`, {}, discordId);
+      setLoadouts(data.loadouts || []);
+      setActiveLoadoutName(data.active_loadout_name || "");
+      setBaseCC(data.base_cc || 4);
+      setStrength(data.strength || 0);
+    } catch (e: any) {
+      flash(e.message || "Could not load loadouts.", "err");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function openLoadout(lo: any) {
+    if (!localCharId) return;
+    try {
+      const data = await apiFetch(`/api/loadouts/${localCharId}/${encodeURIComponent(lo.loadout_name)}`, {}, discordId);
+      setSelectedLoadout(data);
+      setInventory(data.inventory || []);
+      setView("builder");
+    } catch (e: any) {
+      flash(e.message || "Could not load loadout.", "err");
+    }
+  }
+
+  async function createLoadout() {
+    const name = newLoadoutName.trim();
+    if (!name) { flash("Loadout name required.", "err"); return; }
+    try {
+      await apiFetch(`/api/loadouts/${localCharId}`, { method: "POST", body: JSON.stringify({ loadout_name: name }) }, discordId);
+      setNewLoadoutName("");
+      flash(`"${name}" created.`);
+      loadLoadouts();
+    } catch (e: any) {
+      flash(e.message || "Could not create loadout.", "err");
+    }
+  }
+
+  async function deleteLoadout(name: string) {
+    if (!confirm(`Delete loadout "${name}"?`)) return;
+    try {
+      await apiFetch(`/api/loadouts/${localCharId}/${encodeURIComponent(name)}`, { method: "DELETE" }, discordId);
+      if (selectedLoadout?.loadout_name === name) { setSelectedLoadout(null); setView("list"); }
+      flash(`"${name}" deleted.`);
+      loadLoadouts();
+    } catch (e: any) {
+      flash(e.message || "Could not delete.", "err");
+    }
+  }
+
+  async function activateLoadout(name: string) {
+    try {
+      await apiFetch(`/api/loadouts/${localCharId}/${encodeURIComponent(name)}/activate`, { method: "POST" }, discordId);
+      setActiveLoadoutName(name);
+      flash(`"${name}" is now your active loadout.`);
+      loadLoadouts();
+    } catch (e: any) {
+      flash(e.message || "Could not activate.", "err");
+    }
+  }
+
+  async function updateItem(itemId: string, qty: number, worn: boolean) {
+    if (!selectedLoadout || !localCharId) return;
+    const changes: Record<string, any> = {};
+    if (qty <= 0) {
+      changes[itemId] = null; // remove
+    } else {
+      changes[itemId] = { qty, worn };
+    }
+    try {
+      const data = await apiFetch(
+        `/api/loadouts/${localCharId}/${encodeURIComponent(selectedLoadout.loadout_name)}`,
+        { method: "PATCH", body: JSON.stringify({ items: changes }) },
+        discordId
+      );
+      setSelectedLoadout(data.loadout);
+    } catch (e: any) {
+      flash(e.message || "Could not update.", "err");
+    }
+  }
+
+  useEffect(() => { loadCharacters(); }, [discordId]);
+  useEffect(() => { if (localCharId) loadLoadouts(localCharId); }, [localCharId]);
+
+  const ccData = selectedLoadout?.cc;
+  const totalCC = ccData ? ccData.total_cc : baseCC;
+  const ccUsed = ccData ? ccData.cc_used : 0;
+  const ccOver = ccData ? ccData.over_capacity : false;
+
+  // Items in this loadout by id for quick lookup
+  const loadoutItems: Record<string, { qty: number; worn: boolean }> = selectedLoadout?.items || {};
+
+  // Inventory items not yet in loadout (for adding)
+  const availableToAdd = inventory.filter(inv => {
+    const inLoadout = loadoutItems[inv.item_id];
+    return !inLoadout || inLoadout.qty < inv.qty_owned;
+  });
+
+  return (
+    <section>
+      <div className="card market-hero" style={{ marginBottom: "1rem" }}>
+        <div>
+          <span className="activity-type-label">Character Gear</span>
+          <h2>Loadouts</h2>
+          <p className="muted-text">Build and manage what your character carries into scenes. CC tracks carry capacity.</p>
+        </div>
+        <button className="ghost" onClick={() => loadLoadouts()}><RefreshCw size={16} /></button>
+      </div>
+
+      {msg.text && (
+        <p style={{
+          fontSize: 13, padding: "8px 12px", borderRadius: "var(--border-radius-md)", marginBottom: 12,
+          background: msg.type === "ok" ? "var(--color-background-success)" : "var(--color-background-danger)",
+          color: msg.type === "ok" ? "var(--color-text-success)" : "var(--color-text-danger)",
+          border: `0.5px solid ${msg.type === "ok" ? "var(--color-border-success)" : "var(--color-border-danger)"}`,
+        }}>{msg.text}</p>
+      )}
+
+      {/* Character selector */}
+      <div className="card" style={{ padding: "12px 14px", marginBottom: "1rem", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <label style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Character:</label>
+        <select value={localCharId} onChange={(e) => { setLocalCharId(e.target.value); setSelectedCharacterId(e.target.value); setView("list"); setSelectedLoadout(null); }} style={{ flex: 1, minWidth: 160 }}>
+          <option value="">Select character...</option>
+          {characters.map((c: any) => (
+            <option key={c.character_id || c.id} value={c.character_id || c.id}>{c.name}</option>
+          ))}
+        </select>
+        <span className="muted-text" style={{ fontSize: 12 }}>STR {strength} → Base CC: {baseCC}</span>
+      </div>
+
+      {view === "list" && (
+        <>
+          {/* Create new loadout */}
+          <div className="card" style={{ padding: "12px 14px", marginBottom: "1rem", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <input
+              value={newLoadoutName}
+              onChange={(e) => setNewLoadoutName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && createLoadout()}
+              placeholder="New loadout name (e.g. Forest Run, PvP Kit)"
+              style={{ flex: 1, minWidth: 200 }}
+            />
+            <button onClick={createLoadout} disabled={!localCharId || !newLoadoutName.trim()}>
+              <Plus size={14} /> Create Loadout
+            </button>
+          </div>
+
+          {loading && <p className="muted-text" style={{ fontSize: 13 }}>Loading...</p>}
+
+          {loadouts.length === 0 && !loading && (
+            <div className="card" style={{ textAlign: "center", padding: "2rem", color: "var(--color-text-secondary)" }}>
+              <Package size={36} style={{ marginBottom: 8, opacity: 0.25 }} />
+              <p style={{ fontSize: 13 }}>No loadouts yet. Create one above.</p>
+            </div>
+          )}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {loadouts.map((lo: any) => {
+              const cc = lo.cc;
+              const isActive = lo.loadout_name === activeLoadoutName;
+              return (
+                <div key={lo.loadout_name} className="card" style={{ padding: "12px 14px", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <p style={{ fontWeight: 500, fontSize: 14 }}>{lo.loadout_name}</p>
+                      {isActive && <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: "var(--color-background-success)", color: "var(--color-text-success)" }}>⭐ Active</span>}
+                    </div>
+                    {cc && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <p className="muted-text" style={{ fontSize: 12 }}>CC: {cc.cc_used}/{cc.total_cc}</p>
+                        <div style={{ width: 80, height: 4, borderRadius: 2, background: "var(--color-background-tertiary)", overflow: "hidden" }}>
+                          <div style={{ height: "100%", borderRadius: 2, width: `${Math.min(100, (cc.cc_used / (cc.total_cc || 4)) * 100)}%`, background: cc.over_capacity ? "var(--color-background-danger)" : "var(--color-background-success)" }} />
+                        </div>
+                        {cc.over_capacity && <span style={{ fontSize: 11, color: "var(--color-text-danger)" }}>Over!</span>}
+                        <p className="muted-text" style={{ fontSize: 12 }}>{(cc.worn_items?.length || 0) + (cc.carried_items?.length || 0)} items</p>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <button className="ghost" onClick={() => openLoadout(lo)} style={{ fontSize: 12, padding: "4px 10px" }}><Edit size={13} /> Edit</button>
+                    {!isActive && <button className="ghost" onClick={() => activateLoadout(lo.loadout_name)} style={{ fontSize: 12, padding: "4px 10px" }}>⭐ Set Active</button>}
+                    <button className="ghost" onClick={() => deleteLoadout(lo.loadout_name)} style={{ fontSize: 12, padding: "4px 10px", color: "var(--color-text-danger)" }}><Trash2 size={13} /></button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {view === "builder" && selectedLoadout && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: "1rem", flexWrap: "wrap" }}>
+            <button className="ghost" onClick={() => { setView("list"); loadLoadouts(); }} style={{ fontSize: 13 }}><X size={13} /> Back to loadouts</button>
+            <h3 style={{ fontSize: 16, fontWeight: 500 }}>{selectedLoadout.loadout_name}</h3>
+            {selectedLoadout.loadout_name === activeLoadoutName && <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: "var(--color-background-success)", color: "var(--color-text-success)" }}>⭐ Active</span>}
+          </div>
+
+          {/* CC Bar */}
+          <div className="card" style={{ padding: "12px 16px", marginBottom: "1rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <p style={{ fontWeight: 500, fontSize: 14 }}>Carry Capacity</p>
+              <p style={{ fontSize: 18, fontWeight: 600, color: ccOver ? "var(--color-text-danger)" : "var(--color-text-success)" }}>{ccUsed} / {totalCC}</p>
+            </div>
+            <div style={{ height: 10, borderRadius: 5, background: "var(--color-background-tertiary)", overflow: "hidden", marginBottom: 4 }}>
+              <div style={{ height: "100%", borderRadius: 5, width: `${Math.min(100, (ccUsed / (totalCC || 4)) * 100)}%`, background: ccOver ? "var(--color-background-danger)" : "var(--color-background-success)", transition: "width 0.3s ease" }} />
+            </div>
+            <div style={{ display: "flex", gap: 16, fontSize: 12, color: "var(--color-text-secondary)" }}>
+              <span>Base CC: {ccData?.base_cc || baseCC} (STR {strength})</span>
+              {(ccData?.cc_bonus || 0) > 0 && <span>+{ccData.cc_bonus} bonus CC from worn items</span>}
+              <span>{totalCC - ccUsed} remaining</span>
+            </div>
+            {ccOver && <p style={{ fontSize: 12, color: "var(--color-text-danger)", marginTop: 4 }}>⚠️ Over carry capacity! Remove items from CARRIED section.</p>}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            {/* WORN column */}
+            <div>
+              <h4 style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                🧥 WORN <span className="muted-text" style={{ fontSize: 12, fontWeight: 400 }}>(armor, backpack — CC ignored)</span>
+              </h4>
+              {(ccData?.worn_items || []).length === 0 && (
+                <div className="card" style={{ padding: "1rem", textAlign: "center", color: "var(--color-text-secondary)", fontSize: 13 }}>Nothing worn</div>
+              )}
+              {(ccData?.worn_items || []).map((item: any) => (
+                <div key={item.item_id} className="card" style={{ padding: "8px 12px", marginBottom: 8, display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 13, fontWeight: 500 }}>{item.name}</p>
+                    <p className="muted-text" style={{ fontSize: 11 }}>{item.item_class} · CC {item.cc} (ignored) · ×{item.qty}</p>
+                  </div>
+                  <button className="ghost" onClick={() => updateItem(item.item_id, item.qty, false)} style={{ fontSize: 11, padding: "3px 8px" }}>→ Carry</button>
+                  <button className="ghost" onClick={() => updateItem(item.item_id, 0, true)} style={{ fontSize: 11, padding: "3px 8px", color: "var(--color-text-danger)" }}><X size={11} /></button>
+                </div>
+              ))}
+            </div>
+
+            {/* CARRIED column */}
+            <div>
+              <h4 style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                🎒 CARRIED <span className="muted-text" style={{ fontSize: 12, fontWeight: 400 }}>(counts against CC)</span>
+              </h4>
+              {(ccData?.carried_items || []).length === 0 && (
+                <div className="card" style={{ padding: "1rem", textAlign: "center", color: "var(--color-text-secondary)", fontSize: 13 }}>Nothing carried</div>
+              )}
+              {(ccData?.carried_items || []).map((item: any) => (
+                <div key={item.item_id} className="card" style={{ padding: "8px 12px", marginBottom: 8, display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 13, fontWeight: 500 }}>{item.name}</p>
+                    <p className="muted-text" style={{ fontSize: 11 }}>{item.item_class} · {item.cc} CC each · ×{item.qty} = {item.cc_cost} CC</p>
+                  </div>
+                  <button className="ghost" onClick={() => updateItem(item.item_id, item.qty, true)} style={{ fontSize: 11, padding: "3px 8px" }}>→ Wear</button>
+                  <button className="ghost" onClick={() => updateItem(item.item_id, 0, false)} style={{ fontSize: 11, padding: "3px 8px", color: "var(--color-text-danger)" }}><X size={11} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Add from inventory */}
+          <div style={{ marginTop: "1.5rem" }}>
+            <h4 style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Add from inventory</h4>
+            {availableToAdd.length === 0 && (
+              <p className="muted-text" style={{ fontSize: 13 }}>All owned items are already in this loadout.</p>
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {availableToAdd.map((inv: any) => {
+                const inLoadout = loadoutItems[inv.item_id];
+                const maxQty = inv.qty_owned - (inLoadout?.qty || 0);
+                return (
+                  <div key={inv.item_id} className="card" style={{ padding: "8px 12px", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 13, fontWeight: 500 }}>{inv.name}</p>
+                      <p className="muted-text" style={{ fontSize: 11 }}>{inv.item_class} · {inv.cc} CC · {inv.qty_owned} owned{inLoadout ? ` · ${inLoadout.qty} already in loadout` : ""}</p>
+                    </div>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button className="ghost" onClick={() => updateItem(inv.item_id, Math.min(1, maxQty), true)} style={{ fontSize: 11, padding: "3px 8px" }}>+ Wear</button>
+                      <button className="ghost" onClick={() => updateItem(inv.item_id, Math.min(1, maxQty), false)} style={{ fontSize: 11, padding: "3px 8px" }}>+ Carry</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 function InventoryDashboard({
   discordId,
   selectedCharacterId,
@@ -1571,6 +1910,40 @@ function InventoryDashboard({
         </div>
 
         {message ? <p className="message">{message}</p> : null}
+
+        {/* CC Meter */}
+        {data.base_cc !== undefined && (
+          <div className="card" style={{ padding: "12px 16px", marginBottom: "1rem" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
+              <div>
+                <p style={{ fontWeight: 500, fontSize: 14 }}>Carry Capacity</p>
+                {data.active_loadout_cc ? (
+                  <p className="muted-text" style={{ fontSize: 12 }}>Active loadout: <strong>{data.active_loadout_cc.loadout_name}</strong></p>
+                ) : (
+                  <p className="muted-text" style={{ fontSize: 12 }}>No active loadout — CC shown for full inventory</p>
+                )}
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <p style={{ fontSize: 18, fontWeight: 600, color: (data.active_loadout_cc?.over_capacity) ? "var(--color-text-danger)" : "var(--color-text-success)" }}>
+                  {data.active_loadout_cc ? data.active_loadout_cc.cc_used : 0} / {data.base_cc}
+                </p>
+                <p className="muted-text" style={{ fontSize: 11 }}>CC used / total (STR {data.strength})</p>
+              </div>
+            </div>
+            <div style={{ height: 8, borderRadius: 4, background: "var(--color-background-tertiary)", overflow: "hidden" }}>
+              <div style={{
+                height: "100%",
+                borderRadius: 4,
+                width: `${Math.min(100, ((data.active_loadout_cc?.cc_used || 0) / (data.base_cc || 4)) * 100)}%`,
+                background: (data.active_loadout_cc?.over_capacity) ? "var(--color-background-danger)" : "var(--color-background-success)",
+                transition: "width 0.3s ease",
+              }} />
+            </div>
+            {data.active_loadout_cc?.over_capacity && (
+              <p style={{ fontSize: 12, color: "var(--color-text-danger)", marginTop: 4 }}>⚠️ Over carry capacity!</p>
+            )}
+          </div>
+        )}
 
         <div className="inventory-summary-grid">
           <div className="card inventory-summary-card">
@@ -2214,6 +2587,7 @@ function ManageView({ discordId, isStaff }: { discordId: string; isStaff: boolea
     category: "General",
     price: "0",
     stock: "",
+    cc: "0",
     image_url: "",
     requires_approval: false,
     is_active: true,
@@ -2273,7 +2647,7 @@ function ManageView({ discordId, isStaff }: { discordId: string; isStaff: boolea
 
   function openAddItem() {
     setEditingItemId(null);
-    setItemForm({ name: "", description: "", category: "General", price: "0", stock: "", image_url: "", requires_approval: false, is_active: true, item_type: "item" });
+    setItemForm({ name: "", description: "", category: "General", price: "0", stock: "", cc: "0", image_url: "", requires_approval: false, is_active: true, item_type: "item" });
     setShowItemForm(true);
     setItemMsg({ text: "", type: "ok" });
   }
@@ -2286,6 +2660,7 @@ function ManageView({ discordId, isStaff }: { discordId: string; isStaff: boolea
       category: item.category || "General",
       price: String(item.price ?? 0),
       stock: item.stock !== null && item.stock !== undefined ? String(item.stock) : "",
+      cc: String((item as any).cc || (item as any).wu || 0),
       image_url: item.image_url || "",
       requires_approval: item.requires_approval,
       is_active: item.is_active !== false,
@@ -2303,6 +2678,7 @@ function ManageView({ discordId, isStaff }: { discordId: string; isStaff: boolea
       category: itemForm.category,
       price: parseInt(itemForm.price) || 0,
       stock: (itemForm.stock === "" || itemForm.stock === null) ? null : (isNaN(parseInt(itemForm.stock)) ? null : parseInt(itemForm.stock)),
+      cc: parseInt(itemForm.cc || "0") || 0,
       image_url: itemForm.image_url.trim() || null,
       requires_approval: itemForm.requires_approval,
       is_active: itemForm.is_active,
@@ -2500,6 +2876,24 @@ function ManageView({ discordId, isStaff }: { discordId: string; isStaff: boolea
                     const v = e.target.value.replace(/[^0-9]/g, "");
                     setItemForm((f) => ({ ...f, stock: v }));
                   }} placeholder="∞ (leave blank for unlimited)" style={{ width: "100%" }} />
+                </label>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>CC (Carry Capacity cost)</span>
+                  <input type="text" inputMode="numeric" value={itemForm.cc} onChange={(e) => {
+                    const v = e.target.value.replace(/[^0-9]/g, "");
+                    setItemForm((f) => ({ ...f, cc: v || "0" }));
+                  }} placeholder="0" />
+                  <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>0 = free (trinkets, flavor items). Worn armor CC is ignored.</span>
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Item type</span>
+                  <select value={itemForm.item_type || "item"} onChange={(e) => setItemForm((f) => ({ ...f, item_type: e.target.value }))}>
+                    <option value="item">Item</option>
+                    <option value="consumable">Consumable</option>
+                    <option value="material">Material</option>
+                  </select>
                 </label>
               </div>
               <label style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>

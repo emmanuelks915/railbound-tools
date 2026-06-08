@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.routes import (
+    loadouts,
     characters,
     combat,
     dashboard,
@@ -67,6 +68,7 @@ app.include_router(activity_log.router)
 app.include_router(permissions.router)
 app.include_router(request_workflow.router)
 app.include_router(market.router)
+app.include_router(loadouts.router)
 app.include_router(shop_owner.router)
 app.include_router(character_self.router)
 app.include_router(discord_roles.router)

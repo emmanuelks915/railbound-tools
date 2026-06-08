@@ -370,13 +370,14 @@ def create_shop_item(
         "name": name,
         "description": _clean(payload.get("description"), 1000),
         "price": _number(payload.get("price"), 0),
-        "stock": int(_number(payload.get("stock"), 0)),
+        "stock": int(_number(payload.get("stock"), 0)) if payload.get("stock") not in (None, "", "null") else None,
         "requires_approval": _bool(payload.get("requires_approval"), False),
         "is_active": _bool(payload.get("is_active"), True),
         "purchasable": _bool(payload.get("purchasable"), True),
         "review_status": "approved" if not _bool(payload.get("requires_approval"), False) else "PENDING_STAFF_REVIEW",
         "item_type": item_type_value,
         "grants_qty": int(_number(payload.get("grants_qty"), 1)),
+        "cc": int(_number(payload.get("cc") or payload.get("wu"), 0)),
     }
 
     # Live databases have varied here. Do not rely on category being present.
@@ -481,6 +482,13 @@ def create_shop_item(
                     if grants_id:
                         _as_list(sb.table("shop_items").update({"grants_item_id": grants_id}).eq("item_id", shop_item_id).execute())
                         item["grants_item_id"] = grants_id
+                        # Sync wu (CC) to the items table entry
+                        cc_val = int(_number(payload.get("cc") or payload.get("wu"), 0))
+                        if cc_val:
+                            try:
+                                sb.table("items").update({"wu": cc_val}).eq("item_id", grants_id).execute()
+                            except Exception:
+                                pass
                 except Exception:
                     pass  # Non-fatal — item still created, just needs manual grants_item_id
 
@@ -681,6 +689,9 @@ def update_shop_item(
 
     if "is_active" in payload:
         update_payload["is_active"] = _bool(payload.get("is_active"), True)
+
+    if "cc" in payload or "wu" in payload:
+        update_payload["cc"] = int(_number(payload.get("cc") or payload.get("wu"), 0))
 
     if "grants_item_id" in payload:
         update_payload["grants_item_id"] = str(payload.get("grants_item_id")) if payload.get("grants_item_id") else None
