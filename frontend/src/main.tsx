@@ -171,8 +171,7 @@ function App() {
     ["activity", ClipboardList, "Activity"],
     ["staff", ShieldCheck, "Staff"],
     ["beast_skills", Sparkles, "Beast Skills"],
-    ["qa", ClipboardList, "QA Checklist"],
-    ["combat", ClipboardList, "Derived Stats"],
+    ["combat", ClipboardList, "Combat Calculator"],
   ] as const;
 
     const permissions = usePermissions(discordId);
