@@ -529,6 +529,21 @@ def _apply_skill_purchase_approval(
         ),
     }).execute()
 
+    # If this is a beast stat request, update source_beasts base stat directly
+    if skill_key.startswith("beast_stat_"):
+        stat_key = skill_key[len("beast_stat_"):]
+        valid_stats = ["strength", "dexterity", "stamina", "magic_affinity", "mana"]
+        if stat_key in valid_stats:
+            # Parse target value from submitter_note (e.g. "Raise Strength from 5 to 50.")
+            import re as _re
+            note = str(request_row.get("submitter_note") or "")
+            match = _re.search(r"from\s+(\d+)\s+to\s+(\d+)", note)
+            if match:
+                target_value = int(match.group(2))
+                sb.table("source_beasts").update({
+                    f"base_{stat_key}": target_value
+                }).eq("character_id", character_id).execute()
+
 @router.post("/{request_type}/{request_id}/approve")
 def approve_request(
     request_type: str,
