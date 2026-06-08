@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+ï»¿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Calculator, Check, ClipboardList, Home, Package, Plus, RefreshCw, Save, Send, ShieldCheck, Sparkles, Store, UserRound, X, Users } from "lucide-react";
 import "./styles.css";
@@ -541,14 +541,14 @@ function HomeDashboard({
                 <h3>Pending Stat Requests</h3>
                 {(data.pending_stat_requests || []).length === 0 ? <p>None pending.</p> : null}
                 {(data.pending_stat_requests || []).slice(0, 5).map((r: any) => (
-                  <p className="pill" key={r.request_id}>{r.total_cost} XP • {r.status}</p>
+                  <p className="pill" key={r.request_id}>{r.total_cost} XP  {r.status}</p>
                 ))}
               </div>
               <div>
                 <h3>Pending Skill Requests</h3>
                 {(data.pending_skill_requests || []).length === 0 ? <p>None pending.</p> : null}
                 {(data.pending_skill_requests || []).slice(0, 5).map((r: any) => (
-                  <p className="pill" key={r.request_id}>{r.skill_key} • {r.cost} XP</p>
+                  <p className="pill" key={r.request_id}>{r.skill_key}  {r.cost} XP</p>
                 ))}
               </div>
             </div>
@@ -723,7 +723,7 @@ function PreviewPanel({ preview }: { preview: any }) {
             <ul>
               {(item.breakdown || []).map((part: any, index: number) => (
                 <li key={index}>
-                  {part.from_value}–{part.to_value}: {part.points} × {part.cost_per_point} XP = {part.subtotal} XP
+                  {part.from_value}{part.to_value}: {part.points}  {part.cost_per_point} XP = {part.subtotal} XP
                 </li>
               ))}
             </ul>
@@ -771,21 +771,21 @@ function OCBalancesCard({ discordId, characterId }: { discordId: string; charact
       <div className="oc-balances-grid">
         <div className="oc-balance-tile">
           <span>Available XP</span>
-          <strong>{xp.available_xp ?? xp.current_xp ?? "—"}</strong>
+          <strong>{xp.available_xp ?? xp.current_xp ?? ""}</strong>
         </div>
         <div className="oc-balance-tile">
           <span>Total XP</span>
-          <strong>{xp.total_xp ?? "—"}</strong>
+          <strong>{xp.total_xp ?? ""}</strong>
         </div>
         <div className="oc-balance-tile">
           <span>Spent XP</span>
-          <strong>{xp.spent_xp ?? "—"}</strong>
+          <strong>{xp.spent_xp ?? ""}</strong>
         </div>
 
         {currencies.length === 0 ? (
           <div className="oc-balance-tile">
             <span>Currency</span>
-            <strong>—</strong>
+            <strong></strong>
           </div>
         ) : null}
 
@@ -837,7 +837,7 @@ function OCMoneyCard({ discordId, characterId }: { discordId: string; characterI
         <div>
           <span className="activity-type-label">Wallet</span>
           <h3>XP & Currency</h3>
-          <p className="muted-text">The selected OC’s current progression and money balances.</p>
+          <p className="muted-text">The selected OCs current progression and money balances.</p>
         </div>
         <button className="ghost" onClick={loadBalances}>
           <RefreshCw size={16} /> Refresh
@@ -849,21 +849,21 @@ function OCMoneyCard({ discordId, characterId }: { discordId: string; characterI
       <div className="oc-money-grid">
         <div className="oc-money-tile xp-tile">
           <span>Available XP</span>
-          <strong>{xp.available_xp ?? xp.current_xp ?? "—"}</strong>
+          <strong>{xp.available_xp ?? xp.current_xp ?? ""}</strong>
         </div>
         <div className="oc-money-tile">
           <span>Total XP</span>
-          <strong>{xp.total_xp ?? "—"}</strong>
+          <strong>{xp.total_xp ?? ""}</strong>
         </div>
         <div className="oc-money-tile">
           <span>Spent XP</span>
-          <strong>{xp.spent_xp ?? "—"}</strong>
+          <strong>{xp.spent_xp ?? ""}</strong>
         </div>
 
         {currencies.length === 0 ? (
           <div className="oc-money-tile">
             <span>Currency</span>
-            <strong>—</strong>
+            <strong></strong>
           </div>
         ) : null}
 
@@ -1028,7 +1028,7 @@ function OCManagementCard({ discordId, characterId }: { discordId: string; chara
         <div>
           <span className="activity-type-label">Management</span>
           <h3>Manage OC</h3>
-          <p className="muted-text">Edit this OC’s public dashboard information and manage visibility.</p>
+          <p className="muted-text">Edit this OCs public dashboard information and manage visibility.</p>
         </div>
         <button className="ghost" onClick={loadManagement}>
           <RefreshCw size={16} /> Refresh
@@ -1376,7 +1376,7 @@ return (
                       <strong>{skill.name || skill.skill_key}</strong>
                     </div>
                     <div className="owned-skill-meta">
-                      <span>Tier {skill.tier ?? "—"}</span>
+                      <span>Tier {skill.tier ?? ""}</span>
                       <span>{skill.cost ?? 0} XP</span>
                     </div>
                   </div>
@@ -1514,7 +1514,7 @@ function InventoryDashboard({
             <span className="activity-type-label">Character Goods</span>
             <h2>Inventory</h2>
             <p className="muted-text">
-              Review an OC’s items, quantities, categories, sources, and currency balances.
+              Review an OCs items, quantities, categories, sources, and currency balances.
             </p>
           </div>
           <button className="ghost" onClick={loadInventory} disabled={loading}>
@@ -1571,7 +1571,7 @@ function InventoryDashboard({
         <div className="inventory-summary-grid">
           <div className="card inventory-summary-card">
             <span>Selected OC</span>
-            <strong>{selected?.name || data.character?.name || "—"}</strong>
+            <strong>{selected?.name || data.character?.name || ""}</strong>
           </div>
           <div className="card inventory-summary-card">
             <span>Unique Items</span>
@@ -1629,7 +1629,7 @@ function InventoryDashboard({
                   <span className="activity-type-label">{itemBadge(item)}</span>
                   <h3>{item.name || "Unnamed Item"}</h3>
                 </div>
-                <strong className="inventory-quantity">×{item.quantity ?? 1}</strong>
+                <strong className="inventory-quantity">{item.quantity ?? 1}</strong>
               </div>
 
               {item.description ? <p className="muted-text">{item.description}</p> : null}
@@ -2253,8 +2253,8 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
                         <div className="shop-owner-order-top">
                           <div>
                             <strong>{order.item_name || "Unknown Item"}</strong>
-                            <span>Qty {order.quantity || 1} • {order.status}</span>
-                            <small>Buyer: {order.user_id ? `<@${order.user_id}>` : "—"} {order.character_id ? `• OC: ${order.character_id}` : ""}</small>
+                            <span>Qty {order.quantity || 1}  {order.status}</span>
+                            <small>Buyer: {order.user_id ? `<@${order.user_id}>` : ""} {order.character_id ? ` OC: ${order.character_id}` : ""}</small>
                           </div>
                           <em className={`request-status-pill ${order.status}`}>{order.status}</em>
                         </div>
@@ -2316,8 +2316,8 @@ function ShopOwnerDashboard({ discordId }: { discordId: string }) {
                     <div className="shop-owner-item-row" key={item.item_id || item.name}>
                       <div>
                         <strong>{item.name}</strong>
-                        <span>{item.category} • {item.price} • Stock {item.stock ?? "8"}</span>
-                        <small>{item.is_active ? "Active" : "Inactive"}{item.requires_approval ? " • Approval required" : ""}</small>
+                        <span>{item.category}  {item.price}  Stock {item.stock ?? "8"}</span>
+                        <small>{item.is_active ? "Active" : "Inactive"}{item.requires_approval ? "  Approval required" : ""}</small>
                       </div>
 
                       <div className="shop-owner-item-actions">
@@ -2611,7 +2611,7 @@ function ShopDashboard({ discordId, selectedCharacterId }: { discordId: string; 
                     onClick={() => setShopId(shop.shop_id)}
                   >
                     <strong>{shop.name}</strong>
-                    <span>{shop.item_count || 0} items • {shop.status || "Open"}</span>
+                    <span>{shop.item_count || 0} items  {shop.status || "Open"}</span>
                     {shop.description ? <small>{shop.description}</small> : null}
                   </button>
                 ))}
@@ -2639,7 +2639,7 @@ function ShopDashboard({ discordId, selectedCharacterId }: { discordId: string; 
                 {orders.slice(0, 8).map((order: any, index: number) => (
                   <div className="market-order-row" key={order.order_id || order.id || index}>
                     <strong>{order.status || "pending"}</strong>
-                    <span>Item: {order.item_id || order.shop_item_id || "—"}</span>
+                    <span>Item: {order.item_id || order.shop_item_id || ""}</span>
                     <span>Qty: {order.quantity || 1}</span>
                   </div>
                 ))}
@@ -2934,7 +2934,7 @@ function SkillsDashboard({ discordId, selectedCharacterId, setSelectedCharacterI
                         <div>
                           <h3>{ownedKeys.includes(skill.skill_key) ? "? " : ""}{skill.name}</h3>
                           <p>
-                            Tier {skill.tier ?? "—"} • {skill.cost} XP • {skill.skill_key}
+                            Tier {skill.tier ?? ""}  {skill.cost} XP  {skill.skill_key}
                           </p>
                         </div>
                         <span className={`pill ${state.className}`}>{state.label}</span>
@@ -2951,7 +2951,7 @@ function SkillsDashboard({ discordId, selectedCharacterId, setSelectedCharacterI
                         </div>
                         <div>
                           <span>Source</span>
-                          <strong>{skill.source_label || "—"}</strong>
+                          <strong>{skill.source_label || ""}</strong>
                         </div>
                       </div>
 
@@ -2994,7 +2994,7 @@ function SkillsDashboard({ discordId, selectedCharacterId, setSelectedCharacterI
                   <div>
                     <h3>{skills.find((skill) => skill.skill_key === request.skill_key)?.name || request.skill_key}</h3>
                     <p>
-                      {String(request.status || "unknown").toUpperCase()} • {request.cost} XP
+                      {String(request.status || "unknown").toUpperCase()}  {request.cost} XP
                     </p>
                     {request.staff_note ? <small>Staff note: {request.staff_note}</small> : null}
                   </div>
@@ -3684,7 +3684,7 @@ function OCRegistry({ discordId }: { discordId: string }) {
   }
 
   function fieldValue(value: any) {
-    return value ? String(value) : "—";
+    return value ? String(value) : "";
   }
 
   function cleanAffiliation(value: any) {
@@ -3892,7 +3892,7 @@ function OCRegistry({ discordId }: { discordId: string }) {
                     <span className="activity-type-label">Citizen File</span>
                     <h2>{selected.name}</h2>
                     <p className="muted-text">
-                      {[selected.occupation, selected.affiliation, selected.origin].filter(Boolean).join(" • ") ||
+                      {[selected.occupation, selected.affiliation, selected.origin].filter(Boolean).join("  ") ||
                         "Public character file"}
                     </p>
 
@@ -3957,7 +3957,7 @@ function OCRegistry({ discordId }: { discordId: string }) {
                         <div className="registry-wallet-grid">
                           <div>
                             <span>Available XP</span>
-                            <strong>{xp.available_xp ?? xp.current_xp ?? "—"}</strong>
+                            <strong>{xp.available_xp ?? xp.current_xp ?? ""}</strong>
                           </div>
                           {currencies.map((currency: any, index: number) => (
                             <div key={`${currency.currency_id || currency.name}-${index}`}>
@@ -4543,7 +4543,7 @@ function ActivityDashboard({ discordId }: { discordId: string }) {
                 <div className="activity-log-title-row">
                   <div>
                     <strong>{event.label || prettyText(event.event_type)}</strong>
-                    <span>{prettyText(event.event_type)} • {formatDate(event.created_at)}</span>
+                    <span>{prettyText(event.event_type)}  {formatDate(event.created_at)}</span>
                   </div>
                   <em className={`activity-status-pill ${statusClass(event.status)}`}>{prettyText(event.status)}</em>
                 </div>
@@ -4686,7 +4686,7 @@ function RpHubDashboard({
                 <div>
                   <h3>{post.character_name}</h3>
                   <p>
-                    {post.word_count} words • {new Date(post.posted_at).toLocaleString()}
+                    {post.word_count} words  {new Date(post.posted_at).toLocaleString()}
                   </p>
                   {post.content_preview ? <small>{post.content_preview}</small> : null}
                 </div>
@@ -4742,7 +4742,7 @@ function RpHubDashboard({
                   <div>
                     <h3>{scene.title}</h3>
                     <p>
-                      {statusLabel(scene.status)} • {scene.scene_type || "scene"} •{" "}
+                      {statusLabel(scene.status)}  {scene.scene_type || "scene"} {" "}
                       {scene.xp_eligible ? "XP eligible" : "No XP"}
                     </p>
 
@@ -4753,7 +4753,7 @@ function RpHubDashboard({
                     ) : null}
 
                     <p>
-                      Your posts: {scene.my_post_count || 0} • Your words:{" "}
+                      Your posts: {scene.my_post_count || 0}  Your words:{" "}
                       {scene.my_word_count || 0}
                     </p>
 
@@ -4787,18 +4787,18 @@ function RpHubDashboard({
                   <div>
                     <h3>{claim.character_name}</h3>
                     <p>
-                      {claim.claim_type} • {claim.word_count} words • {claim.post_count} posts
+                      {claim.claim_type}  {claim.word_count} words  {claim.post_count} posts
                     </p>
                     <p>
-                      Estimated: {claim.estimated_xp} XP • Approved:{" "}
-                      {claim.approved_xp ?? "—"} XP
+                      Estimated: {claim.estimated_xp} XP  Approved:{" "}
+                      {claim.approved_xp ?? ""} XP
                     </p>
                     <p>
                       Status:{" "}
                       <strong className={claimStatusClass(claim.status)}>
                         {statusLabel(claim.status)}
                       </strong>{" "}
-                      • Payout:{" "}
+                       Payout:{" "}
                       <strong className={claimStatusClass(claim.payout_status)}>
                         {statusLabel(claim.payout_status)}
                       </strong>
@@ -5011,7 +5011,7 @@ function CompanionDashboard({
           <div>
             <span className="activity-type-label">Loyal Companion</span>
             <h2>Companion</h2>
-            <p className="muted-text">Your OC's Source Beast — identity, stats, and skills all in one place.</p>
+            <p className="muted-text">Your OC's Source Beast  identity, stats, and skills all in one place.</p>
           </div>
           <button className="ghost" onClick={() => loadCompanion()}><RefreshCw size={16} /> Refresh</button>
         </div>
@@ -5047,7 +5047,7 @@ function CompanionDashboard({
                 </>
               ) : (
                 <div className="request-actions-panel">
-                  <label><span>Beast name</span><input value={form.beast_name || ""} onChange={(e) => setForm((c: any) => ({ ...c, beast_name: e.target.value }))} placeholder="Vespera, Ricardo, Nero…" /></label>
+                  <label><span>Beast name</span><input value={form.beast_name || ""} onChange={(e) => setForm((c: any) => ({ ...c, beast_name: e.target.value }))} placeholder="Vespera, Ricardo, Nero" /></label>
                   <label><span>Beast type</span>
                     <select value={form.beast_type || "utility"} onChange={(e) => setForm((c: any) => ({ ...c, beast_type: e.target.value }))}>
                       <option value="combat">Combat</option>
@@ -5071,7 +5071,7 @@ function CompanionDashboard({
                 {statLabels.map(([key, label]) => (
                   <div key={key} className="mini-stat">
                     <span>{label}</span>
-                    <strong>{computed[key]?.final ?? "—"}</strong>
+                    <strong>{computed[key]?.final ?? ""}</strong>
                     <small className="muted-text" style={{ fontSize: "0.7rem" }}>{computed[key]?.base ?? 5}+{computed[key]?.modifier ?? 0}</small>
                   </div>
                 ))}
@@ -5096,7 +5096,7 @@ function CompanionDashboard({
                           setStatRequestForm((c: any) => ({ ...c, stat_key: key }));
                           setStatCostPreview(tgt > cur ? calcStatCost(cur, tgt) : null);
                         }}>
-                          <option value="">— choose a stat —</option>
+                          <option value=""> choose a stat </option>
                           <option value="strength">Strength</option>
                           <option value="dexterity">Dexterity</option>
                           <option value="stamina">Stamina</option>
@@ -5123,7 +5123,7 @@ function CompanionDashboard({
                       </label>
                       {statCostPreview !== null ? (
                         <div className="card">
-                          <p><strong>XP cost: {statCostPreview} XP</strong> &nbsp;·&nbsp; You have {wallet.available_xp ?? "—"} XP available</p>
+                          <p><strong>XP cost: {statCostPreview} XP</strong> &nbsp;&nbsp; You have {wallet.available_xp ?? ""} XP available</p>
                         </div>
                       ) : null}
                       <label><span>Note to staff (optional)</span><input value={statRequestForm.note} onChange={(e) => setStatRequestForm((c: any) => ({ ...c, note: e.target.value }))} placeholder="Any context for staff" /></label>
@@ -5168,7 +5168,7 @@ function CompanionDashboard({
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <span className="pill good">{acquiredRequests.length} acquired</span>
-                    <div className="muted-text" style={{ fontSize: "0.75rem", marginTop: "4px" }}>{wallet.available_xp ?? "—"} XP available</div>
+                    <div className="muted-text" style={{ fontSize: "0.75rem", marginTop: "4px" }}>{wallet.available_xp ?? ""} XP available</div>
                   </div>
                 </div>
 
@@ -5215,9 +5215,9 @@ function CompanionDashboard({
                     <label>
                       <span>Select skill</span>
                       <select value={skillRequestForm.skill_key} onChange={(e) => setSkillRequestForm((c: any) => ({ ...c, skill_key: e.target.value }))}>
-                        <option value="">— choose a skill —</option>
+                        <option value=""> choose a skill </option>
                         {availableSkills.map((s: any) => (
-                          <option key={s.skill_key} value={s.skill_key}>{s.name} · {s.beast_skill_type} T{s.tier} · {s.cost} XP</option>
+                          <option key={s.skill_key} value={s.skill_key}>{s.name}  {s.beast_skill_type} T{s.tier}  {s.cost} XP</option>
                         ))}
                       </select>
                     </label>
@@ -5241,7 +5241,7 @@ function CompanionDashboard({
                             </div>
                             <div style={{ textAlign: "right" }}>
                               <strong style={{ fontSize: "1.1rem" }}>{skill.cost} XP</strong>
-                              <div className="muted-text" style={{ fontSize: "0.75rem" }}>You have {wallet.available_xp ?? "—"} XP</div>
+                              <div className="muted-text" style={{ fontSize: "0.75rem" }}>You have {wallet.available_xp ?? ""} XP</div>
                             </div>
                           </div>
                           {skill.description ? <p className="muted-text" style={{ margin: 0, fontSize: "0.875rem" }}>{skill.description}</p> : null}
@@ -5277,9 +5277,9 @@ function CompanionDashboard({
                 <h2>Role Rules</h2>
                 <p className="muted-text">Skill tier limits for a <strong>{beastTypeLabel(beast.beast_type || "utility")}</strong> type beast.</p>
                 <div className="summary vertical" style={{ marginTop: "0.75rem" }}>
-                  <div><span>Combat tier max</span><strong>{rules.combat ?? "—"}</strong></div>
-                  <div><span>Mount tier max</span><strong>{rules.mount ?? "—"}</strong></div>
-                  <div><span>Utility tier max</span><strong>{rules.utility ?? "—"}</strong></div>
+                  <div><span>Combat tier max</span><strong>{rules.combat ?? ""}</strong></div>
+                  <div><span>Mount tier max</span><strong>{rules.mount ?? ""}</strong></div>
+                  <div><span>Utility tier max</span><strong>{rules.utility ?? ""}</strong></div>
                   <div><span>Own-type cap</span><strong>{rules.own_type_skill_cap_per_tier ?? 3} / tier</strong></div>
                   <div><span>Non-type cap</span><strong>{rules.non_type_skill_cap_per_tier ?? 2} / tier</strong></div>
                 </div>
@@ -5566,8 +5566,8 @@ function MissionBoardDashboard({
           {signupContext ? (
             <div className="request-note-block">
               <span>Keystone Auto-Check</span>
-              <p><strong>Name:</strong> {signupContext.character_name || "—"}</p>
-              <p><strong>Guild:</strong> {signupForm.guild_name || signupContext.default_guild || "—"}</p>
+              <p><strong>Name:</strong> {signupContext.character_name || ""}</p>
+              <p><strong>Guild:</strong> {signupForm.guild_name || signupContext.default_guild || ""}</p>
               <p><strong>EXP:</strong> {signupContext.exp_label || `${signupForm.bst || "0"} BST`}</p>
               <p><strong>Other Active Missions:</strong> {signupForm.other_active_missions || signupContext.other_active_missions_text || "None"}</p>
               <p>
@@ -5692,8 +5692,8 @@ function MissionBoardDashboard({
               {mission.bonus_pay ? <p><strong>Bonus Pay:</strong> {mission.bonus_pay}</p> : null}
 
               <div className="request-meta-grid">
-                <div><span>Party Size</span><strong>{mission.party_size || "—"}</strong></div>
-                <div><span>BST Range</span><strong>{mission.min_bst || "—"} - {mission.max_bst || "—"}</strong></div>
+                <div><span>Party Size</span><strong>{mission.party_size || ""}</strong></div>
+                <div><span>BST Range</span><strong>{mission.min_bst || ""} - {mission.max_bst || ""}</strong></div>
                 <div><span>Priority</span><strong>{guildList(mission.priority_guilds) || "None"}</strong></div>
                 <div><span>Restricted</span><strong>{guildList(mission.restricted_guilds) || "None"}</strong></div>
               </div>
@@ -5803,7 +5803,7 @@ function BeastSkillCatalogDashboard({ discordId }: { discordId: string }) {
   }
 
   async function toggleSkill(skill: any, patch: any) { setMessage(""); try { const data = await apiFetch(`/api/staff/source-beast-skills/${skill.skill_key}/toggle`, { method: "PATCH", body: JSON.stringify(patch) }, discordId); setMessage(data.message || "Beast Skill updated."); await loadSkills(); } catch (error: any) { setMessage(error.message || "Could not update Beast Skill."); } }
-  return <StaffOnly discordId={discordId}><section className="request-workflow-page"><div className="card request-workflow-hero"><div><span className="activity-type-label">Staff Catalog</span><h2>Source Beast Skill Builder</h2><p className="muted-text">Create and edit Beast Skill definitions without touching Supabase. Purchasing stays locked until staff marks a skill purchasable.</p></div><button className="ghost" onClick={loadSkills}><RefreshCw size={16} /> Refresh</button></div>{message ? <p className="message">{message}</p> : null}<div className="card"><h3>{editingKey ? "Edit Beast Skill" : "Create Beast Skill"}</h3><div className="request-actions-panel"><label><span>Skill Name</span><input value={form.name} onChange={(event) => setForm((current: any) => ({ ...current, name: event.target.value }))} placeholder="Ravaged Strike" /></label><label><span>Internal Key</span><input value={form.skill_key} onChange={(event) => setForm((current: any) => ({ ...current, skill_key: event.target.value }))} placeholder="Auto-generated from skill name" disabled={Boolean(editingKey)} /></label><label><span>Beast Skill Type</span><select value={form.beast_skill_type} onChange={(event) => setForm((current: any) => ({ ...current, beast_skill_type: event.target.value }))}><option value="combat">Combat</option><option value="mount">Mount</option><option value="utility">Utility</option></select></label><label><span>Tier</span><input type="number" min="0" max="3" value={form.tier} onChange={(event) => setForm((current: any) => ({ ...current, tier: Number(event.target.value) }))} /></label><label><span>XP Cost</span><input type="number" min="0" value={form.cost} onChange={(event) => setForm((current: any) => ({ ...current, cost: Number(event.target.value) }))} /></label><label><span>Action Type</span><input value={form.action_type || ""} onChange={(event) => setForm((current: any) => ({ ...current, action_type: event.target.value }))} placeholder="Passive, Action, Bonus Action, Reaction" /></label><label><span>Prerequisites</span><input value={form.prerequisites || ""} onChange={(event) => setForm((current: any) => ({ ...current, prerequisites: event.target.value }))} placeholder="Choose prerequisite skills below. Keystone stores the keys automatically." /></label><label><span>Upgrade Line</span><input value={form.chain || ""} onChange={(event) => setForm((current: any) => ({ ...current, chain: event.target.value }))} placeholder="Example: Magical Attack I ? Magical Attack II ? Magical Attack III. Leave blank if standalone." /></label><label><span>Source Label</span><input value={form.source_label || ""} onChange={(event) => setForm((current: any) => ({ ...current, source_label: event.target.value }))} /></label><label><span>Display Order</span><input type="number" value={form.sort_order || 0} onChange={(event) => setForm((current: any) => ({ ...current, sort_order: Number(event.target.value) }))} /></label><label><span>Status</span><select value={form.is_active ? "active" : "inactive"} onChange={(event) => setForm((current: any) => ({ ...current, is_active: event.target.value === "active" }))}><option value="active">Active</option><option value="inactive">Inactive / Hidden</option></select></label><label><span>Purchasing</span><select value={form.is_purchasable ? "yes" : "no"} onChange={(event) => setForm((current: any) => ({ ...current, is_purchasable: event.target.value === "yes" }))}><option value="no">Locked / Not Purchasable</option><option value="yes">Purchasable</option></select></label><label><span>Effects</span><textarea rows={4} value={form.effects || ""} onChange={(event) => setForm((current: any) => ({ ...current, effects: event.target.value }))} placeholder="Mechanical effects, bonuses, AP/action cost, restrictions..." /></label><label><span>Description</span><textarea rows={5} value={form.description || ""} onChange={(event) => setForm((current: any) => ({ ...current, description: event.target.value }))} placeholder="Player-facing description." /></label></div><div className="actions"><button onClick={saveSkill}><Save size={16} /> {editingKey ? "Update Beast Skill" : "Create Beast Skill"}</button>{editingKey ? <button className="ghost" onClick={resetForm}>Cancel Edit</button> : null}</div></div><div className="request-card-list">{skills.length === 0 ? <div className="card request-empty-state"><strong>No Beast Skills created yet.</strong><p className="muted-text">Create the first Source Beast Skill above.</p></div> : null}{skills.map((skill: any) => <div className="card request-review-card" key={skill.skill_key}><div className="request-review-top"><div><span className="activity-type-label">{skill.beast_skill_type} • Tier {skill.tier}</span><h3>{skill.name}</h3><p className="muted-text">{skill.skill_key} • {skill.cost} Beast XP • {skill.action_type || "Action type TBA"}</p></div><em className={`request-status-pill ${skill.is_purchasable ? "approved" : "pending"}`}>{skill.is_purchasable ? "Purchasable" : "Locked"}</em></div>{skill.description ? <p>{skill.description}</p> : null}{skill.effects ? <p><strong>Effects:</strong> {skill.effects}</p> : null}<div className="actions"><button className="ghost" onClick={() => editSkill(skill)}>Edit</button><button className="ghost" onClick={() => toggleSkill(skill, { is_purchasable: !skill.is_purchasable })}>{skill.is_purchasable ? "Lock Purchasing" : "Enable Purchasing"}</button><button className="ghost" onClick={() => toggleSkill(skill, { is_active: !skill.is_active })}>{skill.is_active ? "Hide" : "Unhide"}</button><button className="danger-button" onClick={() => deleteSkill(skill)}>Delete</button></div></div>)}</div></section></StaffOnly>;
+  return <StaffOnly discordId={discordId}><section className="request-workflow-page"><div className="card request-workflow-hero"><div><span className="activity-type-label">Staff Catalog</span><h2>Source Beast Skill Builder</h2><p className="muted-text">Create and edit Beast Skill definitions without touching Supabase. Purchasing stays locked until staff marks a skill purchasable.</p></div><button className="ghost" onClick={loadSkills}><RefreshCw size={16} /> Refresh</button></div>{message ? <p className="message">{message}</p> : null}<div className="card"><h3>{editingKey ? "Edit Beast Skill" : "Create Beast Skill"}</h3><div className="request-actions-panel"><label><span>Skill Name</span><input value={form.name} onChange={(event) => setForm((current: any) => ({ ...current, name: event.target.value }))} placeholder="Ravaged Strike" /></label><label><span>Internal Key</span><input value={form.skill_key} onChange={(event) => setForm((current: any) => ({ ...current, skill_key: event.target.value }))} placeholder="Auto-generated from skill name" disabled={Boolean(editingKey)} /></label><label><span>Beast Skill Type</span><select value={form.beast_skill_type} onChange={(event) => setForm((current: any) => ({ ...current, beast_skill_type: event.target.value }))}><option value="combat">Combat</option><option value="mount">Mount</option><option value="utility">Utility</option></select></label><label><span>Tier</span><input type="number" min="0" max="3" value={form.tier} onChange={(event) => setForm((current: any) => ({ ...current, tier: Number(event.target.value) }))} /></label><label><span>XP Cost</span><input type="number" min="0" value={form.cost} onChange={(event) => setForm((current: any) => ({ ...current, cost: Number(event.target.value) }))} /></label><label><span>Action Type</span><input value={form.action_type || ""} onChange={(event) => setForm((current: any) => ({ ...current, action_type: event.target.value }))} placeholder="Passive, Action, Bonus Action, Reaction" /></label><label><span>Prerequisites</span><input value={form.prerequisites || ""} onChange={(event) => setForm((current: any) => ({ ...current, prerequisites: event.target.value }))} placeholder="Choose prerequisite skills below. Keystone stores the keys automatically." /></label><label><span>Upgrade Line</span><input value={form.chain || ""} onChange={(event) => setForm((current: any) => ({ ...current, chain: event.target.value }))} placeholder="Example: Magical Attack I ? Magical Attack II ? Magical Attack III. Leave blank if standalone." /></label><label><span>Source Label</span><input value={form.source_label || ""} onChange={(event) => setForm((current: any) => ({ ...current, source_label: event.target.value }))} /></label><label><span>Display Order</span><input type="number" value={form.sort_order || 0} onChange={(event) => setForm((current: any) => ({ ...current, sort_order: Number(event.target.value) }))} /></label><label><span>Status</span><select value={form.is_active ? "active" : "inactive"} onChange={(event) => setForm((current: any) => ({ ...current, is_active: event.target.value === "active" }))}><option value="active">Active</option><option value="inactive">Inactive / Hidden</option></select></label><label><span>Purchasing</span><select value={form.is_purchasable ? "yes" : "no"} onChange={(event) => setForm((current: any) => ({ ...current, is_purchasable: event.target.value === "yes" }))}><option value="no">Locked / Not Purchasable</option><option value="yes">Purchasable</option></select></label><label><span>Effects</span><textarea rows={4} value={form.effects || ""} onChange={(event) => setForm((current: any) => ({ ...current, effects: event.target.value }))} placeholder="Mechanical effects, bonuses, AP/action cost, restrictions..." /></label><label><span>Description</span><textarea rows={5} value={form.description || ""} onChange={(event) => setForm((current: any) => ({ ...current, description: event.target.value }))} placeholder="Player-facing description." /></label></div><div className="actions"><button onClick={saveSkill}><Save size={16} /> {editingKey ? "Update Beast Skill" : "Create Beast Skill"}</button>{editingKey ? <button className="ghost" onClick={resetForm}>Cancel Edit</button> : null}</div></div><div className="request-card-list">{skills.length === 0 ? <div className="card request-empty-state"><strong>No Beast Skills created yet.</strong><p className="muted-text">Create the first Source Beast Skill above.</p></div> : null}{skills.map((skill: any) => <div className="card request-review-card" key={skill.skill_key}><div className="request-review-top"><div><span className="activity-type-label">{skill.beast_skill_type}  Tier {skill.tier}</span><h3>{skill.name}</h3><p className="muted-text">{skill.skill_key}  {skill.cost} Beast XP  {skill.action_type || "Action type TBA"}</p></div><em className={`request-status-pill ${skill.is_purchasable ? "approved" : "pending"}`}>{skill.is_purchasable ? "Purchasable" : "Locked"}</em></div>{skill.description ? <p>{skill.description}</p> : null}{skill.effects ? <p><strong>Effects:</strong> {skill.effects}</p> : null}<div className="actions"><button className="ghost" onClick={() => editSkill(skill)}>Edit</button><button className="ghost" onClick={() => toggleSkill(skill, { is_purchasable: !skill.is_purchasable })}>{skill.is_purchasable ? "Lock Purchasing" : "Enable Purchasing"}</button><button className="ghost" onClick={() => toggleSkill(skill, { is_active: !skill.is_active })}>{skill.is_active ? "Hide" : "Unhide"}</button><button className="danger-button" onClick={() => deleteSkill(skill)}>Delete</button></div></div>)}</div></section></StaffOnly>;
 }
 
 function StaffQueue({ discordId }: { discordId: string }) {
@@ -6561,15 +6561,15 @@ function StaffQueue({ discordId }: { discordId: string }) {
                 <div className="request-meta-grid">
                   <div>
                     <span>OC</span>
-                    <strong>{request.character_name || request.character_id || "—"}</strong>
+                    <strong>{request.character_name || request.character_id || ""}</strong>
                   </div>
                   <div>
                     <span>Submitted By</span>
-                    <strong>{request.actor_id ? `<@${request.actor_id}>` : "—"}</strong>
+                    <strong>{request.actor_id ? `<@${request.actor_id}>` : ""}</strong>
                   </div>
                   <div>
                     <span>Amount / Cost</span>
-                    <strong>{request.amount ?? "—"}</strong>
+                    <strong>{request.amount ?? ""}</strong>
                   </div>
                   <div>
                     <span>Created</span>
