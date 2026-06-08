@@ -456,6 +456,34 @@ def create_shop_item(
             rows = _as_list(sb.table("shop_items").insert(attempt_payload).execute())
             item = rows[0] if rows else attempt_payload
 
+            # Auto-create items table entry and link grants_item_id if not already set
+            shop_item_id = str(item.get("item_id") or "")
+            if shop_item_id and not item.get("grants_item_id"):
+                try:
+                    # Check if an items entry already exists for this name
+                    existing = _safe_rows(
+                        sb.table("items").select("item_id").eq("guild_id", get_guild_id()).eq("name", name).limit(1)
+                    )
+                    if existing:
+                        grants_id = str(existing[0].get("item_id") or "")
+                    else:
+                        item_class = (payload.get("category") or "misc").lower()
+                        new_item_rows = _as_list(
+                            sb.table("items").insert({
+                                "guild_id": get_guild_id(),
+                                "name": name,
+                                "item_class": item_class,
+                                "is_active": True,
+                            }).execute()
+                        )
+                        grants_id = str(new_item_rows[0].get("item_id") or "") if new_item_rows else ""
+
+                    if grants_id:
+                        _as_list(sb.table("shop_items").update({"grants_item_id": grants_id}).eq("item_id", shop_item_id).execute())
+                        item["grants_item_id"] = grants_id
+                except Exception:
+                    pass  # Non-fatal — item still created, just needs manual grants_item_id
+
             log_activity(
                 event_type="shop_item_created",
                 label=f"Shop item created: {name}",
@@ -654,6 +682,9 @@ def update_shop_item(
     if "is_active" in payload:
         update_payload["is_active"] = _bool(payload.get("is_active"), True)
 
+    if "grants_item_id" in payload:
+        update_payload["grants_item_id"] = str(payload.get("grants_item_id")) if payload.get("grants_item_id") else None
+
     if not update_payload:
         raise HTTPException(status_code=400, detail="No item fields provided.")
 
@@ -677,6 +708,32 @@ def update_shop_item(
         )
 
     updated = rows[0] if rows else {**item, **update_payload}
+
+    # If item still has no grants_item_id, create and link it automatically
+    if not updated.get("grants_item_id"):
+        item_name = updated.get("name") or updated.get("item_name") or ""
+        if item_name:
+            try:
+                existing = _safe_rows(
+                    sb.table("items").select("item_id").eq("guild_id", get_guild_id()).eq("name", item_name).limit(1)
+                )
+                if existing:
+                    grants_id = str(existing[0].get("item_id") or "")
+                else:
+                    new_item_rows = _as_list(
+                        sb.table("items").insert({
+                            "guild_id": get_guild_id(),
+                            "name": item_name,
+                            "item_class": (updated.get("category") or updated.get("item_class") or "misc").lower(),
+                            "is_active": True,
+                        }).execute()
+                    )
+                    grants_id = str(new_item_rows[0].get("item_id") or "") if new_item_rows else ""
+                if grants_id:
+                    _as_list(sb.table("shop_items").update({"grants_item_id": grants_id}).eq(id_column, item_id).execute())
+                    updated["grants_item_id"] = grants_id
+            except Exception:
+                pass
 
     log_activity(
         event_type="shop_item_updated",
