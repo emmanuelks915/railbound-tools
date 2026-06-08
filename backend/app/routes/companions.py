@@ -192,7 +192,7 @@ def request_beast_skill(character_id: UUID, payload: dict=Body(default={}), acto
         status=str(req.get("status") or "").lower()
         if status=="pending": raise HTTPException(status_code=409,detail="You already have a pending request for this beast skill.")
         if status in ("approved","accepted"): raise HTTPException(status_code=409,detail="Your companion already has this skill.")
-    wallet=_wallet(sb,cid,gid)
+    rows=_safe(sb.table("oc_xp_wallets").select("available_xp,total_spent_xp").eq("guild_id",gid).eq("character_id",cid).limit(1)); wallet=rows[0] if rows else {"available_xp":0}
     available=int(wallet.get("available_xp") or 0)
     if cost > 0 and available < cost: raise HTTPException(status_code=400,detail=f"Not enough XP. You have {available} XP, this skill costs {cost} XP.")
     insert_row={"guild_id":gid,"character_id":cid,"skill_key":skill_key,"skill_name":str(skill.get("name") or skill_key),"cost":cost,"status":"pending","requested_by_discord_id":a,"submitter_note":str(payload.get("note") or "")[:500],"source_label":"Beast Skill","request_type":"skill"}
@@ -224,7 +224,7 @@ def request_beast_stat(character_id: UUID, payload: dict=Body(default={}), actor
     existing=_safe(sb.table("skill_purchase_requests").select("request_id,status").eq("guild_id",gid).eq("character_id",cid).eq("skill_key",f"beast_stat_{stat_key}").eq("source_label","Beast Stat").eq("status","pending").limit(5))
     if existing: raise HTTPException(status_code=409,detail=f"You already have a pending stat request for {stat_key}.")
     cost=_stat_xp_cost(current_value,target_value)
-    wallet=_wallet(sb,cid,gid)
+    rows=_safe(sb.table("oc_xp_wallets").select("available_xp,total_spent_xp").eq("guild_id",gid).eq("character_id",cid).limit(1)); wallet=rows[0] if rows else {"available_xp":0}
     available=int(wallet.get("available_xp") or 0)
     if cost > 0 and available < cost: raise HTTPException(status_code=400,detail=f"Not enough XP. Cost: {cost} XP, available: {available} XP.")
     labels={"strength":"Strength","dexterity":"Dexterity","stamina":"Stamina","magic_affinity":"Magic Affinity","mana":"Mana"}
