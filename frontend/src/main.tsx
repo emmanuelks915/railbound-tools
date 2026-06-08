@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Calculator, Check, ClipboardList, Edit, Eye, EyeOff, Home, Package, Plus, RefreshCw, Save, Send, ShieldCheck, ShoppingCart, Sparkles, Store, Trash2, UserRound, X, Users } from "lucide-react";
+import { Calculator, Check, ClipboardList, Home, Package, RefreshCw, Save, Send, ShieldCheck, Sparkles, Store, UserRound, X, Users } from "lucide-react";
 import "./styles.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -21,7 +21,7 @@ type CoreStats = {
   mana: number;
 };
 
-type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "missions" | "companion" | "staff" | "beast_skills" | "combat" | "registry" | "register" | "manage_oc" | "qa" | "shop_owner" | "loadouts";
+type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "missions" | "companion" | "staff" | "beast_skills" | "combat" | "registry" | "register" | "manage_oc" | "qa" | "shop_owner";
 
 const STAT_LABELS: Record<keyof CoreStats, string> = {
   strength: "Strength",
@@ -163,11 +163,11 @@ function App() {
     ["planner", Calculator, "XP Planner"],
     ["skills", Sparkles, "Skills"],
     ["inventory", Package, "Inventory"],
-    ["loadouts", Package, "Loadouts"],
     ["rp", ClipboardList, "RP Hub"],
     ["missions", ClipboardList, "Missions"],
-    ["companion", Sparkles, "Companion"],
+    ["companion", Sparkles, "LC Unit"],
     ["shops", Store, "Shops"],
+    ["shop_owner", Store, "Manage Shop"],
     ["activity", ClipboardList, "Activity"],
     ["staff", ShieldCheck, "Staff"],
     ["beast_skills", Sparkles, "Beast Skills"],
@@ -275,14 +275,8 @@ return (
       {tab === "oc" && <OCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} jump={setTab} />}
       {tab === "manage_oc" && <ManageOCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "inventory" && <InventoryDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
-      {tab === "loadouts" && <LoadoutsDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
-      {(tab === "shops" || tab === "shop_owner") && (
-        <ShopHubDashboard
-          discordId={discordId}
-          selectedCharacterId={selectedCharacterId}
-          initialView={tab === "shop_owner" ? "manage" : "browse"}
-        />
-      )}
+      {tab === "shops" && <ShopDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} />}
+      {tab === "shop_owner" && <ShopOwnerDashboard discordId={discordId} />}
       {tab === "skills" && <SkillsDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "rp" && <RpHubDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "missions" && <MissionBoardDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
@@ -344,8 +338,7 @@ function canUseTab(permissions: any, tab: Tab) {
   const allowedTabs = permissions?.allowed_tabs || [];
 
   if (!allowedTabs.length) {
-    // Not yet loaded — hide staff/restricted tabs, show everything else except shop_owner nav
-    return !["staff", "qa", "activity", "shop_owner"].includes(String(tab));
+    return !["staff", "qa", "activity"].includes(String(tab));
   }
 
   return allowedTabs.includes(tab);
@@ -536,7 +529,8 @@ function HomeDashboard({
             <button onClick={() => jump("inventory")}><Package size={16} /> Manage Inventory</button>
             <button onClick={() => jump("skills")}><Sparkles size={16} /> Manage Skills</button>
             <button onClick={() => jump("register")}><UserRound size={16} /> Register OC</button>
-            <button onClick={() => jump("shops")}><Store size={16} /> Shops & Market</button>
+            <button onClick={() => jump("shops")}><Store size={16} /> Manage Shops</button>
+            <button onClick={() => jump("shop_owner")}><Store size={16} /> Manage My Shop</button>
             <button onClick={() => jump("staff")}><ShieldCheck size={16} /> Staff Queue</button>
             <button onClick={() => jump("qa")}><ClipboardList size={16} /> QA Checklist</button>
           </div>
@@ -1429,343 +1423,6 @@ return (
   );
 }
 
-
-// ============================================================
-// LOADOUTS DASHBOARD
-// Full loadout builder with CC tracking, worn/carried sections
-// ============================================================
-
-function LoadoutsDashboard({
-  discordId,
-  selectedCharacterId,
-  setSelectedCharacterId,
-}: {
-  discordId: string;
-  selectedCharacterId: string;
-  setSelectedCharacterId: (id: string) => void;
-}) {
-  const [characters, setCharacters] = useState<any[]>([]);
-  const [localCharId, setLocalCharId] = useState(selectedCharacterId || "");
-  const [loadouts, setLoadouts] = useState<any[]>([]);
-  const [activeLoadoutName, setActiveLoadoutName] = useState("");
-  const [baseCC, setBaseCC] = useState(4);
-  const [strength, setStrength] = useState(0);
-  const [selectedLoadout, setSelectedLoadout] = useState<any | null>(null);
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [view, setView] = useState<"list" | "builder">("list");
-  const [newLoadoutName, setNewLoadoutName] = useState("");
-  const [msg, setMsg] = useState({ text: "", type: "ok" as "ok" | "err" });
-  const [loading, setLoading] = useState(false);
-
-  function flash(text: string, type: "ok" | "err" = "ok") {
-    setMsg({ text, type });
-    setTimeout(() => setMsg({ text: "", type: "ok" }), 4000);
-  }
-
-  async function loadCharacters() {
-    if (!discordId) return;
-    try {
-      const result = await apiFetch("/api/characters/mine", {}, discordId);
-      const rows = Array.isArray(result) ? result : result.characters || result.data || [];
-      setCharacters(rows);
-      if (!localCharId && rows.length > 0) {
-        const id = String(rows[0].character_id || rows[0].id);
-        setLocalCharId(id);
-        setSelectedCharacterId(id);
-      }
-    } catch { /* silent */ }
-  }
-
-  async function loadLoadouts(cid = localCharId) {
-    if (!discordId || !cid) return;
-    setLoading(true);
-    try {
-      const data = await apiFetch(`/api/loadouts/${cid}`, {}, discordId);
-      setLoadouts(data.loadouts || []);
-      setActiveLoadoutName(data.active_loadout_name || "");
-      setBaseCC(data.base_cc || 4);
-      setStrength(data.strength || 0);
-    } catch (e: any) {
-      flash(e.message || "Could not load loadouts.", "err");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function openLoadout(lo: any) {
-    if (!localCharId) return;
-    try {
-      const data = await apiFetch(`/api/loadouts/${localCharId}/${encodeURIComponent(lo.loadout_name)}`, {}, discordId);
-      setSelectedLoadout(data);
-      setInventory(data.inventory || []);
-      setView("builder");
-    } catch (e: any) {
-      flash(e.message || "Could not load loadout.", "err");
-    }
-  }
-
-  async function createLoadout() {
-    const name = newLoadoutName.trim();
-    if (!name) { flash("Loadout name required.", "err"); return; }
-    try {
-      await apiFetch(`/api/loadouts/${localCharId}`, { method: "POST", body: JSON.stringify({ loadout_name: name }) }, discordId);
-      setNewLoadoutName("");
-      flash(`"${name}" created.`);
-      loadLoadouts();
-    } catch (e: any) {
-      flash(e.message || "Could not create loadout.", "err");
-    }
-  }
-
-  async function deleteLoadout(name: string) {
-    if (!confirm(`Delete loadout "${name}"?`)) return;
-    try {
-      await apiFetch(`/api/loadouts/${localCharId}/${encodeURIComponent(name)}`, { method: "DELETE" }, discordId);
-      if (selectedLoadout?.loadout_name === name) { setSelectedLoadout(null); setView("list"); }
-      flash(`"${name}" deleted.`);
-      loadLoadouts();
-    } catch (e: any) {
-      flash(e.message || "Could not delete.", "err");
-    }
-  }
-
-  async function activateLoadout(name: string) {
-    try {
-      await apiFetch(`/api/loadouts/${localCharId}/${encodeURIComponent(name)}/activate`, { method: "POST" }, discordId);
-      setActiveLoadoutName(name);
-      flash(`"${name}" is now your active loadout.`);
-      loadLoadouts();
-    } catch (e: any) {
-      flash(e.message || "Could not activate.", "err");
-    }
-  }
-
-  async function updateItem(itemId: string, qty: number, worn: boolean) {
-    if (!selectedLoadout || !localCharId) return;
-    const changes: Record<string, any> = {};
-    if (qty <= 0) {
-      changes[itemId] = null; // remove
-    } else {
-      changes[itemId] = { qty, worn };
-    }
-    try {
-      const data = await apiFetch(
-        `/api/loadouts/${localCharId}/${encodeURIComponent(selectedLoadout.loadout_name)}`,
-        { method: "PATCH", body: JSON.stringify({ items: changes }) },
-        discordId
-      );
-      setSelectedLoadout(data.loadout);
-    } catch (e: any) {
-      flash(e.message || "Could not update.", "err");
-    }
-  }
-
-  useEffect(() => { loadCharacters(); }, [discordId]);
-  useEffect(() => { if (localCharId) loadLoadouts(localCharId); }, [localCharId]);
-
-  const ccData = selectedLoadout?.cc;
-  const totalCC = ccData ? ccData.total_cc : baseCC;
-  const ccUsed = ccData ? ccData.cc_used : 0;
-  const ccOver = ccData ? ccData.over_capacity : false;
-
-  // Items in this loadout by id for quick lookup
-  const loadoutItems: Record<string, { qty: number; worn: boolean }> = selectedLoadout?.items || {};
-
-  // Inventory items not yet in loadout (for adding)
-  const availableToAdd = inventory.filter(inv => {
-    const inLoadout = loadoutItems[inv.item_id];
-    return !inLoadout || inLoadout.qty < inv.qty_owned;
-  });
-
-  return (
-    <section>
-      <div className="card market-hero" style={{ marginBottom: "1rem" }}>
-        <div>
-          <span className="activity-type-label">Character Gear</span>
-          <h2>Loadouts</h2>
-          <p className="muted-text">Build and manage what your character carries into scenes. CC tracks carry capacity.</p>
-        </div>
-        <button className="ghost" onClick={() => loadLoadouts()}><RefreshCw size={16} /></button>
-      </div>
-
-      {msg.text && (
-        <p style={{
-          fontSize: 13, padding: "8px 12px", borderRadius: "var(--border-radius-md)", marginBottom: 12,
-          background: msg.type === "ok" ? "var(--color-background-success)" : "var(--color-background-danger)",
-          color: msg.type === "ok" ? "var(--color-text-success)" : "var(--color-text-danger)",
-          border: `0.5px solid ${msg.type === "ok" ? "var(--color-border-success)" : "var(--color-border-danger)"}`,
-        }}>{msg.text}</p>
-      )}
-
-      {/* Character selector */}
-      <div className="card" style={{ padding: "12px 14px", marginBottom: "1rem", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <label style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Character:</label>
-        <select value={localCharId} onChange={(e) => { setLocalCharId(e.target.value); setSelectedCharacterId(e.target.value); setView("list"); setSelectedLoadout(null); }} style={{ flex: 1, minWidth: 160 }}>
-          <option value="">Select character...</option>
-          {characters.map((c: any) => (
-            <option key={c.character_id || c.id} value={c.character_id || c.id}>{c.name}</option>
-          ))}
-        </select>
-        <span className="muted-text" style={{ fontSize: 12 }}>STR {strength} → Base CC: {baseCC}</span>
-      </div>
-
-      {view === "list" && (
-        <>
-          {/* Create new loadout */}
-          <div className="card" style={{ padding: "12px 14px", marginBottom: "1rem", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <input
-              value={newLoadoutName}
-              onChange={(e) => setNewLoadoutName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && createLoadout()}
-              placeholder="New loadout name (e.g. Forest Run, PvP Kit)"
-              style={{ flex: 1, minWidth: 200 }}
-            />
-            <button onClick={createLoadout} disabled={!localCharId || !newLoadoutName.trim()}>
-              <Plus size={14} /> Create Loadout
-            </button>
-          </div>
-
-          {loading && <p className="muted-text" style={{ fontSize: 13 }}>Loading...</p>}
-
-          {loadouts.length === 0 && !loading && (
-            <div className="card" style={{ textAlign: "center", padding: "2rem", color: "var(--color-text-secondary)" }}>
-              <Package size={36} style={{ marginBottom: 8, opacity: 0.25 }} />
-              <p style={{ fontSize: 13 }}>No loadouts yet. Create one above.</p>
-            </div>
-          )}
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {loadouts.map((lo: any) => {
-              const cc = lo.cc;
-              const isActive = lo.loadout_name === activeLoadoutName;
-              return (
-                <div key={lo.loadout_name} className="card" style={{ padding: "12px 14px", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                      <p style={{ fontWeight: 500, fontSize: 14 }}>{lo.loadout_name}</p>
-                      {isActive && <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: "var(--color-background-success)", color: "var(--color-text-success)" }}>⭐ Active</span>}
-                    </div>
-                    {cc && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <p className="muted-text" style={{ fontSize: 12 }}>CC: {cc.cc_used}/{cc.total_cc}</p>
-                        <div style={{ width: 80, height: 4, borderRadius: 2, background: "var(--color-background-tertiary)", overflow: "hidden" }}>
-                          <div style={{ height: "100%", borderRadius: 2, width: `${Math.min(100, (cc.cc_used / (cc.total_cc || 4)) * 100)}%`, background: cc.over_capacity ? "var(--color-background-danger)" : "var(--color-background-success)" }} />
-                        </div>
-                        {cc.over_capacity && <span style={{ fontSize: 11, color: "var(--color-text-danger)" }}>Over!</span>}
-                        <p className="muted-text" style={{ fontSize: 12 }}>{(cc.worn_items?.length || 0) + (cc.carried_items?.length || 0)} items</p>
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                    <button className="ghost" onClick={() => openLoadout(lo)} style={{ fontSize: 12, padding: "4px 10px" }}><Edit size={13} /> Edit</button>
-                    {!isActive && <button className="ghost" onClick={() => activateLoadout(lo.loadout_name)} style={{ fontSize: 12, padding: "4px 10px" }}>⭐ Set Active</button>}
-                    <button className="ghost" onClick={() => deleteLoadout(lo.loadout_name)} style={{ fontSize: 12, padding: "4px 10px", color: "var(--color-text-danger)" }}><Trash2 size={13} /></button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {view === "builder" && selectedLoadout && (
-        <>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: "1rem", flexWrap: "wrap" }}>
-            <button className="ghost" onClick={() => { setView("list"); loadLoadouts(); }} style={{ fontSize: 13 }}><X size={13} /> Back to loadouts</button>
-            <h3 style={{ fontSize: 16, fontWeight: 500 }}>{selectedLoadout.loadout_name}</h3>
-            {selectedLoadout.loadout_name === activeLoadoutName && <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, background: "var(--color-background-success)", color: "var(--color-text-success)" }}>⭐ Active</span>}
-          </div>
-
-          {/* CC Bar */}
-          <div className="card" style={{ padding: "12px 16px", marginBottom: "1rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <p style={{ fontWeight: 500, fontSize: 14 }}>Carry Capacity</p>
-              <p style={{ fontSize: 18, fontWeight: 600, color: ccOver ? "var(--color-text-danger)" : "var(--color-text-success)" }}>{ccUsed} / {totalCC}</p>
-            </div>
-            <div style={{ height: 10, borderRadius: 5, background: "var(--color-background-tertiary)", overflow: "hidden", marginBottom: 4 }}>
-              <div style={{ height: "100%", borderRadius: 5, width: `${Math.min(100, (ccUsed / (totalCC || 4)) * 100)}%`, background: ccOver ? "var(--color-background-danger)" : "var(--color-background-success)", transition: "width 0.3s ease" }} />
-            </div>
-            <div style={{ display: "flex", gap: 16, fontSize: 12, color: "var(--color-text-secondary)" }}>
-              <span>Base CC: {ccData?.base_cc || baseCC} (STR {strength})</span>
-              {(ccData?.cc_bonus || 0) > 0 && <span>+{ccData.cc_bonus} bonus CC from worn items</span>}
-              <span>{totalCC - ccUsed} remaining</span>
-            </div>
-            {ccOver && <p style={{ fontSize: 12, color: "var(--color-text-danger)", marginTop: 4 }}>⚠️ Over carry capacity! Remove items from CARRIED section.</p>}
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            {/* WORN column */}
-            <div>
-              <h4 style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                🧥 WORN <span className="muted-text" style={{ fontSize: 12, fontWeight: 400 }}>(armor, backpack — CC ignored)</span>
-              </h4>
-              {(ccData?.worn_items || []).length === 0 && (
-                <div className="card" style={{ padding: "1rem", textAlign: "center", color: "var(--color-text-secondary)", fontSize: 13 }}>Nothing worn</div>
-              )}
-              {(ccData?.worn_items || []).map((item: any) => (
-                <div key={item.item_id} className="card" style={{ padding: "8px 12px", marginBottom: 8, display: "flex", gap: 8, alignItems: "center" }}>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 13, fontWeight: 500 }}>{item.name}</p>
-                    <p className="muted-text" style={{ fontSize: 11 }}>{item.item_class} · CC {item.cc} (ignored) · ×{item.qty}</p>
-                  </div>
-                  <button className="ghost" onClick={() => updateItem(item.item_id, item.qty, false)} style={{ fontSize: 11, padding: "3px 8px" }}>→ Carry</button>
-                  <button className="ghost" onClick={() => updateItem(item.item_id, 0, true)} style={{ fontSize: 11, padding: "3px 8px", color: "var(--color-text-danger)" }}><X size={11} /></button>
-                </div>
-              ))}
-            </div>
-
-            {/* CARRIED column */}
-            <div>
-              <h4 style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                🎒 CARRIED <span className="muted-text" style={{ fontSize: 12, fontWeight: 400 }}>(counts against CC)</span>
-              </h4>
-              {(ccData?.carried_items || []).length === 0 && (
-                <div className="card" style={{ padding: "1rem", textAlign: "center", color: "var(--color-text-secondary)", fontSize: 13 }}>Nothing carried</div>
-              )}
-              {(ccData?.carried_items || []).map((item: any) => (
-                <div key={item.item_id} className="card" style={{ padding: "8px 12px", marginBottom: 8, display: "flex", gap: 8, alignItems: "center" }}>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 13, fontWeight: 500 }}>{item.name}</p>
-                    <p className="muted-text" style={{ fontSize: 11 }}>{item.item_class} · {item.cc} CC each · ×{item.qty} = {item.cc_cost} CC</p>
-                  </div>
-                  <button className="ghost" onClick={() => updateItem(item.item_id, item.qty, true)} style={{ fontSize: 11, padding: "3px 8px" }}>→ Wear</button>
-                  <button className="ghost" onClick={() => updateItem(item.item_id, 0, false)} style={{ fontSize: 11, padding: "3px 8px", color: "var(--color-text-danger)" }}><X size={11} /></button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Add from inventory */}
-          <div style={{ marginTop: "1.5rem" }}>
-            <h4 style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Add from inventory</h4>
-            {availableToAdd.length === 0 && (
-              <p className="muted-text" style={{ fontSize: 13 }}>All owned items are already in this loadout.</p>
-            )}
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {availableToAdd.map((inv: any) => {
-                const inLoadout = loadoutItems[inv.item_id];
-                const maxQty = inv.qty_owned - (inLoadout?.qty || 0);
-                return (
-                  <div key={inv.item_id} className="card" style={{ padding: "8px 12px", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: 13, fontWeight: 500 }}>{inv.name}</p>
-                      <p className="muted-text" style={{ fontSize: 11 }}>{inv.item_class} · {inv.cc} CC · {inv.qty_owned} owned{inLoadout ? ` · ${inLoadout.qty} already in loadout` : ""}</p>
-                    </div>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      <button className="ghost" onClick={() => updateItem(inv.item_id, Math.min(1, maxQty), true)} style={{ fontSize: 11, padding: "3px 8px" }}>+ Wear</button>
-                      <button className="ghost" onClick={() => updateItem(inv.item_id, Math.min(1, maxQty), false)} style={{ fontSize: 11, padding: "3px 8px" }}>+ Carry</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </>
-      )}
-    </section>
-  );
-}
-
 function InventoryDashboard({
   discordId,
   selectedCharacterId,
@@ -1911,40 +1568,6 @@ function InventoryDashboard({
 
         {message ? <p className="message">{message}</p> : null}
 
-        {/* CC Meter */}
-        {data.base_cc !== undefined && (
-          <div className="card" style={{ padding: "12px 16px", marginBottom: "1rem" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
-              <div>
-                <p style={{ fontWeight: 500, fontSize: 14 }}>Carry Capacity</p>
-                {data.active_loadout_cc ? (
-                  <p className="muted-text" style={{ fontSize: 12 }}>Active loadout: <strong>{data.active_loadout_cc.loadout_name}</strong></p>
-                ) : (
-                  <p className="muted-text" style={{ fontSize: 12 }}>No active loadout — CC shown for full inventory</p>
-                )}
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <p style={{ fontSize: 18, fontWeight: 600, color: (data.active_loadout_cc?.over_capacity) ? "var(--color-text-danger)" : "var(--color-text-success)" }}>
-                  {data.active_loadout_cc ? data.active_loadout_cc.cc_used : 0} / {data.base_cc}
-                </p>
-                <p className="muted-text" style={{ fontSize: 11 }}>CC used / total (STR {data.strength})</p>
-              </div>
-            </div>
-            <div style={{ height: 8, borderRadius: 4, background: "var(--color-background-tertiary)", overflow: "hidden" }}>
-              <div style={{
-                height: "100%",
-                borderRadius: 4,
-                width: `${Math.min(100, ((data.active_loadout_cc?.cc_used || 0) / (data.base_cc || 4)) * 100)}%`,
-                background: (data.active_loadout_cc?.over_capacity) ? "var(--color-background-danger)" : "var(--color-background-success)",
-                transition: "width 0.3s ease",
-              }} />
-            </div>
-            {data.active_loadout_cc?.over_capacity && (
-              <p style={{ fontSize: 12, color: "var(--color-text-danger)", marginTop: 4 }}>⚠️ Over carry capacity!</p>
-            )}
-          </div>
-        )}
-
         <div className="inventory-summary-grid">
           <div className="card inventory-summary-card">
             <span>Selected OC</span>
@@ -2025,1242 +1648,1009 @@ function InventoryDashboard({
   );
 }
 
-
-// ====== SHOP HUB DASHBOARD (unified) ======
-
-// ---- types ------------------------------------------------
-
-interface Shop {
-  shop_id: string;
-  name: string;
-  description?: string;
-  owner_discord_id?: string;
-  shop_type: "npc" | "player";
-  status: string;
-  is_active: boolean;
-  image_url?: string;
-  item_count: number;
-}
-
-interface ShopItem {
-  item_id: string;
-  shop_id: string;
-  shop_name?: string;
-  name: string;
-  description?: string;
-  category: string;
-  price: number;
-  stock?: number | null;
-  currency_name?: string;
-  currency_emoji?: string;
-  currency_ticker?: string;
-  requires_approval: boolean;
-  is_active: boolean;
-  image_url?: string;
-}
-
-interface Order {
-  order_id: string;
-  item_id?: string;
-  item_name?: string;
-  shop_name?: string;
-  user_id?: string;
-  buyer?: string;
-  quantity: number;
-  status: "pending" | "approved" | "denied" | "fulfilled";
-  note?: string;
-  created_at?: string;
-}
-
-type HubView = "browse" | "storefronts" | "manage" | "orders" | "create";
-
-// ---- helpers ----------------------------------------------
-
-function priceLabel(item: ShopItem) {
-  const currency = item.currency_emoji || item.currency_ticker || item.currency_name || "";
-  return `${item.price ?? 0}${currency ? ` ${currency}` : ""}`;
-}
-
-function stockLabel(item: ShopItem) {
-  if (item.stock === null || item.stock === undefined) return "∞ stock";
-  if (Number(item.stock) <= 0) return "Out of stock";
-  return `${item.stock} in stock`;
-}
-
-function isOos(item: ShopItem) {
-  return item.stock !== null && item.stock !== undefined && Number(item.stock) <= 0;
-}
-
-// ---- sub-components ----------------------------------------
-
-function ItemImage({ url, alt, size = "card" }: { url?: string; alt: string; size?: "card" | "thumb" | "preview" }) {
-  const [broken, setBroken] = useState(false);
-  const heights: Record<string, string> = { card: "120px", thumb: "44px", preview: "56px" };
-  const h = heights[size] || "120px";
-  const w = size !== "card" ? h : "100%";
-
-  if (!url || broken) {
-    return (
-      <div
-        className="item-no-img"
-        style={{
-          width: w,
-          height: h,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "var(--color-background-tertiary)",
-          borderRadius: size === "card" ? "0" : "var(--border-radius-md)",
-          flexShrink: 0,
-        }}
-      >
-        <Package size={size === "card" ? 32 : 18} style={{ opacity: 0.3 }} />
-      </div>
-    );
-  }
-
-  return (
-    <img
-      src={url}
-      alt={alt}
-      onError={() => setBroken(true)}
-      style={{
-        width: w,
-        height: h,
-        objectFit: "cover",
-        display: "block",
-        flexShrink: 0,
-        borderRadius: size === "card" ? "0" : "var(--border-radius-md)",
-      }}
-    />
-  );
-}
-
-function StoreBanner({ url, name }: { url?: string; name: string }) {
-  const [broken, setBroken] = useState(false);
-  return (
-    <div
-      style={{
-        height: 72,
-        background: "var(--color-background-tertiary)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        overflow: "hidden",
-      }}
-    >
-      {url && !broken ? (
-        <img
-          src={url}
-          alt={name}
-          onError={() => setBroken(true)}
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-        />
-      ) : (
-        <Store size={30} style={{ opacity: 0.2 }} />
-      )}
-    </div>
-  );
-}
-
-function ImagePreview({ url }: { url: string }) {
-  const [broken, setBroken] = useState(false);
-  useEffect(() => { setBroken(false); }, [url]);
-  return (
-    <div
-      style={{
-        width: 56,
-        height: 56,
-        flexShrink: 0,
-        borderRadius: "var(--border-radius-md)",
-        overflow: "hidden",
-        border: "0.5px solid var(--color-border-secondary)",
-        background: "var(--color-background-tertiary)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      {url && !broken ? (
-        <img
-          src={url}
-          alt=""
-          onError={() => setBroken(true)}
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-        />
-      ) : (
-        <Package size={20} style={{ opacity: 0.25 }} />
-      )}
-    </div>
-  );
-}
-
-function Badge({ label, variant = "default" }: { label: string; variant?: "default" | "success" | "danger" | "info" | "warn" | "muted" }) {
-  const styles: Record<string, React.CSSProperties> = {
-    default: { background: "var(--color-background-secondary)", color: "var(--color-text-secondary)" },
-    success: { background: "var(--color-background-success)", color: "var(--color-text-success)" },
-    danger: { background: "var(--color-background-danger)", color: "var(--color-text-danger)" },
-    info: { background: "var(--color-background-info)", color: "var(--color-text-info)" },
-    warn: { background: "var(--color-background-warning)", color: "var(--color-text-warning)" },
-    muted: { background: "var(--color-background-secondary)", color: "var(--color-text-secondary)", border: "0.5px solid var(--color-border-secondary)" },
-  };
-  return (
-    <span
-      style={{
-        fontSize: 11,
-        padding: "2px 8px",
-        borderRadius: 20,
-        display: "inline-block",
-        ...styles[variant],
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-function FlashMsg({ text, type }: { text: string; type: "ok" | "err" }) {
-  if (!text) return null;
-  return (
-    <p
-      style={{
-        fontSize: 13,
-        padding: "8px 12px",
-        borderRadius: "var(--border-radius-md)",
-        marginBottom: 10,
-        background: type === "ok" ? "var(--color-background-success)" : "var(--color-background-danger)",
-        color: type === "ok" ? "var(--color-text-success)" : "var(--color-text-danger)",
-        border: `0.5px solid ${type === "ok" ? "var(--color-border-success)" : "var(--color-border-danger)"}`,
-      }}
-    >
-      {text}
-    </p>
-  );
-}
-
-// ---- BROWSE VIEW ------------------------------------------
-
-function BrowseView({
-  discordId,
-  selectedCharacterId,
-  shops,
-}: {
-  discordId: string;
-  selectedCharacterId?: string;
-  shops: Shop[];
-}) {
-  const [items, setItems] = useState<ShopItem[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [summary, setSummary] = useState({ shops: 0, items: 0, approval_required: 0, out_of_stock: 0 });
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [shopFilter, setShopFilter] = useState("all");
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState({ text: "", type: "ok" as "ok" | "err" });
-  const [quantities, setQuantities] = useState<Record<string, number>>({});
-  const [notes, setNotes] = useState<Record<string, string>>({});
-
-  async function load() {
-    if (!discordId) return;
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ category: categoryFilter, shop_id: shopFilter });
-      if (search.trim()) params.set("search", search.trim());
-      const data = await apiFetch(`/api/market/overview?${params}`, {}, discordId);
-      setItems(data.items || []);
-      setCategories(data.categories || []);
-      setSummary(data.summary || {});
-    } catch (e: any) {
-      setMsg({ text: e.message || "Could not load market.", type: "err" });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { load(); }, [discordId, categoryFilter, shopFilter]);
-
-  async function buyItem(item: ShopItem) {
-    const qty = quantities[item.item_id] || 1;
-    if (!selectedCharacterId) {
-      setMsg({ text: "No character selected — go to the OC tab and select your active character first.", type: "err" });
-      return;
-    }
-    try {
-      const result = await apiFetch(
-        `/api/market/items/${item.item_id}/request`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            quantity: qty,
-            character_id: selectedCharacterId,
-            note: notes[item.item_id] || "",
-          }),
-        },
-        discordId
-      );
-      setMsg({ text: result.message || "Request submitted.", type: "ok" });
-      load();
-    } catch (e: any) {
-      setMsg({ text: e.message || "Could not submit request.", type: "err" });
-    }
-  }
-
-  return (
-    <div>
-      {/* Summary cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 10, marginBottom: "1.5rem" }}>
-        {[
-          { label: "Open shops", value: summary.shops },
-          { label: "Items listed", value: summary.items },
-          { label: "Needs approval", value: summary.approval_required },
-          { label: "Out of stock", value: summary.out_of_stock },
-        ].map(({ label, value }) => (
-          <div key={label} className="card" style={{ padding: "12px 14px" }}>
-            <p className="muted-text" style={{ fontSize: 12, marginBottom: 4 }}>{label}</p>
-            <strong style={{ fontSize: 22 }}>{value ?? 0}</strong>
-          </div>
-        ))}
-      </div>
-
-      {/* Character indicator */}
-      {!selectedCharacterId && (
-        <div style={{ fontSize: 13, padding: "8px 12px", borderRadius: "var(--border-radius-md)", marginBottom: 12,
-          background: "var(--color-background-warning)", color: "var(--color-text-warning)",
-          border: "0.5px solid var(--color-border-warning)" }}>
-          ⚠️ No character selected — go to the <strong>OC</strong> tab and select your active character before buying.
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className="card" style={{ padding: 14, marginBottom: "1rem", display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 180 }}>
-          <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Search</span>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && load()}
-            placeholder="Items, shops, categories..."
-          />
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 130 }}>
-          <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Shop</span>
-          <select value={shopFilter} onChange={(e) => setShopFilter(e.target.value)}>
-            <option value="all">All shops</option>
-            {shops.filter((s) => s.is_active).map((s) => (
-              <option key={s.shop_id} value={s.shop_id}>{s.name}</option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 130 }}>
-          <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Category</span>
-          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-            <option value="all">All categories</option>
-            {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </label>
-        <button className="ghost" onClick={load} disabled={loading}>
-          <RefreshCw size={14} /> {loading ? "Loading..." : "Refresh"}
-        </button>
-      </div>
-
-      <FlashMsg text={msg.text} type={msg.type} />
-
-      {/* Item grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 12 }}>
-        {items.length === 0 && !loading && (
-          <div className="card" style={{ gridColumn: "1/-1", textAlign: "center", padding: "2.5rem 1rem", color: "var(--color-text-secondary)" }}>
-            <Package size={36} style={{ marginBottom: 8, opacity: 0.3 }} />
-            <p>No items match your filters.</p>
-          </div>
-        )}
-        {items.map((item) => {
-          const oos = isOos(item);
-          return (
-            <div key={item.item_id} className="card" style={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-              <ItemImage url={item.image_url} alt={item.name} size="card" />
-              <div style={{ padding: "12px 12px 0", flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                  <div>
-                    <p style={{ fontWeight: 500, fontSize: 14, lineHeight: 1.3 }}>{item.name}</p>
-                    <p className="muted-text" style={{ fontSize: 11 }}>{item.shop_name}</p>
-                  </div>
-                  <strong style={{ fontSize: 15, color: "var(--color-text-info)", whiteSpace: "nowrap" }}>{priceLabel(item)}</strong>
-                </div>
-                {item.description && <p className="muted-text" style={{ fontSize: 12, lineHeight: 1.5 }}>{item.description}</p>}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                  <Badge label={item.category || "General"} variant="info" />
-                  <Badge label={stockLabel(item)} variant={oos ? "danger" : "default"} />
-                  {item.requires_approval && <Badge label="Approval required" variant="warn" />}
-                </div>
-              </div>
-              <div style={{ padding: "10px 12px 12px", display: "flex", gap: 6, alignItems: "center" }}>
-                <input
-                  type="number"
-                  min={1}
-                  value={quantities[item.item_id] || 1}
-                  onChange={(e) => setQuantities((q) => ({ ...q, [item.item_id]: Math.max(1, Number(e.target.value)) }))}
-                  style={{ width: 58, fontSize: 13, padding: "5px 8px" }}
-                  aria-label="Quantity"
-                />
-                <button
-                  style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
-                  onClick={() => buyItem(item)}
-                  disabled={oos || !item.item_id}
-                >
-                  <ShoppingCart size={14} />
-                  {item.requires_approval ? "Request" : "Buy"}
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ---- STOREFRONTS VIEW -------------------------------------
-
-function StorefrontsView({ shops, discordId, selectedCharacterId }: { shops: Shop[]; discordId: string; selectedCharacterId?: string }) {
-  const [storeFilter, setStoreFilter] = useState<"all" | "npc" | "player">("all");
-  const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
-  const [shopItems, setShopItems] = useState<ShopItem[]>([]);
-  const [loadingItems, setLoadingItems] = useState(false);
-  const [msg, setMsg] = useState({ text: "", type: "ok" as "ok" | "err" });
-  const [quantities, setQuantities] = useState<Record<string, number>>({});
-  const detailRef = useRef<HTMLDivElement>(null);
-
-  const filtered = shops.filter((s) => storeFilter === "all" || s.shop_type === storeFilter);
-
-  async function openShop(shop: Shop) {
-    setSelectedShop(shop);
-    setLoadingItems(true);
-    try {
-      const data = await apiFetch(`/api/market/overview?shop_id=${shop.shop_id}`, {}, discordId);
-      setShopItems(data.items || []);
-    } catch {
-      setShopItems([]);
-    } finally {
-      setLoadingItems(false);
-      setTimeout(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 100);
-    }
-  }
-
-  async function buyFromStore(item: ShopItem) {
-    const qty = quantities[item.item_id] || 1;
-    if (!selectedCharacterId) {
-      setMsg({ text: "No character selected — go to the OC tab and select your active character first.", type: "err" });
-      return;
-    }
-    try {
-      const result = await apiFetch(
-        `/api/market/items/${item.item_id}/request`,
-        { method: "POST", body: JSON.stringify({ quantity: qty, character_id: selectedCharacterId }) },
-        discordId
-      );
-      setMsg({ text: result.message || "Done.", type: "ok" });
-    } catch (e: any) {
-      setMsg({ text: e.message || "Error.", type: "err" });
-    }
-  }
-
-  return (
-    <div>
-      {/* Filter buttons */}
-      <div style={{ display: "flex", gap: 8, marginBottom: "1rem" }}>
-        {(["all", "npc", "player"] as const).map((f) => (
-          <button key={f} className={storeFilter === f ? "" : "ghost"} onClick={() => setStoreFilter(f)} style={{ fontSize: 13 }}>
-            {f === "all" ? "All" : f === "npc" ? "NPC shops" : "Player shops"}
-          </button>
-        ))}
-      </div>
-
-      {/* Store cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(190px,1fr))", gap: 12, marginBottom: "1.5rem" }}>
-        {filtered.map((shop) => (
-          <div
-            key={shop.shop_id}
-            className="card"
-            onClick={() => openShop(shop)}
-            style={{
-              padding: 0,
-              overflow: "hidden",
-              cursor: "pointer",
-              border: selectedShop?.shop_id === shop.shop_id ? "1.5px solid var(--color-border-info)" : undefined,
-              transition: "border-color 0.15s",
-            }}
-          >
-            <StoreBanner url={shop.image_url} name={shop.name} />
-            <div style={{ padding: "10px 12px" }}>
-              <p style={{ fontWeight: 500, fontSize: 14, marginBottom: 2 }}>{shop.name}</p>
-              <p className="muted-text" style={{ fontSize: 12 }}>{shop.item_count} items</p>
-              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
-                <Badge label={shop.status} variant={shop.is_active ? "success" : "danger"} />
-                <Badge label={shop.shop_type === "npc" ? "NPC" : "Player"} variant="muted" />
-              </div>
-            </div>
-          </div>
-        ))}
-        {filtered.length === 0 && (
-          <p className="muted-text" style={{ fontSize: 13, gridColumn: "1/-1" }}>No shops of this type found.</p>
-        )}
-      </div>
-
-      {/* Selected shop detail */}
-      {selectedShop && (
-        <div ref={detailRef}>
-          <hr style={{ borderColor: "var(--color-border-tertiary)", margin: "0 0 1rem" }} />
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem", flexWrap: "wrap", gap: 8 }}>
-            <div>
-              <h3>{selectedShop.name}</h3>
-              {selectedShop.description && <p className="muted-text" style={{ fontSize: 13 }}>{selectedShop.description}</p>}
-            </div>
-            <button className="ghost" onClick={() => setSelectedShop(null)} style={{ fontSize: 13 }}>
-              <X size={14} /> Close
-            </button>
-          </div>
-          <FlashMsg text={msg.text} type={msg.type} />
-          {loadingItems ? (
-            <p className="muted-text" style={{ fontSize: 13 }}>Loading items...</p>
-          ) : shopItems.length === 0 ? (
-            <p className="muted-text" style={{ fontSize: 13 }}>No items listed in this shop.</p>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 12 }}>
-              {shopItems.map((item) => {
-                const oos = isOos(item);
-                return (
-                  <div key={item.item_id} className="card" style={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-                    <ItemImage url={item.image_url} alt={item.name} size="card" />
-                    <div style={{ padding: "12px 12px 0", flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                        <p style={{ fontWeight: 500, fontSize: 14 }}>{item.name}</p>
-                        <strong style={{ color: "var(--color-text-info)", fontSize: 15, whiteSpace: "nowrap" }}>{priceLabel(item)}</strong>
-                      </div>
-                      {item.description && <p className="muted-text" style={{ fontSize: 12 }}>{item.description}</p>}
-                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                        <Badge label={item.category} variant="info" />
-                        <Badge label={stockLabel(item)} variant={oos ? "danger" : "default"} />
-                        {item.requires_approval && <Badge label="Approval required" variant="warn" />}
-                      </div>
-                    </div>
-                    <div style={{ padding: "10px 12px 12px", display: "flex", gap: 6 }}>
-                      <input
-                        type="number"
-                        min={1}
-                        value={quantities[item.item_id] || 1}
-                        onChange={(e) => setQuantities((q) => ({ ...q, [item.item_id]: Math.max(1, Number(e.target.value)) }))}
-                        style={{ width: 58, fontSize: 13, padding: "5px 8px" }}
-                      />
-                      <button style={{ flex: 1 }} onClick={() => buyFromStore(item)} disabled={oos}>
-                        <ShoppingCart size={13} /> {item.requires_approval ? "Request" : "Buy"}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---- MANAGE VIEW ------------------------------------------
-
-function ManageView({ discordId, isStaff }: { discordId: string; isStaff: boolean }) {
-  const [shops, setShops] = useState<Shop[]>([]);
+function ShopOwnerDashboard({ discordId }: { discordId: string }) {
+  const [shops, setShops] = useState<any[]>([]);
   const [selectedShopId, setSelectedShopId] = useState("");
-  const [shopData, setShopData] = useState<{ shop: Shop | null; items: ShopItem[] }>({ shop: null, items: [] });
-  const [shopForm, setShopForm] = useState({ name: "", description: "", image_url: "", status: "Open" });
-  const [shopMsg, setShopMsg] = useState({ text: "", type: "ok" as "ok" | "err" });
+  const [shopData, setShopData] = useState<any>({ shop: null, items: [], currencies: [] });
+  const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
-
-  // item form
-  const [showItemForm, setShowItemForm] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
-  const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [itemMsg, setItemMsg] = useState({ text: "", type: "ok" as "ok" | "err" });
+  const [shopForm, setShopForm] = useState({
+    name: "",
+    description: "",
+    image_url: "",
+    status: "Open",
+    is_active: true,
+  });
+  const [createShopForm, setCreateShopForm] = useState({
+    name: "",
+    description: "",
+    image_url: "",
+    status: "Open",
+    is_active: true,
+  });
   const [itemForm, setItemForm] = useState({
     name: "",
     description: "",
     category: "General",
     price: "0",
-    stock: "",
-    cc: "0",
+    stock: "0",
+    currency_id: "",
     image_url: "",
     requires_approval: false,
     is_active: true,
-    item_type: "item",
   });
+  const [editingItemId, setEditingItemId] = useState("");
+  const [editingItem, setEditingItem] = useState<any>(null);
+
+  const [orders, setOrders] = useState<any[]>([]);
+  const [orderStatus, setOrderStatus] = useState("pending");
+  const [orderNotes, setOrderNotes] = useState<Record<string, string>>({});
+  const [workingOrderId, setWorkingOrderId] = useState("");
 
   async function loadMyShops() {
     if (!discordId) return;
+
+    setMessage("");
+
     try {
       const data = await apiFetch("/api/shop-owner/shops", {}, discordId);
-      const rows: Shop[] = data.shops || [];
+      const rows = data.shops || [];
       setShops(rows);
-      if (!selectedShopId && rows.length > 0) setSelectedShopId(rows[0].shop_id);
-    } catch {
+
+      if (!selectedShopId && rows.length > 0) {
+        setSelectedShopId(rows[0].shop_id);
+      }
+    } catch (error: any) {
+      setMessage(error.message || "Could not load your shops.");
       setShops([]);
     }
   }
 
-  async function loadShop(sid = selectedShopId) {
-    if (!discordId || !sid) return;
+  async function loadOrders(shopId = selectedShopId) {
+    if (!discordId || !shopId) return;
+
     try {
-      const data = await apiFetch(`/api/shop-owner/shops/${sid}`, {}, discordId);
-      setShopData({ shop: data.shop || null, items: data.items || [] });
-      const s = data.shop || {};
-      setShopForm({
-        name: s.name || "",
-        description: s.description || "",
-        image_url: s.image_url || "",
-        status: s.status || "Open",
-      });
-    } catch {
-      setShopData({ shop: null, items: [] });
-    }
-  }
-
-  useEffect(() => { loadMyShops(); }, [discordId]);
-  useEffect(() => { if (selectedShopId) loadShop(selectedShopId); }, [selectedShopId]);
-
-  async function saveShop() {
-    setSaving(true);
-    setShopMsg({ text: "", type: "ok" });
-    try {
-      const data = await apiFetch(
-        `/api/market/shops/${selectedShopId}`,
-        { method: "PATCH", body: JSON.stringify(shopForm) },
-        discordId
-      );
-      setShopMsg({ text: data.message || "Saved.", type: "ok" });
-      await loadMyShops();
-      await loadShop(selectedShopId);
-    } catch (e: any) {
-      setShopMsg({ text: e.message || "Could not save.", type: "err" });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function openAddItem() {
-    setEditingItemId(null);
-    setItemForm({ name: "", description: "", category: "General", price: "0", stock: "", cc: "0", image_url: "", requires_approval: false, is_active: true, item_type: "item" });
-    setShowItemForm(true);
-    setItemMsg({ text: "", type: "ok" });
-  }
-
-  function openEditItem(item: ShopItem) {
-    setEditingItemId(item.item_id);
-    setItemForm({
-      name: item.name,
-      description: item.description || "",
-      category: item.category || "General",
-      price: String(item.price ?? 0),
-      stock: item.stock !== null && item.stock !== undefined ? String(item.stock) : "",
-      cc: String((item as any).cc || (item as any).wu || 0),
-      image_url: item.image_url || "",
-      requires_approval: item.requires_approval,
-      is_active: item.is_active !== false,
-      item_type: "item",
-    });
-    setShowItemForm(true);
-    setItemMsg({ text: "", type: "ok" });
-  }
-
-  async function saveItem() {
-    if (!itemForm.name.trim()) { setItemMsg({ text: "Item name is required.", type: "err" }); return; }
-    const payload: Record<string, any> = {
-      name: itemForm.name.trim(),
-      description: itemForm.description.trim(),
-      category: itemForm.category,
-      price: parseInt(itemForm.price) || 0,
-      stock: (itemForm.stock === "" || itemForm.stock === null) ? null : (isNaN(parseInt(itemForm.stock)) ? null : parseInt(itemForm.stock)),
-      cc: parseInt(itemForm.cc || "0") || 0,
-      image_url: itemForm.image_url.trim() || null,
-      requires_approval: itemForm.requires_approval,
-      is_active: itemForm.is_active,
-      item_type: itemForm.item_type,
-    };
-    try {
-      if (editingItemId) {
-        const data = await apiFetch(`/api/shop-owner/items/${editingItemId}`, { method: "PATCH", body: JSON.stringify(payload) }, discordId);
-        setItemMsg({ text: data.message || "Item updated.", type: "ok" });
-      } else {
-        const data = await apiFetch(`/api/shop-owner/shops/${selectedShopId}/items`, { method: "POST", body: JSON.stringify(payload) }, discordId);
-        setItemMsg({ text: data.message || "Item created.", type: "ok" });
-      }
-      await loadShop(selectedShopId);
-      setShowItemForm(false);
-    } catch (e: any) {
-      setItemMsg({ text: e.message || "Could not save item.", type: "err" });
-    }
-  }
-
-  async function deleteItem() {
-    if (!editingItemId) return;
-    const item = shopData.items.find((i) => i.item_id === editingItemId);
-    if (!window.confirm(`Delete "${item?.name || "this item"}" permanently?`)) return;
-    try {
-      const result = await apiFetch(`/api/shop-owner/items/${editingItemId}`, { method: "DELETE" }, discordId);
-      setShowItemForm(false);
-      if (result.soft_deleted) {
-        setShopMsg({ text: result.message, type: "ok" });
-      }
-      await loadShop(selectedShopId);
-    } catch (e: any) {
-      setItemMsg({ text: e.message || "Could not delete.", type: "err" });
-    }
-  }
-
-  async function forceDeleteItem(item: ShopItem) {
-    if (!window.confirm(`Force delete "${item.name}"? This will permanently remove it and all its order history. This cannot be undone.`)) return;
-    try {
-      await apiFetch(`/api/shop-owner/items/${item.item_id}/force-delete`, { method: "DELETE" }, discordId);
-      await loadShop(selectedShopId);
-      setShopMsg({ text: `"${item.name}" permanently deleted.`, type: "ok" });
-    } catch (e: any) {
-      setShopMsg({ text: e.message || "Could not force delete.", type: "err" });
-    }
-  }
-
-  async function toggleItem(item: ShopItem) {
-    try {
-      await apiFetch(`/api/shop-owner/items/${item.item_id}/toggle`, { method: "POST" }, discordId);
-      await loadShop(selectedShopId);
-    } catch { /* silent */ }
-  }
-
-  return (
-    <div>
-      {/* Shop selector */}
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap" }}>
-        <span className="muted-text" style={{ fontSize: 13 }}>Your shop:</span>
-        <select value={selectedShopId} onChange={(e) => setSelectedShopId(e.target.value)} style={{ flex: 1, minWidth: 160 }}>
-          <option value="">Select a shop...</option>
-          {shops.map((s) => <option key={s.shop_id} value={s.shop_id}>{s.name}</option>)}
-        </select>
-      </div>
-
-      {!selectedShopId ? (
-        <div className="card" style={{ textAlign: "center", padding: "2rem", color: "var(--color-text-secondary)" }}>
-          <Store size={36} style={{ marginBottom: 8, opacity: 0.25 }} />
-          <p style={{ fontSize: 13 }}>Select a shop to manage it, or create a new one from the Create tab.</p>
-        </div>
-      ) : (
-        <>
-          {/* Shop settings */}
-          <div className="card" style={{ marginBottom: "1.5rem" }}>
-            <h3 style={{ fontSize: 15, fontWeight: 500, marginBottom: 14 }}>Shop settings</h3>
-            <FlashMsg text={shopMsg.text} type={shopMsg.type} />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
-              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Shop name</span>
-                <input value={shopForm.name} onChange={(e) => setShopForm((f) => ({ ...f, name: e.target.value }))} />
-              </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Status</span>
-                <select value={shopForm.status} onChange={(e) => setShopForm((f) => ({ ...f, status: e.target.value }))}>
-                  <option>Open</option>
-                  <option>Closed</option>
-                  <option>Coming Soon</option>
-                </select>
-              </label>
-            </div>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
-              <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Description</span>
-              <textarea value={shopForm.description} onChange={(e) => setShopForm((f) => ({ ...f, description: e.target.value }))} style={{ minHeight: 60, resize: "vertical" }} />
-            </label>
-            <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
-              <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-                <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Banner / logo URL</span>
-                <input
-                  value={shopForm.image_url}
-                  onChange={(e) => setShopForm((f) => ({ ...f, image_url: e.target.value }))}
-                  placeholder="https://..."
-                />
-                <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>PNG, JPG, GIF, WebP — paste any image URL</span>
-              </label>
-              <ImagePreview url={shopForm.image_url} />
-            </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-              <button onClick={saveShop} disabled={saving}>
-                <Save size={14} /> {saving ? "Saving..." : "Save settings"}
-              </button>
-            </div>
-          </div>
-
-          {/* Items list */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 500 }}>Items ({shopData.items.filter(i => i.is_active || showArchived).length})</h3>
-            <div style={{ display: "flex", gap: 6 }}>
-              {shopData.items.some(i => !i.is_active) && (
-                <button className="ghost" onClick={() => setShowArchived(a => !a)} style={{ fontSize: 12 }}>
-                  <Eye size={12} /> {showArchived ? "Hide archived" : `Show archived (${shopData.items.filter(i => !i.is_active).length})`}
-                </button>
-              )}
-              <button onClick={openAddItem}>
-                <Plus size={14} /> Add item
-              </button>
-            </div>
-          </div>
-
-          {shopData.items.filter(i => showArchived || i.is_active).length === 0 ? (
-            <div className="card" style={{ textAlign: "center", padding: "1.5rem", color: "var(--color-text-secondary)" }}>
-              <Package size={28} style={{ marginBottom: 6, opacity: 0.25 }} />
-              <p style={{ fontSize: 13 }}>No items yet — add your first one above.</p>
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {shopData.items.filter(i => showArchived || i.is_active).map((item) => (
-                <div key={item.item_id} className="card" style={{ display: "flex", gap: 12, alignItems: "center", padding: "10px 12px" }}>
-                  <ItemImage url={item.image_url} alt={item.name} size="thumb" />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontWeight: 500, fontSize: 13 }}>{item.name}</p>
-                    <p className="muted-text" style={{ fontSize: 12 }}>
-                      {item.category} · {priceLabel(item)} · {stockLabel(item)}{item.requires_approval ? " · Approval req." : ""}{!item.is_active ? " · Hidden" : ""}
-                    </p>
-                  </div>
-                  <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                    <button className="ghost" onClick={() => openEditItem(item)} style={{ padding: "4px 8px" }} title="Edit">
-                      <Edit size={13} />
-                    </button>
-                    <button className="ghost" onClick={() => toggleItem(item)} style={{ padding: "4px 8px" }} title={item.is_active ? "Hide" : "Show"}>
-                      {item.is_active ? <EyeOff size={13} /> : <Eye size={13} />}
-                    </button>
-                    {!item.is_active && isStaff && (
-                      <button
-                        className="ghost"
-                        onClick={() => forceDeleteItem(item)}
-                        style={{ padding: "4px 8px", color: "var(--color-text-danger)" }}
-                        title="Force delete (staff only — removes order history)"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Item form */}
-          {showItemForm && (
-            <div className="card" style={{ marginTop: 12 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 500, marginBottom: 14 }}>
-                {editingItemId ? "Edit item" : "Add item"}
-              </h3>
-              <FlashMsg text={itemMsg.text} type={itemMsg.type} />
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
-                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Item name *</span>
-                  <input value={itemForm.name} onChange={(e) => setItemForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Iron Sword" />
-                </label>
-                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Category</span>
-                  <select value={itemForm.category} onChange={(e) => setItemForm((f) => ({ ...f, category: e.target.value }))}>
-                    {["General", "Weapon", "Armor", "Consumable", "Material", "Misc", "Service", "Role"].map((c) => <option key={c}>{c}</option>)}
-                  </select>
-                </label>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
-                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Price *</span>
-                  <input type="number" min={0} value={itemForm.price} onChange={(e) => setItemForm((f) => ({ ...f, price: e.target.value }))} />
-                </label>
-                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Stock (blank = unlimited)</span>
-                  <input type="text" inputMode="numeric" value={itemForm.stock} onChange={(e) => {
-                    const v = e.target.value.replace(/[^0-9]/g, "");
-                    setItemForm((f) => ({ ...f, stock: v }));
-                  }} placeholder="∞ (leave blank for unlimited)" style={{ width: "100%" }} />
-                </label>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
-                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>CC (Carry Capacity cost)</span>
-                  <input type="text" inputMode="numeric" value={itemForm.cc} onChange={(e) => {
-                    const v = e.target.value.replace(/[^0-9]/g, "");
-                    setItemForm((f) => ({ ...f, cc: v || "0" }));
-                  }} placeholder="0" />
-                  <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>0 = free (trinkets, flavor items). Worn armor CC is ignored.</span>
-                </label>
-                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Item type</span>
-                  <select value={itemForm.item_type || "item"} onChange={(e) => setItemForm((f) => ({ ...f, item_type: e.target.value }))}>
-                    <option value="item">Item</option>
-                    <option value="consumable">Consumable</option>
-                    <option value="material">Material</option>
-                  </select>
-                </label>
-              </div>
-              <label style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
-                <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Description</span>
-                <textarea value={itemForm.description} onChange={(e) => setItemForm((f) => ({ ...f, description: e.target.value }))} style={{ minHeight: 60, resize: "vertical" }} />
-              </label>
-              <div style={{ display: "flex", gap: 10, alignItems: "flex-end", marginBottom: 10 }}>
-                <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-                  <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Item image URL</span>
-                  <input value={itemForm.image_url} onChange={(e) => setItemForm((f) => ({ ...f, image_url: e.target.value }))} placeholder="https://..." />
-                  <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>Shows on item card in the market</span>
-                </label>
-                <ImagePreview url={itemForm.image_url} />
-              </div>
-              <div style={{ display: "flex", gap: 20, marginBottom: 14 }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                  <input type="checkbox" checked={itemForm.requires_approval} onChange={(e) => setItemForm((f) => ({ ...f, requires_approval: e.target.checked }))} style={{ width: "auto" }} />
-                  Requires approval
-                </label>
-                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                  <input type="checkbox" checked={itemForm.is_active} onChange={(e) => setItemForm((f) => ({ ...f, is_active: e.target.checked }))} style={{ width: "auto" }} />
-                  Visible / purchasable
-                </label>
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={saveItem}><Check size={14} /> Save item</button>
-                <button className="ghost" onClick={() => setShowItemForm(false)}><X size={14} /> Cancel</button>
-                {editingItemId && (
-                  <button className="ghost" onClick={deleteItem} style={{ marginLeft: "auto", color: "var(--color-text-danger)" }}>
-                    <Trash2 size={14} /> Delete
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-// ---- ORDERS VIEW ------------------------------------------
-
-function OrdersView({ discordId, isStaff }: { discordId: string; isStaff: boolean }) {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [statusFilter, setStatusFilter] = useState("pending");
-  const [role, setRole] = useState<"buyer" | "seller" | "staff">("buyer");
-  const [msg, setMsg] = useState({ text: "", type: "ok" as "ok" | "err" });
-  const [working, setWorking] = useState("");
-
-  async function load() {
-    if (!discordId) return;
-    try {
-      let endpoint = "";
-      if (role === "buyer") {
-        endpoint = `/api/market/orders?status=${statusFilter}`;
-      } else if (role === "seller") {
-        const shopsData = await apiFetch("/api/shop-owner/shops", {}, discordId);
-        const firstShop = (shopsData.shops || [])[0];
-        endpoint = firstShop
-          ? `/api/shop-owner/shops/${firstShop.shop_id}/orders?status=${statusFilter}`
-          : `/api/market/orders?status=${statusFilter}`;
-      } else {
-        endpoint = `/api/market/orders?status=${statusFilter}`;
-      }
-      const data = await apiFetch(endpoint, {}, discordId);
+      const data = await apiFetch(`/api/shop-owner/shops/${shopId}/orders?status=${orderStatus}`, {}, discordId);
       setOrders(data.orders || []);
     } catch {
       setOrders([]);
     }
   }
 
-  useEffect(() => { load(); }, [discordId, statusFilter, role]);
+  async function actOnOrder(order: any, action: "approve" | "deny" | "fulfill") {
+    const orderId = order.order_id;
+    const note = orderNotes[orderId] || "";
 
-  async function act(order: Order, action: "approve" | "deny" | "fulfill") {
-    let reason = "";
-    if (action === "deny") {
-      reason = window.prompt("Reason for denial (required):") || "";
-      if (!reason.trim()) return;
+    if (action === "deny" && !note.trim()) {
+      setMessage("A denial reason is required.");
+      return;
     }
-    setWorking(order.order_id);
+
+    setWorkingOrderId(orderId);
+    setMessage("");
+
     try {
-      const body = action === "deny" ? { reason } : {};
+      const body = JSON.stringify(action === "deny" ? { reason: note } : { note });
       const data = await apiFetch(
-        `/api/shop-owner/orders/${order.order_id}/${action}`,
-        { method: "POST", body: JSON.stringify(body) },
+        `/api/shop-owner/orders/${orderId}/${action}`,
+        { method: "POST", body },
         discordId
       );
-      setMsg({ text: data.message || "Updated.", type: "ok" });
-      load();
-    } catch (e: any) {
-      setMsg({ text: e.message || "Error.", type: "err" });
+
+      setMessage(data.message || "Order updated.");
+      await loadOrders(selectedShopId);
+      await loadShop(selectedShopId);
+    } catch (error: any) {
+      setMessage(error.message || "Could not update order.");
     } finally {
-      setWorking("");
+      setWorkingOrderId("");
     }
   }
 
-  const statusVariant: Record<string, "default" | "warn" | "success" | "danger" | "info" | "muted"> = {
-    pending: "warn",
-    paid: "warn",
-    approved: "success",
-    denied: "danger",
-    fulfilled: "info",
-  };
+  async function loadShop(shopId = selectedShopId) {
+    if (!discordId || !shopId) return;
 
-  return (
-    <div>
-      <div className="card" style={{ padding: 14, marginBottom: "1rem", display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
-        {isStaff && (
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>View as</span>
-            <select value={role} onChange={(e) => setRole(e.target.value as any)}>
-              <option value="buyer">My orders (buyer)</option>
-              <option value="seller">My shop orders (seller)</option>
-              <option value="staff">All orders (staff)</option>
-            </select>
-          </label>
-        )}
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Status</span>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="pending">Pending / Awaiting Approval</option>
-            <option value="approved">Approved</option>
-            <option value="denied">Denied</option>
-            <option value="fulfilled">Fulfilled</option>
-            <option value="all">All</option>
-          </select>
-        </label>
-        <button className="ghost" onClick={load}><RefreshCw size={14} /> Refresh</button>
-      </div>
+    setMessage("");
 
-      <FlashMsg text={msg.text} type={msg.type} />
-
-      {orders.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: "2rem", color: "var(--color-text-secondary)" }}>
-          <Package size={28} style={{ opacity: 0.25, marginBottom: 6 }} />
-          <p style={{ fontSize: 13 }}>No orders match this filter.</p>
-        </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {orders.map((order) => (
-            <div key={order.order_id} className="card" style={{ display: "flex", gap: 12, alignItems: "center", padding: "10px 14px", flexWrap: "wrap" }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontWeight: 500, fontSize: 13 }}>{order.item_name || "Item"}</p>
-                <p className="muted-text" style={{ fontSize: 12 }}>
-                  {order.shop_name || ""}{order.shop_name && " · "}
-                  Qty: {order.quantity}{order.note ? ` · "${order.note}"` : ""}
-                </p>
-              </div>
-              <Badge label={order.status} variant={statusVariant[order.status] || "default"} />
-              <div style={{ display: "flex", gap: 4 }}>
-                {(order.status === "pending" || order.status === "PENDING" || order.status === "PAID" || order.status === "paid") && (
-                  <>
-                    <button
-                      className="ghost"
-                      onClick={() => act(order, "approve")}
-                      disabled={working === order.order_id}
-                      style={{ padding: "4px 10px", color: "var(--color-text-success)" }}
-                    >
-                      <Check size={13} /> Approve
-                    </button>
-                    <button
-                      className="ghost"
-                      onClick={() => act(order, "deny")}
-                      disabled={working === order.order_id}
-                      style={{ padding: "4px 10px", color: "var(--color-text-danger)" }}
-                    >
-                      <X size={13} /> Deny
-                    </button>
-                  </>
-                )}
-                {(order.status === "approved" || order.status === "APPROVED") && (
-                  <button
-                    className="ghost"
-                    onClick={() => act(order, "fulfill")}
-                    disabled={working === order.order_id}
-                    style={{ padding: "4px 10px" }}
-                  >
-                    <Package size={13} /> Fulfill
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---- CREATE VIEW ------------------------------------------
-
-function CreateView({ discordId, isStaff, onCreated }: { discordId: string; isStaff: boolean; onCreated: () => void }) {
-  const [form, setForm] = useState({ name: "", description: "", image_url: "", shop_type: "player" });
-  const [msg, setMsg] = useState({ text: "", type: "ok" as "ok" | "err" });
-  const [saving, setSaving] = useState(false);
-
-  async function create() {
-    if (!form.name.trim()) { setMsg({ text: "Shop name is required.", type: "err" }); return; }
-    setSaving(true);
     try {
-      let endpoint = "/api/shop-owner/shops";
-      const payload: Record<string, any> = { name: form.name.trim(), description: form.description.trim(), image_url: form.image_url.trim() || null };
+      const data = await apiFetch(`/api/shop-owner/shops/${shopId}`, {}, discordId);
+      setShopData(data);
 
-      if (form.shop_type === "npc") {
-        // Staff-only NPC shop endpoint
-        endpoint = "/api/market/shops";
+      const shop = data.shop || {};
+      setShopForm({
+        name: shop.name || "",
+        description: shop.description || "",
+        image_url: shop.image_url || "",
+        status: shop.status || "Open",
+        is_active: shop.is_active !== false,
+      });
+    } catch (error: any) {
+      setMessage(error.message || "Could not load shop tools.");
+      setShopData({ shop: null, items: [], currencies: [] });
+    }
+  }
+
+  useEffect(() => {
+    loadMyShops();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId]);
+
+  useEffect(() => {
+    if (selectedShopId) loadShop(selectedShopId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedShopId]);
+
+  async function createShop() {
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const data = await apiFetch(
+        "/api/shop-owner/shops",
+        { method: "POST", body: JSON.stringify(createShopForm) },
+        discordId
+      );
+
+      setMessage(data.message || "Shop created.");
+      setCreateShopForm({
+        name: "",
+        description: "",
+        image_url: "",
+        status: "Open",
+        is_active: true,
+      });
+
+      await loadMyShops();
+
+      const newShopId = data.shop?.shop_id;
+      if (newShopId) {
+        setSelectedShopId(newShopId);
+        await loadShop(newShopId);
       }
-
-      const data = await apiFetch(endpoint, { method: "POST", body: JSON.stringify(payload) }, discordId);
-      setMsg({ text: data.message || "Shop created!", type: "ok" });
-      setForm({ name: "", description: "", image_url: "", shop_type: "player" });
-      setTimeout(() => onCreated(), 1200);
-    } catch (e: any) {
-      setMsg({ text: e.message || "Could not create shop.", type: "err" });
+    } catch (error: any) {
+      setMessage(error.message || "Could not create shop.");
     } finally {
       setSaving(false);
     }
   }
 
+  async function saveShop() {
+    if (!selectedShopId) return;
+
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const data = await apiFetch(
+        `/api/shop-owner/shops/${selectedShopId}`,
+        { method: "PATCH", body: JSON.stringify(shopForm) },
+        discordId
+      );
+
+      setMessage(data.message || "Shop updated.");
+      await loadMyShops();
+      await loadShop(selectedShopId);
+    } catch (error: any) {
+      setMessage(error.message || "Could not save shop.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function resetItemForm() {
+    setEditingItemId("");
+    setEditingItem(null);
+    setItemForm({
+      name: "",
+      description: "",
+      category: "General",
+      price: "0",
+      stock: "0",
+      currency_id: "",
+      image_url: "",
+      requires_approval: false,
+      is_active: true,
+    });
+  }
+
+  function startEditItem(item: any) {
+    setEditingItemId(item.item_id);
+    setEditingItem(item);
+    setItemForm({
+      name: item.name || "",
+      description: item.description || "",
+      category: item.category || "General",
+      price: String(item.price ?? 0),
+      stock: String(item.stock ?? 0),
+      currency_id: item.currency_id || "",
+      image_url: item.image_url || "",
+      requires_approval: Boolean(item.requires_approval),
+      is_active: item.is_active !== false,
+    });
+  }
+
+  async function saveItem() {
+    if (!selectedShopId) return;
+
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const endpoint = editingItemId
+        ? `/api/shop-owner/items/${editingItemId}`
+        : `/api/shop-owner/shops/${selectedShopId}/items`;
+
+      const method = editingItemId ? "PATCH" : "POST";
+      const data = await apiFetch(endpoint, { method, body: JSON.stringify(itemForm) }, discordId);
+
+      setMessage(data.message || (editingItemId ? "Item updated." : "Item created."));
+      resetItemForm();
+      await loadShop(selectedShopId);
+    } catch (error: any) {
+      setMessage(error.message || "Could not save item.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleItem(item: any) {
+    if (!item.item_id) return;
+
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const data = await apiFetch(
+        `/api/shop-owner/items/${item.item_id}/toggle`,
+        { method: "POST" },
+        discordId
+      );
+
+      setMessage(data.message || "Item updated.");
+      await loadShop(selectedShopId);
+    } catch (error: any) {
+      setMessage(error.message || "Could not toggle item.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const shop = shopData.shop;
+  const items = shopData.items || [];
+  const currencies = shopData.currencies || [];
+
   return (
-    <div>
-      <div className="card">
-        <h3 style={{ fontSize: 15, fontWeight: 500, marginBottom: 14 }}>Create storefront</h3>
-        <FlashMsg text={msg.text} type={msg.type} />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Shop name *</span>
-            <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. The Wanderer's Goods" />
+    <RequireDiscord discordId={discordId}>
+      <section className="shop-owner-page">
+        <div className="card shop-owner-hero">
+          <div>
+            <span className="activity-type-label">Owner Tools</span>
+            <h2>Manage Shop</h2>
+            <p className="muted-text">
+              Edit your storefront, create items, update prices/stock, and activate or hide listings.
+            </p>
+          </div>
+          <button className="ghost" onClick={() => loadShop()} disabled={saving || !selectedShopId}>
+            <RefreshCw size={16} /> Refresh
+          </button>
+        </div>
+
+        <div className="card shop-owner-picker">
+          <label>
+            <span>Choose Shop</span>
+            <select value={selectedShopId} onChange={(event) => setSelectedShopId(event.target.value)}>
+              <option value="">Select a shop</option>
+              {shops.map((shop) => (
+                <option value={shop.shop_id} key={shop.shop_id}>
+                  {shop.name}
+                </option>
+              ))}
+            </select>
           </label>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Type</span>
-            <select value={form.shop_type} onChange={(e) => setForm((f) => ({ ...f, shop_type: e.target.value }))} disabled={!isStaff}>
-              <option value="player">Player-owned shop</option>
-              {isStaff && <option value="npc">NPC shop (staff-run)</option>}
+
+          {shops.length === 0 ? (
+            <div className="shop-create-empty-state">
+              <div>
+                <strong>No shop found yet.</strong>
+                <p className="muted-text">
+                  If you bought a shop owner token, create your storefront here. Staff can still review activity through the audit log.
+                </p>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        {message ? <p className="message">{message}</p> : null}
+
+        {shops.length === 0 ? (
+          <div className="card shop-create-card">
+            <div className="card-title-row">
+              <div>
+                <h3>Create Your Storefront</h3>
+                <p className="muted-text">
+                  This is where shop owner token holders make their first store.
+                </p>
+              </div>
+            </div>
+
+            <div className="shop-owner-form">
+              <label>
+                <span>Shop Name</span>
+                <input
+                  value={createShopForm.name}
+                  onChange={(event) => setCreateShopForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Example: Meris' Relic Exchange"
+                />
+              </label>
+
+              <label>
+                <span>Status</span>
+                <input
+                  value={createShopForm.status}
+                  onChange={(event) => setCreateShopForm((current) => ({ ...current, status: event.target.value }))}
+                  placeholder="Open, Coming Soon, Restocking..."
+                />
+              </label>
+
+              <label className="shop-owner-wide">
+                <span>Banner / Image URL</span>
+                <input
+                  value={createShopForm.image_url}
+                  onChange={(event) => setCreateShopForm((current) => ({ ...current, image_url: event.target.value }))}
+                  placeholder="https://..."
+                />
+              </label>
+
+              <label className="shop-owner-wide">
+                <span>Description</span>
+                <textarea
+                  rows={4}
+                  value={createShopForm.description}
+                  onChange={(event) => setCreateShopForm((current) => ({ ...current, description: event.target.value }))}
+                  placeholder="What does your shop sell? What is the vibe?"
+                />
+              </label>
+
+              <label className="shop-owner-check">
+                <input
+                  type="checkbox"
+                  checked={createShopForm.is_active}
+                  onChange={(event) => setCreateShopForm((current) => ({ ...current, is_active: event.target.checked }))}
+                />
+                <span>Publish shop immediately</span>
+              </label>
+            </div>
+
+            <div className="auth-actions">
+              <button onClick={createShop} disabled={saving || !createShopForm.name.trim()}>
+                <Store size={16} /> {saving ? "Creating..." : "Create Storefront"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {shop ? (
+          <div className="shop-owner-layout">
+            <div className="shop-owner-main">
+              <div className="card shop-owner-editor">
+                <div className="card-title-row">
+                  <div>
+                    <h3>Storefront Settings</h3>
+                    <p className="muted-text">These fields control how the shop appears in the Market District.</p>
+                  </div>
+                  <span className="pill">{shop.is_active ? "Active" : "Inactive"}</span>
+                </div>
+
+                <div className="shop-owner-form">
+                  <label>
+                    <span>Shop Name</span>
+                    <input
+                      value={shopForm.name}
+                      onChange={(event) => setShopForm((current) => ({ ...current, name: event.target.value }))}
+                    />
+                  </label>
+
+                  <label>
+                    <span>Status</span>
+                    <input
+                      value={shopForm.status}
+                      onChange={(event) => setShopForm((current) => ({ ...current, status: event.target.value }))}
+                      placeholder="Open, Closed, Restocking..."
+                    />
+                  </label>
+
+                  <label className="shop-owner-wide">
+                    <span>Banner / Image URL</span>
+                    <input
+                      value={shopForm.image_url}
+                      onChange={(event) => setShopForm((current) => ({ ...current, image_url: event.target.value }))}
+                      placeholder="https://..."
+                    />
+                  </label>
+
+                  <label className="shop-owner-wide">
+                    <span>Description</span>
+                    <textarea
+                      rows={4}
+                      value={shopForm.description}
+                      onChange={(event) => setShopForm((current) => ({ ...current, description: event.target.value }))}
+                      placeholder="What does this storefront sell?"
+                    />
+                  </label>
+
+                  <label className="shop-owner-check">
+                    <input
+                      type="checkbox"
+                      checked={shopForm.is_active}
+                      onChange={(event) => setShopForm((current) => ({ ...current, is_active: event.target.checked }))}
+                    />
+                    <span>Shop is active / visible</span>
+                  </label>
+                </div>
+
+                <div className="auth-actions">
+                  <button onClick={saveShop} disabled={saving}>
+                    <Save size={16} /> {saving ? "Saving..." : "Save Shop"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="card shop-item-editor">
+                <div className="card-title-row">
+                  <div>
+                    <h3>{editingItemId ? "Edit Item" : "Create Item"}</h3>
+                    <p className="muted-text">
+                      Add or update a listing without touching Discord commands.
+                    </p>
+                  </div>
+                  {editingItemId ? <button className="ghost" onClick={resetItemForm}>Cancel Edit</button> : null}
+                </div>
+
+                <div className="shop-owner-form">
+                  <label>
+                    <span>Item Name</span>
+                    <input
+                      value={itemForm.name}
+                      onChange={(event) => setItemForm((current) => ({ ...current, name: event.target.value }))}
+                      placeholder="Potion, relic, license..."
+                    />
+                  </label>
+
+                  <label>
+                    <span>Category</span>
+                    <input
+                      value={itemForm.category}
+                      onChange={(event) => setItemForm((current) => ({ ...current, category: event.target.value }))}
+                      placeholder="Consumable, Relic, Service..."
+                    />
+                  </label>
+
+                  <label>
+                    <span>Price</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={itemForm.price}
+                      onChange={(event) => setItemForm((current) => ({ ...current, price: event.target.value }))}
+                    />
+                  </label>
+
+                  <label>
+                    <span>Stock</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={itemForm.stock}
+                      onChange={(event) => setItemForm((current) => ({ ...current, stock: event.target.value }))}
+                    />
+                  </label>
+
+                  <label>
+                    <span>Currency</span>
+                    <select
+                      value={itemForm.currency_id}
+                      onChange={(event) => setItemForm((current) => ({ ...current, currency_id: event.target.value }))}
+                    >
+                      <option value="">Default / blank</option>
+                      {currencies.map((currency: any) => {
+                        const id = String(currency.currency_id || currency.id || "");
+                        return (
+                          <option value={id} key={id}>
+                            {currency.emoji ? `${currency.emoji} ` : ""}
+                            {currency.ticker || currency.name || id}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </label>
+
+                  <label>
+                    <span>Image URL</span>
+                    <input
+                      value={itemForm.image_url}
+                      onChange={(event) => setItemForm((current) => ({ ...current, image_url: event.target.value }))}
+                      placeholder="https://..."
+                    />
+                  </label>
+
+                  <label className="shop-owner-wide">
+                    <span>Description</span>
+                    <textarea
+                      rows={4}
+                      value={itemForm.description}
+                      onChange={(event) => setItemForm((current) => ({ ...current, description: event.target.value }))}
+                      placeholder="Describe what the item does or why someone would buy it."
+                    />
+                  </label>
+
+                  <label className="shop-owner-check">
+                    <input
+                      type="checkbox"
+                      checked={itemForm.requires_approval}
+                      onChange={(event) =>
+                        setItemForm((current) => ({ ...current, requires_approval: event.target.checked }))
+                      }
+                    />
+                    <span>Requires staff/shop approval</span>
+                  </label>
+
+                  <label className="shop-owner-check">
+                    <input
+                      type="checkbox"
+                      checked={itemForm.is_active}
+                      onChange={(event) =>
+                        setItemForm((current) => ({ ...current, is_active: event.target.checked }))
+                      }
+                    />
+                    <span>Item is active / visible</span>
+                  </label>
+                </div>
+
+                <div className="auth-actions">
+                  <button onClick={saveItem} disabled={saving}>
+                    <Save size={16} /> {saving ? "Saving..." : editingItemId ? "Save Item" : "Create Item"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <aside className="shop-owner-side">
+
+              <div className="card shop-owner-orders-card">
+                <div className="card-title-row">
+                  <div>
+                    <h3>Shop Orders</h3>
+                    <p className="muted-text">Approve, deny, or fulfill item requests for this shop.</p>
+                  </div>
+                  <span className="pill">{orders.length}</span>
+                </div>
+
+                <div className="shop-order-filter-row">
+                  <select value={orderStatus} onChange={(event) => setOrderStatus(event.target.value)}>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="fulfilled">Fulfilled</option>
+                    <option value="denied">Denied</option>
+                    <option value="all">All</option>
+                  </select>
+                  <button className="ghost" onClick={() => loadOrders()} disabled={!selectedShopId}>
+                    <RefreshCw size={16} /> Refresh Orders
+                  </button>
+                </div>
+
+                <div className="shop-owner-order-list">
+                  {orders.length === 0 ? (
+                    <p className="muted-text">No orders found for this status.</p>
+                  ) : null}
+
+                  {orders.map((order: any) => {
+                    const pending = order.status === "pending";
+                    const approved = order.status === "approved";
+                    const working = workingOrderId === order.order_id;
+
+                    return (
+                      <div className="shop-owner-order-row" key={order.order_id}>
+                        <div className="shop-owner-order-top">
+                          <div>
+                            <strong>{order.item_name || "Unknown Item"}</strong>
+                            <span>Qty {order.quantity || 1} • {order.status}</span>
+                            <small>Buyer: {order.user_id ? `<@${order.user_id}>` : "—"} {order.character_id ? `• OC: ${order.character_id}` : ""}</small>
+                          </div>
+                          <em className={`request-status-pill ${order.status}`}>{order.status}</em>
+                        </div>
+
+                        {order.note ? <p className="muted-text">Buyer note: {order.note}</p> : null}
+                        {order.staff_note ? <p className="muted-text">Staff note: {order.staff_note}</p> : null}
+
+                        {(pending || approved) ? (
+                          <div className="shop-owner-order-actions">
+                            <input
+                              value={orderNotes[order.order_id] || ""}
+                              onChange={(event) =>
+                                setOrderNotes((current) => ({ ...current, [order.order_id]: event.target.value }))
+                              }
+                              placeholder="Optional note, required for denial..."
+                            />
+
+                            <div className="auth-actions">
+                              {pending ? (
+                                <>
+                                  <button onClick={() => actOnOrder(order, "approve")} disabled={working}>
+                                    <Check size={16} /> Approve
+                                  </button>
+                                  <button className="danger-button" onClick={() => actOnOrder(order, "deny")} disabled={working}>
+                                    <X size={16} /> Deny
+                                  </button>
+                                </>
+                              ) : null}
+
+                              {pending || approved ? (
+                                <button onClick={() => actOnOrder(order, "fulfill")} disabled={working}>
+                                  <Package size={16} /> Fulfill
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="card shop-owner-items-card">
+                <div className="card-title-row">
+                  <div>
+                    <h3>Current Items</h3>
+                    <p className="muted-text">Click edit to update a listing.</p>
+                  </div>
+                  <span className="pill">{items.length}</span>
+                </div>
+
+                <div className="shop-owner-item-list">
+                  {items.length === 0 ? (
+                    <p className="muted-text">No items yet. Create the first listing.</p>
+                  ) : null}
+
+                  {items.map((item: any) => (
+                    <div className="shop-owner-item-row" key={item.item_id || item.name}>
+                      <div>
+                        <strong>{item.name}</strong>
+                        <span>{item.category} • {item.price} • Stock {item.stock ?? "∞"}</span>
+                        <small>{item.is_active ? "Active" : "Inactive"}{item.requires_approval ? " • Approval required" : ""}</small>
+                      </div>
+
+                      <div className="shop-owner-item-actions">
+                        <button className="ghost" onClick={() => startEditItem(item)}>Edit</button>
+                        <button className="ghost" onClick={() => toggleItem(item)}>
+                          {item.is_active ? "Hide" : "Show"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </aside>
+          </div>
+        ) : null}
+      </section>
+    </RequireDiscord>
+  );
+}
+
+function ShopDashboard({ discordId, selectedCharacterId }: { discordId: string; selectedCharacterId?: string }) {
+  const [data, setData] = useState<any>({ shops: [], items: [], categories: [], summary: {} });
+  const [orders, setOrders] = useState<any[]>([]);
+  const [message, setMessage] = useState("");
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("all");
+  const [shopId, setShopId] = useState("all");
+  const [orderStatus, setOrderStatus] = useState("pending");
+  const [loading, setLoading] = useState(false);
+  const [quantityByItem, setQuantityByItem] = useState<Record<string, number>>({});
+  const [noteByItem, setNoteByItem] = useState<Record<string, string>>({});
+
+  async function loadMarket() {
+    if (!discordId) return;
+
+    setLoading(true);
+    setMessage("");
+
+    try {
+      const params = new URLSearchParams({
+        category,
+        shop_id: shopId,
+      });
+      if (search.trim()) params.set("search", search.trim());
+
+      const result = await apiFetch(`/api/market/overview?${params.toString()}`, {}, discordId);
+      setData(result);
+    } catch (error: any) {
+      setMessage(error.message || "Could not load market.");
+      setData({ shops: [], items: [], categories: [], summary: {} });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadOrders() {
+    if (!discordId) return;
+
+    try {
+      const result = await apiFetch(`/api/market/orders?status=${orderStatus}`, {}, discordId);
+      setOrders(result.orders || []);
+    } catch {
+      setOrders([]);
+    }
+  }
+
+  useEffect(() => {
+    loadMarket();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId, category, shopId]);
+
+  useEffect(() => {
+    loadOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordId, orderStatus]);
+
+  function submitSearch(event: React.FormEvent) {
+    event.preventDefault();
+    loadMarket();
+  }
+
+  function priceLabel(item: any) {
+    const currency = item.currency_emoji || item.currency_ticker || item.currency_name || "";
+    return `${item.price ?? 0}${currency ? ` ${currency}` : ""}`;
+  }
+
+  function stockLabel(item: any) {
+    if (item.stock === null || item.stock === undefined) return "Stock: ∞";
+    if (Number(item.stock) <= 0) return "Out of stock";
+    return `Stock: ${item.stock}`;
+  }
+
+  async function requestItem(item: any) {
+    const itemId = item.item_id;
+    const quantity = quantityByItem[itemId] || 1;
+
+    setMessage("");
+
+    try {
+      const result = await apiFetch(
+        `/api/market/items/${itemId}/request`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            quantity,
+            character_id: selectedCharacterId || null,
+            note: noteByItem[itemId] || "",
+          }),
+        },
+        discordId
+      );
+
+      setMessage(result.message || "Request submitted.");
+      await loadOrders();
+    } catch (error: any) {
+      setMessage(error.message || "Could not request item.");
+    }
+  }
+
+  const shops = data.shops || [];
+  const items = data.items || [];
+  const categories = data.categories || [];
+  const summary = data.summary || {};
+
+  return (
+    <RequireDiscord discordId={discordId}>
+      <section className="market-page">
+        <div className="card market-hero">
+          <div>
+            <span className="activity-type-label">Market District</span>
+            <h2>Shops & Market</h2>
+            <p className="muted-text">
+              Browse storefronts, find items, check stock, and submit purchase requests from the dashboard.
+            </p>
+          </div>
+          <button className="ghost" onClick={loadMarket} disabled={loading}>
+            <RefreshCw size={16} /> {loading ? "Loading..." : "Refresh"}
+          </button>
+        </div>
+
+        <div className="market-summary-grid">
+          <div className="card market-summary-card">
+            <span>Open Shops</span>
+            <strong>{summary.shops ?? shops.length}</strong>
+          </div>
+          <div className="card market-summary-card">
+            <span>Items Listed</span>
+            <strong>{summary.items ?? items.length}</strong>
+          </div>
+          <div className="card market-summary-card">
+            <span>Needs Approval</span>
+            <strong>{summary.approval_required ?? 0}</strong>
+          </div>
+          <div className="card market-summary-card">
+            <span>Out of Stock</span>
+            <strong>{summary.out_of_stock ?? 0}</strong>
+          </div>
+        </div>
+
+        <div className="card market-filters-card">
+          <form className="market-search-form" onSubmit={submitSearch}>
+            <label>
+              <span>Search Market</span>
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search items, shops, categories..."
+              />
+            </label>
+            <button type="submit">Search</button>
+          </form>
+
+          <label>
+            <span>Shop</span>
+            <select value={shopId} onChange={(event) => setShopId(event.target.value)}>
+              <option value="all">All shops</option>
+              {shops.map((shop: any) => (
+                <option value={shop.shop_id} key={shop.shop_id}>
+                  {shop.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <span>Category</span>
+            <select value={category} onChange={(event) => setCategory(event.target.value)}>
+              <option value="all">All categories</option>
+              {categories.map((item: any) => (
+                <option value={item} key={item}>
+                  {item}
+                </option>
+              ))}
             </select>
           </label>
         </div>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
-          <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Description</span>
-          <textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="What does this shop sell?" style={{ minHeight: 60, resize: "vertical" }} />
-        </label>
-        <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-            <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Shop banner URL</span>
-            <input value={form.image_url} onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))} placeholder="https://..." />
-            <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>Appears on the storefront card</span>
-          </label>
-          <ImagePreview url={form.image_url} />
-        </div>
-        <button style={{ marginTop: 14 }} onClick={create} disabled={saving}>
-          <Plus size={14} /> {saving ? "Creating..." : "Create shop"}
-        </button>
-      </div>
 
-      {isStaff && (
-        <div
-          className="card"
-          style={{
-            marginTop: 12,
-            background: "var(--color-background-secondary)",
-            display: "flex",
-            gap: 10,
-            alignItems: "flex-start",
-            padding: "12px 14px",
-            fontSize: 13,
-            color: "var(--color-text-secondary)",
-          }}
-        >
-          <ShieldCheck size={16} style={{ flexShrink: 0, marginTop: 1 }} />
-          <span>Staff can create NPC shops — they have no owner and are managed through the Manage Shop tab. Player shops are tied to the logged-in Discord account.</span>
+        {message ? <p className="message">{message}</p> : null}
+
+        <div className="market-layout">
+          <div className="market-main">
+            <div className="card market-section-title">
+              <h3>Market Listings</h3>
+              <p className="muted-text">Item cards show price, stock, category, approval requirements, and source shop.</p>
+            </div>
+
+            <div className="market-item-grid">
+              {items.length === 0 ? (
+                <div className="card market-empty-state">
+                  <strong>No market items found.</strong>
+                  <p className="muted-text">Try clearing filters or adding items to the shop system.</p>
+                </div>
+              ) : null}
+
+              {items.map((item: any) => {
+                const itemId = item.item_id;
+                const outOfStock = item.stock !== null && item.stock !== undefined && Number(item.stock) <= 0;
+
+                return (
+                  <div className="card market-item-card" key={itemId || item.name}>
+                    {item.image_url ? <img className="market-item-image" src={item.image_url} alt="" /> : null}
+
+                    <div className="market-item-heading">
+                      <div>
+                        <span className="activity-type-label">{item.category || "Item"}</span>
+                        <h3>{item.name}</h3>
+                        <p className="muted-text">{item.shop_name}</p>
+                      </div>
+                      <strong className="market-price">{priceLabel(item)}</strong>
+                    </div>
+
+                    {item.description ? <p className="market-description">{item.description}</p> : null}
+
+                    <div className="market-badges">
+                      <span>{stockLabel(item)}</span>
+                      {item.requires_approval ? <span>Approval Required</span> : <span>Instant / Logged</span>}
+                    </div>
+
+                    <div className="market-request-panel">
+                      <label>
+                        <span>Qty</span>
+                        <input
+                          type="number"
+                          min={1}
+                          value={quantityByItem[itemId] || 1}
+                          onChange={(event) =>
+                            setQuantityByItem((current) => ({
+                              ...current,
+                              [itemId]: Math.max(1, Number(event.target.value || 1)),
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <label className="market-note-field">
+                        <span>Note</span>
+                        <input
+                          value={noteByItem[itemId] || ""}
+                          onChange={(event) =>
+                            setNoteByItem((current) => ({ ...current, [itemId]: event.target.value }))
+                          }
+                          placeholder="Optional note..."
+                        />
+                      </label>
+
+                      <button onClick={() => requestItem(item)} disabled={outOfStock || !itemId}>
+                        <Store size={16} /> {item.requires_approval ? "Request" : "Buy / Log"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <aside className="market-side">
+            <div className="card market-shops-card">
+              <div className="card-title-row">
+                <h3>Storefronts</h3>
+                <span className="pill">{shops.length}</span>
+              </div>
+
+              <div className="market-shop-list">
+                {shops.length === 0 ? <p className="muted-text">No open shops found.</p> : null}
+
+                {shops.map((shop: any) => (
+                  <button
+                    type="button"
+                    className={`market-shop-card ${shopId === shop.shop_id ? "active" : ""}`}
+                    key={shop.shop_id}
+                    onClick={() => setShopId(shop.shop_id)}
+                  >
+                    <strong>{shop.name}</strong>
+                    <span>{shop.item_count || 0} items • {shop.status || "Open"}</span>
+                    {shop.description ? <small>{shop.description}</small> : null}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="card market-orders-card">
+              <div className="card-title-row">
+                <div>
+                  <h3>Orders</h3>
+                  <p className="muted-text">Recent purchase requests.</p>
+                </div>
+              </div>
+
+              <select value={orderStatus} onChange={(event) => setOrderStatus(event.target.value)}>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="denied">Denied</option>
+                <option value="all">All</option>
+              </select>
+
+              <div className="market-order-list">
+                {orders.length === 0 ? <p className="muted-text">No orders found.</p> : null}
+
+                {orders.slice(0, 8).map((order: any, index: number) => (
+                  <div className="market-order-row" key={order.order_id || order.id || index}>
+                    <strong>{order.status || "pending"}</strong>
+                    <span>Item: {order.item_id || order.shop_item_id || "—"}</span>
+                    <span>Qty: {order.quantity || 1}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </aside>
         </div>
-      )}
-    </div>
+      </section>
+    </RequireDiscord>
   );
 }
-
-// ---- ROOT COMPONENT ---------------------------------------
-
-export function ShopHubDashboard({
-  discordId,
-  selectedCharacterId,
-  initialView = "browse",
-}: {
-  discordId: string;
-  selectedCharacterId?: string;
-  initialView?: HubView;
-}) {
-  const [view, setView] = useState<HubView>(initialView);
-  const [shops, setShops] = useState<Shop[]>([]);
-  const [isStaff, setIsStaff] = useState(false);
-  const permissions = usePermissions(discordId);
-
-  async function loadShops() {
-    if (!discordId) return;
-    try {
-      const data = await apiFetch("/api/market/overview?active_only=false", {}, discordId);
-      setShops(data.shops || []);
-      setIsStaff(data.is_staff || false);
-    } catch { /* silent */ }
-  }
-
-  useEffect(() => { loadShops(); }, [discordId]);
-  useEffect(() => { setView(initialView); }, [initialView]);
-
-  const canManage = isStaff || permissions?.is_shop_owner;
-  const tabs: { key: HubView; label: string }[] = [
-    { key: "browse", label: "Browse" },
-    { key: "storefronts", label: "Storefronts" },
-    ...(canManage ? [{ key: "manage" as HubView, label: "Manage Shop" }] : []),
-    { key: "orders", label: "Orders" },
-    ...(canManage ? [{ key: "create" as HubView, label: "Create" }] : []),
-  ];
-
-  return (
-    <section>
-      {/* Header */}
-      <div className="card market-hero" style={{ marginBottom: "1rem" }}>
-        <div>
-          <span className="activity-type-label">Market District</span>
-          <h2>Shop Hub</h2>
-          <p className="muted-text">Browse storefronts, manage your shop, and process orders — all in one place.</p>
-        </div>
-        <button className="ghost" onClick={loadShops}><RefreshCw size={16} /></button>
-      </div>
-
-      {/* Tab bar */}
-      <div style={{ display: "flex", gap: 4, borderBottom: "0.5px solid var(--color-border-tertiary)", marginBottom: "1.5rem", overflowX: "auto" }}>
-        {tabs.map(({ key, label }) => (
-          <button
-            key={key}
-            className="ghost"
-            onClick={() => setView(key)}
-            style={{
-              fontSize: 14,
-              padding: "8px 16px",
-              borderRadius: 0,
-              borderBottom: view === key ? "2px solid var(--color-text-primary)" : "2px solid transparent",
-              color: view === key ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Views */}
-      {view === "browse" && <BrowseView discordId={discordId} selectedCharacterId={selectedCharacterId} shops={shops} />}
-      {view === "storefronts" && <StorefrontsView shops={shops} discordId={discordId} selectedCharacterId={selectedCharacterId} />}
-      {view === "manage" && <ManageView discordId={discordId} isStaff={isStaff} />}
-      {view === "orders" && <OrdersView discordId={discordId} isStaff={isStaff} />}
-      {view === "create" && <CreateView discordId={discordId} isStaff={isStaff} onCreated={() => { loadShops(); setView("manage"); }} />}
-    </section>
-  );
-}
-
-// Keep these as thin aliases so any leftover references in main.tsx don't break
-export function ShopDashboard({ discordId, selectedCharacterId }: { discordId: string; selectedCharacterId?: string }) {
-  return <ShopHubDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} initialView="browse" />;
-}
-
-export function ShopOwnerDashboard({ discordId }: { discordId: string }) {
-  return <ShopHubDashboard discordId={discordId} initialView="manage" />;
-}
-
-// ====== END SHOP HUB DASHBOARD ======
 
 function SkillsDashboard({ discordId, selectedCharacterId, setSelectedCharacterId }: { discordId: string; selectedCharacterId: string; setSelectedCharacterId: (id: string) => void }) {
   const [skills, setSkills] = useState<any[]>([]);
@@ -5466,7 +4856,6 @@ function CompanionDashboard({
   const [skillRequestForm, setSkillRequestForm] = useState<any>({ skill_key: "", note: "" });
   const [catalogSkills, setCatalogSkills] = useState<any[]>([]);
   const [showSkillPicker, setShowSkillPicker] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState("");
   const [skillMessage, setSkillMessage] = useState("");
 
@@ -5504,7 +4893,6 @@ function CompanionDashboard({
         discordId
       );
       setMessage(result.message || "LC Unit saved.");
-      setEditing(false);
       await loadCompanion(selectedCharacterId);
     } catch (error: any) {
       setMessage(error.message || "Could not save LC Unit.");
@@ -5549,31 +4937,30 @@ function CompanionDashboard({
   const rules = data?.type_rules || {};
   const wallet = data?.wallet || {};
   const beastSkillRequests: any[] = data?.beast_skill_requests || [];
-  const beast = data?.beast || {};
   const isStaff = Boolean(permissions?.is_staff);
 
-  const acquiredRequests = beastSkillRequests.filter(
-    (r: any) => ["approved", "accepted"].includes(String(r.status || "").toLowerCase())
+  const acquiredSkillKeys = new Set(
+    beastSkillRequests
+      .filter((r: any) => ["approved", "accepted"].includes(String(r.status || "").toLowerCase()))
+      .map((r: any) => r.skill_key)
   );
-  const pendingRequests = beastSkillRequests.filter(
-    (r: any) => String(r.status || "").toLowerCase() === "pending"
+  const pendingSkillKeys = new Set(
+    beastSkillRequests
+      .filter((r: any) => String(r.status || "").toLowerCase() === "pending")
+      .map((r: any) => r.skill_key)
   );
-  const acquiredSkillKeys = new Set(acquiredRequests.map((r: any) => r.skill_key));
-  const pendingSkillKeys = new Set(pendingRequests.map((r: any) => r.skill_key));
+
   const availableSkills = catalogSkills.filter(
     (s: any) => !acquiredSkillKeys.has(s.skill_key) && !pendingSkillKeys.has(s.skill_key)
   );
 
   const statLabels: [string, string][] = [
-    ["strength", "Strength"],
-    ["dexterity", "Dexterity"],
-    ["stamina", "Stamina"],
-    ["magic_affinity", "Magic Affinity"],
-    ["mana", "Mana"],
+    ["strength", "STR"],
+    ["dexterity", "DEX"],
+    ["stamina", "STA"],
+    ["magic_affinity", "MAG"],
+    ["mana", "MNA"],
   ];
-
-  const beastTypeLabel = (t: string) =>
-    t === "combat" ? "Combat" : t === "mount" ? "Mount" : "Utility";
 
   return (
     <RequireDiscord discordId={discordId}>
@@ -5581,10 +4968,14 @@ function CompanionDashboard({
         <div className="card request-workflow-hero">
           <div>
             <span className="activity-type-label">Loyal Companion</span>
-            <h2>Companion</h2>
-            <p className="muted-text">Your OC's Source Beast — identity, stats, and skills all in one place.</p>
+            <h2>LC Unit</h2>
+            <p className="muted-text">
+              The official Keystone sheet for your OC's Source Beast. Track its identity, bond, stats, and skills — all tied directly to your OC.
+            </p>
           </div>
-          <button className="ghost" onClick={() => loadCompanion()}><RefreshCw size={16} /> Refresh</button>
+          <button className="ghost" onClick={() => loadCompanion()}>
+            <RefreshCw size={16} /> Refresh
+          </button>
         </div>
 
         <CharacterSelect discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />
@@ -5598,173 +4989,157 @@ function CompanionDashboard({
         ) : null}
 
         {data?.eligible ? (
-          <section className="grid oc-dashboard-grid">
-
+          <>
+            {/* Identity */}
             <div className="card">
-              <div className="card-title-row">
-                <h2>Beast Dashboard</h2>
-                <button className="ghost" onClick={() => setEditing(!editing)}>
-                  {editing ? <><X size={14} /> Cancel</> : <><Save size={14} /> Edit</>}
-                </button>
+              <span className="activity-type-label">Identity</span>
+              <h3>Companion profile</h3>
+              <div className="request-actions-panel">
+                <label><span>Beast name</span><input value={form.beast_name || ""} onChange={(e) => setForm((c: any) => ({ ...c, beast_name: e.target.value }))} placeholder="Vespera, Ricardo, Nero…" /></label>
+                <label><span>Beast type</span>
+                  <select value={form.beast_type || "utility"} onChange={(e) => setForm((c: any) => ({ ...c, beast_type: e.target.value }))}>
+                    <option value="combat">Combat</option>
+                    <option value="mount">Mount</option>
+                    <option value="utility">Utility</option>
+                  </select>
+                </label>
+                <label><span>Image URL</span><input value={form.image_url || ""} onChange={(e) => setForm((c: any) => ({ ...c, image_url: e.target.value }))} placeholder="Optional portrait link" /></label>
+                <label><span>Description / appearance</span><textarea rows={4} value={form.description || ""} onChange={(e) => setForm((c: any) => ({ ...c, description: e.target.value }))} placeholder="What does the beast look like? How does it carry itself?" /></label>
+                <label><span>Bond notes</span><textarea rows={3} value={form.bond_notes || ""} onChange={(e) => setForm((c: any) => ({ ...c, bond_notes: e.target.value }))} placeholder="How did your OC encounter this beast? What connects them?" /></label>
               </div>
+            </div>
 
-              {!editing ? (
-                <>
-                  <h3>{beast.beast_name || "Unnamed Beast"}</h3>
-                  <div className="stat-strip"><span>Type</span><strong>{beastTypeLabel(beast.beast_type || "utility")}</strong></div>
-                  <div className="stat-strip"><span>Beast XP</span><strong>{beast.xp ?? 0}</strong></div>
-                  {beast.description ? <p className="muted-text" style={{ marginTop: "0.75rem", fontSize: "0.85rem" }}>{beast.description}</p> : null}
-                  {beast.bond_notes ? <p className="muted-text" style={{ marginTop: "0.5rem", fontSize: "0.85rem", fontStyle: "italic" }}>"{beast.bond_notes}"</p> : null}
-                </>
-              ) : (
-                <div className="request-actions-panel">
-                  <label><span>Beast name</span><input value={form.beast_name || ""} onChange={(e) => setForm((c: any) => ({ ...c, beast_name: e.target.value }))} placeholder="Vespera, Ricardo, Nero…" /></label>
-                  <label><span>Beast type</span>
-                    <select value={form.beast_type || "utility"} onChange={(e) => setForm((c: any) => ({ ...c, beast_type: e.target.value }))}>
-                      <option value="combat">Combat</option>
-                      <option value="mount">Mount</option>
-                      <option value="utility">Utility</option>
-                    </select>
-                  </label>
-                  <label><span>Image URL</span><input value={form.image_url || ""} onChange={(e) => setForm((c: any) => ({ ...c, image_url: e.target.value }))} placeholder="Optional portrait link" /></label>
-                  <label><span>Description</span><textarea rows={3} value={form.description || ""} onChange={(e) => setForm((c: any) => ({ ...c, description: e.target.value }))} placeholder="Appearance and behavior" /></label>
-                  <label><span>Bond notes</span><textarea rows={2} value={form.bond_notes || ""} onChange={(e) => setForm((c: any) => ({ ...c, bond_notes: e.target.value }))} placeholder="How did your OC encounter this beast?" /></label>
-                  <label><span>Notes</span><textarea rows={2} value={form.notes || ""} onChange={(e) => setForm((c: any) => ({ ...c, notes: e.target.value }))} placeholder="Staff or sheet notes" /></label>
-                  <div className="actions"><button onClick={saveCompanion}><Save size={16} /> Save</button></div>
-                </div>
-              )}
-
-              <h3 style={{ marginTop: "1.25rem" }}>Beast Stats</h3>
-              <p className="muted-text" style={{ fontSize: "0.8rem", marginBottom: "0.5rem" }}>
-                Final = base + 10% of OC stat.{!isStaff ? " Base stats are set by staff." : ""}
+            {/* Stat Sync */}
+            <div className="card">
+              <span className="activity-type-label">Stat sync</span>
+              <h3>Base + modified stats</h3>
+              <p className="muted-text">
+                Final stat = base + 10% of your OC's matching stat (passive modifier, auto-calculated).
+                {!isStaff ? " Base stats are set by staff — ask staff to invest XP into your beast's base stats." : " As staff you can edit base stats directly below."}
               </p>
-              <div className="mini-stat-grid">
+              <div className="request-meta-grid">
                 {statLabels.map(([key, label]) => (
-                  <div key={key} className="mini-stat">
+                  <div key={key}>
                     <span>{label}</span>
-                    <strong>{computed[key]?.final ?? "—"}</strong>
-                    <small className="muted-text" style={{ fontSize: "0.7rem" }}>{computed[key]?.base ?? 5}+{computed[key]?.modifier ?? 0}</small>
+                    {isStaff
+                      ? <input type="number" min="0" value={form[`base_${key}`] ?? 5} onChange={(e) => setForm((c: any) => ({ ...c, [`base_${key}`]: Number(e.target.value) }))} />
+                      : <strong>{computed[key]?.base ?? form[`base_${key}`] ?? 5}</strong>
+                    }
+                    <strong>→ {computed[key]?.final ?? "—"} <small className="muted-text">(+{computed[key]?.modifier ?? 0})</small></strong>
                   </div>
                 ))}
               </div>
-
               {isStaff ? (
-                <>
-                  <h3 style={{ marginTop: "1.25rem" }}>Edit Base Stats</h3>
-                  <div className="mini-stat-grid">
-                    {statLabels.map(([key, label]) => (
-                      <div key={key} className="mini-stat">
-                        <span>{label}</span>
-                        <input type="number" min="0" style={{ width: "100%", textAlign: "center" }}
-                          value={form[`base_${key}`] ?? 5}
-                          onChange={(e) => setForm((c: any) => ({ ...c, [`base_${key}`]: Number(e.target.value) }))} />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="request-actions-panel" style={{ marginTop: "0.75rem" }}>
-                    <label><span>Beast XP</span><input type="number" min="0" value={form.xp ?? 0} onChange={(e) => setForm((c: any) => ({ ...c, xp: Number(e.target.value) }))} /></label>
-                    <div className="actions"><button onClick={saveBaseStats}><Save size={16} /> Update base stats</button></div>
-                  </div>
-                </>
+                <div className="request-actions-panel" style={{ marginTop: "1rem" }}>
+                  <label><span>Beast XP (staff-managed)</span><input type="number" min="0" value={form.xp ?? 0} onChange={(e) => setForm((c: any) => ({ ...c, xp: Number(e.target.value) }))} /></label>
+                  <div className="actions"><button onClick={saveBaseStats}><Save size={16} /> Update base stats</button></div>
+                </div>
               ) : null}
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-
-              <div className="card oc-skills-card">
-                <div className="card-title-row">
-                  <div>
-                    <h2>Beast Skills</h2>
-                    <p className="muted-text">Skills your companion has or has requested.</p>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <span className="pill good">{acquiredRequests.length} acquired</span>
-                    <div className="muted-text" style={{ fontSize: "0.75rem", marginTop: "4px" }}>{wallet.available_xp ?? "—"} XP available</div>
-                  </div>
+            {/* Beast Skills */}
+            <div className="card">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
+                <div>
+                  <span className="activity-type-label">Beast skills</span>
+                  <h3 style={{ margin: "4px 0 0" }}>Skills &amp; XP</h3>
                 </div>
-
-                {acquiredRequests.length > 0 ? (
-                  <div className="owned-skill-group">
-                    <div className="owned-skill-group-heading"><h3>Acquired</h3><span>{acquiredRequests.length}</span></div>
-                    <div className="owned-skill-list">
-                      {acquiredRequests.map((req: any) => (
-                        <div className="owned-skill-row" key={req.request_id || req.skill_key}>
-                          <div><strong>{req.skill_name || req.skill_key}</strong></div>
-                          <div className="owned-skill-meta"><span>Beast Skill</span><span>{req.cost ?? 0} XP</span></div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="muted-text" style={{ marginTop: "0.5rem" }}>No beast skills acquired yet.</p>
-                )}
-
-                {pendingRequests.length > 0 ? (
-                  <div className="oc-pending-skills">
-                    <h3>Pending Requests</h3>
-                    <div className="owned-skill-list">
-                      {pendingRequests.map((req: any) => (
-                        <div className="owned-skill-row pending" key={req.request_id || req.skill_key}>
-                          <div><strong>{req.skill_name || req.skill_key}</strong></div>
-                          <div className="owned-skill-meta"><span>Pending</span><span>{req.cost ?? 0} XP</span></div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {skillMessage ? <p className="message" style={{ marginTop: "0.75rem" }}>{skillMessage}</p> : null}
-
-                {!showSkillPicker ? (
-                  <div style={{ marginTop: "1rem" }}>
-                    <button onClick={() => { setShowSkillPicker(true); setSkillMessage(""); }}>
-                      <Plus size={16} /> Request beast skill
-                    </button>
-                  </div>
-                ) : (
-                  <div className="request-actions-panel" style={{ marginTop: "0.75rem" }}>
-                    <label>
-                      <span>Select skill</span>
-                      <select value={skillRequestForm.skill_key} onChange={(e) => setSkillRequestForm((c: any) => ({ ...c, skill_key: e.target.value }))}>
-                        <option value="">— choose a skill —</option>
-                        {availableSkills.map((s: any) => (
-                          <option key={s.skill_key} value={s.skill_key}>{s.name} · {s.beast_skill_type} T{s.tier} · {s.cost} XP</option>
-                        ))}
-                      </select>
-                    </label>
-                    {skillRequestForm.skill_key ? (() => {
-                      const skill = catalogSkills.find((s: any) => s.skill_key === skillRequestForm.skill_key);
-                      return skill ? (
-                        <div className="card">
-                          <p><strong>{skill.name}</strong> — {skill.beast_skill_type} · Tier {skill.tier} · {skill.cost} XP</p>
-                          {skill.description ? <p className="muted-text">{skill.description}</p> : null}
-                          {skill.effects ? <p><strong>Effect:</strong> {skill.effects}</p> : null}
-                        </div>
-                      ) : null;
-                    })() : null}
-                    <label><span>Note to staff (optional)</span><input value={skillRequestForm.note} onChange={(e) => setSkillRequestForm((c: any) => ({ ...c, note: e.target.value }))} placeholder="Any context for staff" /></label>
-                    <div className="actions">
-                      <button onClick={requestBeastSkill}><Send size={16} /> Submit request</button>
-                      <button className="ghost" onClick={() => { setShowSkillPicker(false); setSkillMessage(""); setSkillRequestForm({ skill_key: "", note: "" }); }}>Cancel</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="card">
-                <h2>Role Rules</h2>
-                <p className="muted-text">Skill tier limits for a <strong>{beastTypeLabel(beast.beast_type || "utility")}</strong> type beast.</p>
-                <div className="summary vertical" style={{ marginTop: "0.75rem" }}>
-                  <div><span>Combat tier max</span><strong>{rules.combat ?? "—"}</strong></div>
-                  <div><span>Mount tier max</span><strong>{rules.mount ?? "—"}</strong></div>
-                  <div><span>Utility tier max</span><strong>{rules.utility ?? "—"}</strong></div>
-                  <div><span>Own-type cap</span><strong>{rules.own_type_skill_cap_per_tier ?? 3} / tier</strong></div>
-                  <div><span>Non-type cap</span><strong>{rules.non_type_skill_cap_per_tier ?? 2} / tier</strong></div>
+                <div style={{ textAlign: "right" }}>
+                  <div className="muted-text" style={{ fontSize: "0.75rem" }}>OC XP available</div>
+                  <strong style={{ fontSize: "1.1rem" }}>{wallet.available_xp ?? "—"} XP</strong>
                 </div>
               </div>
 
+              {beastSkillRequests.length === 0 ? (
+                <p className="muted-text">No beast skills yet. Request one below to get started.</p>
+              ) : (
+                <div className="request-card-list" style={{ marginBottom: "1rem" }}>
+                  {beastSkillRequests.map((req: any) => {
+                    const status = String(req.status || "pending").toLowerCase();
+                    const pillClass = status === "approved" || status === "accepted" ? "approved" : status === "denied" ? "denied" : "pending";
+                    return (
+                      <div className="card request-review-card" key={req.request_id || req.id || req.skill_key}>
+                        <div className="request-review-top">
+                          <div>
+                            <span className="activity-type-label">Beast Skill</span>
+                            <h3>{req.skill_name || req.skill_key}</h3>
+                            <p className="muted-text">{req.cost ? `${req.cost} XP` : "Free"}{req.submitter_note ? ` · ${req.submitter_note}` : ""}</p>
+                          </div>
+                          <em className={`request-status-pill ${pillClass}`}>{pillClass === "approved" ? "Acquired" : pillClass === "denied" ? "Denied" : "Pending"}</em>
+                        </div>
+                        {req.staff_note ? <p className="muted-text"><strong>Staff note:</strong> {req.staff_note}</p> : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {skillMessage ? <p className="message">{skillMessage}</p> : null}
+
+              {!showSkillPicker ? (
+                <button onClick={() => { setShowSkillPicker(true); setSkillMessage(""); }}>
+                  <Plus size={16} /> Request beast skill
+                </button>
+              ) : (
+                <div className="request-actions-panel" style={{ marginTop: "0.5rem" }}>
+                  <label>
+                    <span>Select skill</span>
+                    <select value={skillRequestForm.skill_key} onChange={(e) => setSkillRequestForm((c: any) => ({ ...c, skill_key: e.target.value }))}>
+                      <option value="">— choose a skill —</option>
+                      {availableSkills.map((s: any) => (
+                        <option key={s.skill_key} value={s.skill_key}>
+                          {s.name} · {s.beast_skill_type} T{s.tier} · {s.cost} XP
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {skillRequestForm.skill_key ? (
+                    <div className="card" style={{ background: "var(--color-bg-secondary)" }}>
+                      {(() => {
+                        const skill = catalogSkills.find((s: any) => s.skill_key === skillRequestForm.skill_key);
+                        if (!skill) return null;
+                        return (
+                          <>
+                            <p><strong>{skill.name}</strong> — {skill.beast_skill_type} · Tier {skill.tier} · {skill.cost} XP</p>
+                            {skill.description ? <p className="muted-text">{skill.description}</p> : null}
+                            {skill.effects ? <p><strong>Effect:</strong> {skill.effects}</p> : null}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  ) : null}
+                  <label><span>Note to staff (optional)</span><input value={skillRequestForm.note} onChange={(e) => setSkillRequestForm((c: any) => ({ ...c, note: e.target.value }))} placeholder="Any context you want staff to know" /></label>
+                  <div className="actions">
+                    <button onClick={requestBeastSkill}><Send size={16} /> Submit request</button>
+                    <button className="ghost" onClick={() => { setShowSkillPicker(false); setSkillMessage(""); setSkillRequestForm({ skill_key: "", note: "" }); }}>Cancel</button>
+                  </div>
+                </div>
+              )}
             </div>
-          </section>
+
+            {/* Role Rules */}
+            <div className="card">
+              <span className="activity-type-label">Role rules</span>
+              <h3>Skill limits for {form.beast_type || "utility"} type</h3>
+              <div className="request-meta-grid">
+                <div><span>Combat tier max</span><strong>{rules.combat ?? "—"}</strong></div>
+                <div><span>Mount tier max</span><strong>{rules.mount ?? "—"}</strong></div>
+                <div><span>Utility tier max</span><strong>{rules.utility ?? "—"}</strong></div>
+                <div><span>Own-type cap</span><strong>{rules.own_type_skill_cap_per_tier ?? 3} / tier</strong></div>
+                <div><span>Non-type cap</span><strong>{rules.non_type_skill_cap_per_tier ?? 2} / tier</strong></div>
+              </div>
+            </div>
+
+            {/* Notes + Save */}
+            <div className="card">
+              <span className="activity-type-label">Notes</span>
+              <h3>Staff &amp; sheet notes</h3>
+              <div className="request-actions-panel">
+                <label><span>Notes</span><textarea rows={4} value={form.notes || ""} onChange={(e) => setForm((c: any) => ({ ...c, notes: e.target.value }))} placeholder="Sheet notes, staff observations, or companion details." /></label>
+              </div>
+              <div className="actions"><button onClick={saveCompanion}><Save size={16} /> Save LC Unit</button></div>
+            </div>
+          </>
         ) : null}
       </section>
     </RequireDiscord>
@@ -7470,17 +6845,13 @@ function StaffQueue({ discordId }: { discordId: string }) {
                 <label><span>Description</span><textarea rows={2} value={maintenanceForm.custom_description} onChange={(event) => setMaintenanceForm((current) => ({ ...current, custom_description: event.target.value }))} placeholder="Optional staff-facing note/description." /></label>
               </>
             ) : null}
-            {maintenanceForm.action !== "trait_grant_only" ? (
 
             <label>
               <span>Staff Reason</span>
               <textarea rows={3} value={maintenanceForm.reason} onChange={(event) => setMaintenanceForm((current) => ({ ...current, reason: event.target.value }))} placeholder="Required. Example: correcting discounted cost, wrong skill assigned, restricted lore approval." />
             </label>
-            ) : null}
-            {maintenanceForm.action !== "trait_grant_only" ? (
 
             <div className="actions"><button onClick={runMaintenanceAction}><ShieldCheck size={16} /> Run Selected Action</button></div>
-            ) : null}
           </div>
         </div>
 
