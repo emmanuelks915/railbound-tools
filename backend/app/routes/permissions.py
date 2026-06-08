@@ -25,6 +25,7 @@ PLAYER_TABS = [
     "missions",
     "companion",
     "loadouts",
+    "combat",
 ]
 
 
