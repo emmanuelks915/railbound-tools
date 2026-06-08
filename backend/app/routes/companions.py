@@ -81,14 +81,6 @@ def list_beast_skills_catalog(actor_discord_id: int|None=Depends(actor_from_head
     rows=_safe(sb.table("source_beast_skill_definitions").select("*").eq("guild_id",gid).eq("is_active",True).eq("is_purchasable",True).order("beast_skill_type").order("tier").order("sort_order").order("name").limit(500))
     return {"skills": rows}
 
-
-@router.get("/beast-skills/catalog")
-def list_beast_skills_catalog(actor_discord_id: int|None=Depends(actor_from_header)):
-    _actor(actor_discord_id)
-    sb=get_supabase()
-    gid=get_guild_id()
-    rows=_safe(sb.table("source_beast_skill_definitions").select("*").eq("guild_id",gid).eq("is_active",True).eq("is_purchasable",True).order("beast_skill_type").order("tier").order("sort_order").order("name").limit(500))
-    return {"skills": rows}
 @router.get("/eligibility")
 def companion_eligibility(actor_discord_id: int | None = Depends(actor_from_header)):
     actor = _actor(actor_discord_id)
@@ -270,4 +262,5 @@ def update_base_stats(character_id: UUID, payload: dict=Body(default={}), actor_
     saved=rows[0] if rows else {}
     stats=_stats(sb,cid,gid)
     return {"message":"Base stats updated.","beast":saved,"computed_stats":_computed(saved,stats)}
+
 
