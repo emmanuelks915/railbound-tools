@@ -195,7 +195,7 @@ def request_beast_skill(character_id: UUID, payload: dict=Body(default={}), acto
     rows=_safe(sb.table("oc_xp_wallets").select("available_xp,total_spent_xp").eq("guild_id",gid).eq("character_id",cid).limit(1)); wallet=rows[0] if rows else {"available_xp":0}
     available=int(wallet.get("available_xp") or 0)
     if cost > 0 and available < cost: raise HTTPException(status_code=400,detail=f"Not enough XP. You have {available} XP, this skill costs {cost} XP.")
-    insert_row={"guild_id":gid,"character_id":cid,"skill_key":skill_key,"skill_name":str(skill.get("name") or skill_key),"cost":cost,"status":"pending","requested_by_discord_id":a,"submitter_note":str(payload.get("note") or "")[:500],"source_label":"Beast Skill","request_type":"skill"}
+    insert_row={"guild_id":gid,"character_id":cid,"skill_key":skill_key,"skill_name":str(skill.get("name") or skill_key),"cost":cost,"status":"pending","requested_by_discord_id":a,"submitter_note":str(payload.get("note") or "")[:500],"source_label":"Beast Skill"}
     try:
         result_rows=_rows(sb.table("skill_purchase_requests").insert(insert_row).execute())
         result=result_rows[0] if result_rows else insert_row
@@ -228,7 +228,7 @@ def request_beast_stat(character_id: UUID, payload: dict=Body(default={}), actor
     available=int(wallet.get("available_xp") or 0)
     if cost > 0 and available < cost: raise HTTPException(status_code=400,detail=f"Not enough XP. Cost: {cost} XP, available: {available} XP.")
     labels={"strength":"Strength","dexterity":"Dexterity","stamina":"Stamina","magic_affinity":"Magic Affinity","mana":"Mana"}
-    insert_row={"guild_id":gid,"character_id":cid,"skill_key":f"beast_stat_{stat_key}","skill_name":f"Beast Stat — {labels.get(stat_key,stat_key)} {current_value} → {target_value}","cost":cost,"status":"pending","requested_by_discord_id":a,"submitter_note":str(payload.get("note") or "") or f"Raise {labels.get(stat_key,stat_key)} from {current_value} to {target_value}.","source_label":"Beast Stat","request_type":"skill"}
+    insert_row={"guild_id":gid,"character_id":cid,"skill_key":f"beast_stat_{stat_key}","skill_name":f"Beast Stat — {labels.get(stat_key,stat_key)} {current_value} → {target_value}","cost":cost,"status":"pending","requested_by_discord_id":a,"submitter_note":str(payload.get("note") or "") or f"Raise {labels.get(stat_key,stat_key)} from {current_value} to {target_value}.","source_label":"Beast Stat"}
     try:
         result_rows=_rows(sb.table("skill_purchase_requests").insert(insert_row).execute())
         result=result_rows[0] if result_rows else insert_row
