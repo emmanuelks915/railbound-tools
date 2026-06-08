@@ -285,7 +285,7 @@ return (
       {tab === "registry" && <OCRegistry discordId={discordId} />}
       {tab === "staff" && <StaffOnly discordId={discordId}><section className="request-workflow-page"><StaffQueue discordId={discordId} /></section></StaffOnly>}
       {tab === "beast_skills" && <BeastSkillCatalogDashboard discordId={discordId} />}
-      {tab === "combat" && <DerivedStatsCalculator />}
+      {tab === "combat" && <DerivedStatsCalculator discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
     </main>
   );
 }
@@ -7217,37 +7217,345 @@ function StaffQueue({ discordId }: { discordId: string }) {
   );
 }
 
-function DerivedStatsCalculator() {
-  const [stats, setStats] = useState<CoreStats>({ strength: 50, dexterity: 50, stamina: 50, magic_affinity: 50, mana: 50 });
-  const [result, setResult] = useState<any>(null);
-  const derived = result?.derived;
+// ─── Combat Calculator ────────────────────────────────────────────────────────
 
-  async function calculate() {
-    const data = await apiFetch("/api/combat/derived", { method: "POST", body: JSON.stringify(stats) });
-    setResult(data);
+type CombatMode = "incoming" | "outgoing" | "grapple" | "injuries";
+
+interface CombatDerived {
+  str: number; dex: number; sta: number; aff: number; man: number;
+  fort: number; reaction: number; safeOut: number; magicSafe: number;
+  ap: number; dodge: number;
+}
+
+function combatDerived(str: number, dex: number, sta: number, aff: number, man: number): CombatDerived {
+  const fort = sta * 1.25;
+  return { str, dex, sta, aff, man, fort, reaction: (dex * 0.9) + (fort * 0.45), safeOut: fort * 1.15, magicSafe: (fort * 0.6) + (man * 0.8), ap: 1 + (fort / 150), dodge: dex * 1.25 };
+}
+
+function combatAtk(type: string, d: CombatDerived, wpn: number, mc: number) {
+  if (type === "heavy") return { power: Math.round((d.str * 1.1) + (d.dex * 0.35) + wpn), speed: Math.round(Math.min(d.dex * 1.25, d.fort)) };
+  if (type === "agile") return { power: Math.round((d.dex * 0.65) + (d.str * 0.4) + wpn),  speed: Math.round(Math.min(d.dex * 1.25, d.fort)) };
+  return { power: Math.round((d.aff * 0.9) + (d.man * 0.6) + mc), speed: Math.round(Math.min(d.aff * 1.4, d.fort + d.man * 0.25)) };
+}
+
+function combatInjTier(dmg: number) {
+  if (dmg <= 0)   return { tier: 0, label: "No injury",  cls: "good"   as const, desc: "No damage got through." };
+  if (dmg <= 55)  return { tier: 1, label: "Tier 1",     cls: "good"   as const, desc: "Bruises, scratches, sprains. No stat debuffs. Heals naturally." };
+  if (dmg <= 110) return { tier: 2, label: "Tier 2",     cls: "warn"   as const, desc: "Deep cuts, hairline fractures. −5% Stamina per T2 (stacks). Heals ~2 weeks." };
+  if (dmg <= 215) return { tier: 3, label: "Tier 3",     cls: "warn"   as const, desc: "Stab wounds, bone breaks. −5% Output per T3 (stacks). Needs treatment or permanent damage." };
+  if (dmg <= 600) return { tier: 4, label: "Tier 4",     cls: "danger" as const, desc: "Life-threatening. Shock + unconscious within 1 turn. DEX/STA/Output −30%. Needs immediate aid." };
+  return              { tier: 5, label: "Tier 5",     cls: "danger" as const, desc: "Catastrophic. May be instantly fatal. All stats −50%. Must be treated this turn." };
+}
+
+function combatReaction(reaction: number, speed: number, ambushed: boolean) {
+  if (ambushed)              return { label: "Partial (ambushed)",    tag: "warn"   as const, mult: 0.5, dodge: false, desc: "Ambush forces partial reaction regardless of your score. You clash at 50% power. No dodge, no active abilities." };
+  if (reaction >= speed)     return { label: "Full reaction",         tag: "good"   as const, mult: 1.0, dodge: true,  desc: "You can dodge, clash at full power, or use active abilities." };
+  if (reaction >= speed*0.7) return { label: "Partial reaction",      tag: "warn"   as const, mult: 0.7, dodge: false, desc: "No dodge. No active abilities (except Reactive Mana Skin). Clash at 70% power only." };
+  return                     { label: "No reaction — blitzed", tag: "danger" as const, mult: 0.0, dodge: false, desc: "You cannot react at all. You take the full attack power as damage." };
+}
+
+function CombatTag({ cls, children }: { cls: "good"|"warn"|"danger"|"info"; children: string }) {
+  const c = ({ good:"success", warn:"warning", danger:"danger", info:"info" } as const)[cls];
+  return <span style={{ display:"inline-block", fontSize:11, fontWeight:500, padding:"2px 8px", borderRadius:4, marginBottom:5, background:`var(--color-background-${c})`, color:`var(--color-text-${c})` }}>{children}</span>;
+}
+
+function CombatPips({ tier }: { tier: number }) {
+  const colors = ["#63d080","#f5c842","#f0892a","#e24b4a","#8b1a1a"];
+  return <div style={{ display:"flex", gap:4, marginTop:8 }}>{Array.from({length:5},(_,i)=><div key={i} style={{ height:6, flex:1, borderRadius:3, background: i<tier ? colors[i] : "var(--color-border-tertiary)" }} />)}</div>;
+}
+
+function CombatBox({ tag, label, body, sub, tier }: { tag:"good"|"warn"|"danger"|"info"; label:string; body:string; sub?:string; tier?:number }) {
+  return (
+    <div style={{ border:"0.5px solid var(--color-border-tertiary)", borderRadius:"var(--border-radius-md)", padding:"13px 15px", marginBottom:8 }}>
+      <CombatTag cls={tag}>{label}</CombatTag>
+      <p style={{ margin:0, fontSize:13, color:"var(--color-text-secondary)", lineHeight:1.5 }}>{body}</p>
+      {sub && <p style={{ margin:"4px 0 0", fontSize:11, color:"var(--color-text-tertiary)" }}>{sub}</p>}
+      {tier != null && <CombatPips tier={tier} />}
+    </div>
+  );
+}
+
+function CombatStatCard({ label, value, sub }: { label:string; value:string|number; sub?:string }) {
+  return (
+    <div style={{ background:"var(--color-background-secondary)", borderRadius:"var(--border-radius-md)", padding:"12px 14px" }}>
+      <p style={{ margin:0, fontSize:12, color:"var(--color-text-secondary)" }}>{label}</p>
+      <p style={{ margin:0, fontSize:22, fontWeight:500, color:"var(--color-text-primary)" }}>{value}</p>
+      {sub && <p style={{ margin:"2px 0 0", fontSize:11, color:"var(--color-text-tertiary)" }}>{sub}</p>}
+    </div>
+  );
+}
+
+function DerivedStatsCalculator({ discordId = "", selectedCharacterId = "", setSelectedCharacterId = (_id: string) => {} }: { discordId?: string; selectedCharacterId?: string; setSelectedCharacterId?: (id: string) => void }) {
+  const [mode, setMode] = useState<CombatMode>("incoming");
+  const [str, setStr] = useState(200); const [dex, setDex] = useState(200); const [sta, setSta] = useState(200); const [aff, setAff] = useState(100); const [man, setMan] = useState(100);
+  const [loadingStats, setLoadingStats] = useState(false); const [statsMsg, setStatsMsg] = useState("");
+  const [atkPow, setAtkPow] = useState(150); const [atkSpd, setAtkSpd] = useState(200); const [clashType, setClashType] = useState("heavy");
+  const [wpnMod, setWpnMod] = useState(0); const [armor, setArmor] = useState(0); const [manaCost, setManaCost] = useState(0); const [ambushed, setAmbushed] = useState(false);
+  const [outType, setOutType] = useState("heavy"); const [outWpn, setOutWpn] = useState(0); const [outMana, setOutMana] = useState(0); const [stealth, setStealth] = useState(false);
+  const [tgtDex, setTgtDex] = useState(0); const [tgtSta, setTgtSta] = useState(0);
+  const [oppStr, setOppStr] = useState(300); const [oppSta, setOppSta] = useState(200); const [escType, setEscType] = useState("power"); const [sitMod, setSitMod] = useState(0);
+  const [injT1, setInjT1] = useState(0); const [injT2, setInjT2] = useState(0); const [injT3, setInjT3] = useState(0); const [injT4, setInjT4] = useState(0); const [injT5, setInjT5] = useState(0);
+  const [shareMsg, setShareMsg] = useState("");
+  const [characters, setCharacters] = useState<Character[]>([]);
+
+  useEffect(() => {
+    if (!discordId) return;
+    apiFetch("/api/characters/mine", {}, discordId).then((data: any) => {
+      const rows = Array.isArray(data) ? data : data.characters || [];
+      setCharacters(rows);
+    }).catch(() => {});
+  }, [discordId]);
+
+  useEffect(() => {
+    if (selectedCharacterId && discordId) loadOCStats(selectedCharacterId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCharacterId]);
+
+  async function loadOCStats(cid: string) {
+    if (!cid || !discordId) return;
+    setLoadingStats(true); setStatsMsg("");
+    try {
+      const data = await apiFetch(`/api/characters/${cid}/summary`, {}, discordId);
+      const s = data.stats || {};
+      if (s.strength != null) setStr(s.strength);
+      if (s.dexterity != null) setDex(s.dexterity);
+      if (s.stamina != null) setSta(s.stamina);
+      if (s.magic_affinity != null) setAff(s.magic_affinity);
+      if (s.mana != null) setMan(s.mana);
+      setStatsMsg(`Loaded stats for ${data.character?.name || "OC"}.`);
+    } catch (e: any) { setStatsMsg(e.message || "Could not load stats."); }
+    finally { setLoadingStats(false); }
+  }
+
+  const d = combatDerived(str, dex, sta, aff, man);
+  const sectionLbl: React.CSSProperties = { fontSize:11, fontWeight:500, letterSpacing:"0.08em", textTransform:"uppercase", color:"var(--color-text-tertiary)", margin:"0 0 10px" };
+  const fld: React.CSSProperties = { display:"flex", flexDirection:"column", gap:4 };
+  const lbl: React.CSSProperties = { fontSize:12, color:"var(--color-text-secondary)" };
+  const grid: React.CSSProperties = { display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:10, marginBottom:"1rem" };
+  const grid2: React.CSSProperties = { display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(155px,1fr))", gap:10, marginBottom:"1rem" };
+  const checkLbl: React.CSSProperties = { display:"flex", alignItems:"center", gap:8, fontSize:13, color:"var(--color-text-secondary)", cursor:"pointer", marginTop:10 };
+
+  function ModeTab({ id, label }: { id: CombatMode; label: string }) {
+    const active = mode === id;
+    return <button style={{ padding:"6px 13px", fontSize:13, borderRadius:"var(--border-radius-md)", border: active ? "0.5px solid var(--color-border-primary)" : "0.5px solid var(--color-border-secondary)", background: active ? "var(--color-background-secondary)" : "transparent", color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)", fontWeight: active ? 500 : 400, cursor:"pointer" }} onClick={() => setMode(id)}>{label}</button>;
+  }
+
+  const statsSection = (
+    <>
+      <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"space-between", gap:8, marginBottom:4 }}>
+        <p style={sectionLbl}>Your stats</p>
+        {discordId && (
+          <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:10 }}>
+            <select value={selectedCharacterId} onChange={e => setSelectedCharacterId(e.target.value)} style={{ fontSize:12 }}>
+              <option value="">Manual input</option>
+              {characters.map(c => <option key={c.character_id} value={c.character_id}>{c.name}</option>)}
+            </select>
+            <button style={{ fontSize:12, padding:"4px 8px" }} disabled={loadingStats || !selectedCharacterId} onClick={() => loadOCStats(selectedCharacterId)}>
+              <RefreshCw size={12} /> {loadingStats ? "Loading…" : "Load OC"}
+            </button>
+          </div>
+        )}
+      </div>
+      {statsMsg && <p style={{ fontSize:12, color:"var(--color-text-secondary)", marginBottom:8 }}>{statsMsg}</p>}
+      <div style={grid}>
+        {([["STR",str,setStr],["DEX",dex,setDex],["STA",sta,setSta],["AFF",aff,setAff],["MAN",man,setMan]] as [string,number,(v:number)=>void][]).map(([l,v,s]) => (
+          <div key={l} style={fld}><label style={lbl}>{l}</label><input type="number" min={0} value={v} onChange={e => s(Number(e.target.value)||0)} /></div>
+        ))}
+      </div>
+      <div style={{ marginBottom:"1.5rem" }}>
+        <p style={sectionLbl}>Derived stats</p>
+        <div style={grid}>
+          <CombatStatCard label="Fortitude"   value={Math.round(d.fort)} />
+          <CombatStatCard label="Reaction"    value={Math.round(d.reaction)} />
+          <CombatStatCard label="Safe output" value={Math.round(d.safeOut)} sub={`Magic: ${Math.round(d.magicSafe)}`} />
+          <CombatStatCard label="Dodge"       value={Math.round(d.dodge)} />
+          <CombatStatCard label="AP"          value={d.ap.toFixed(1)} />
+        </div>
+      </div>
+    </>
+  );
+
+  function renderIncoming() {
+    const rv = combatReaction(d.reaction, atkSpd, ambushed);
+    const blitzed = rv.mult === 0;
+    let myPow = 0, selfDmg = 0;
+    if (clashType !== "none" && !blitzed) {
+      const atk = combatAtk(clashType, d, wpnMod, manaCost);
+      const lim = clashType === "magic" ? d.magicSafe : d.safeOut;
+      myPow = Math.round(atk.power * rv.mult);
+      if (myPow > lim) { selfDmg = Math.round(myPow - lim); myPow = Math.round(lim); }
+    }
+    const finalDmg = Math.max(0, (blitzed ? atkPow : Math.max(0, atkPow - myPow)) - armor + selfDmg);
+    const inj = combatInjTier(finalDmg);
+    const canDodge = rv.dodge && Math.round(d.dodge) >= atkSpd;
+    return (
+      <>
+        <div style={{ marginBottom:"1.5rem" }}>
+          <p style={sectionLbl}>Incoming attack</p>
+          <div style={grid2}>
+            <div style={fld}><label style={lbl}>Attack power</label><input type="number" min={0} value={atkPow} onChange={e=>setAtkPow(Number(e.target.value)||0)} /></div>
+            <div style={fld}><label style={lbl}>Attack speed</label><input type="number" min={0} value={atkSpd} onChange={e=>setAtkSpd(Number(e.target.value)||0)} /></div>
+            <div style={fld}><label style={lbl}>Your clash type</label><select value={clashType} onChange={e=>setClashType(e.target.value)}><option value="heavy">Heavy / power (STR)</option><option value="agile">Precision / agile (DEX)</option><option value="magic">Magic (AFF)</option><option value="none">Don't clash — take it</option></select></div>
+            <div style={fld}><label style={lbl}>Your weapon modifier</label><input type="number" value={wpnMod} onChange={e=>setWpnMod(Number(e.target.value)||0)} /></div>
+            <div style={fld}><label style={lbl}>Armor reduction</label><input type="number" min={0} value={armor} onChange={e=>setArmor(Number(e.target.value)||0)} /></div>
+            <div style={fld}><label style={lbl}>Mana cost (magic)</label><input type="number" min={0} value={manaCost} onChange={e=>setManaCost(Number(e.target.value)||0)} /></div>
+          </div>
+          <label style={checkLbl}><input type="checkbox" checked={ambushed} onChange={e=>setAmbushed(e.target.checked)} /> Ambushed from stealth (forced partial / 50% clash)</label>
+        </div>
+        <p style={sectionLbl}>Reaction</p>
+        <CombatBox tag={rv.tag} label={rv.label} body={rv.desc} sub={!blitzed ? `Your reaction ${Math.round(d.reaction)} vs speed ${Math.round(atkSpd)} · 70% threshold ${Math.round(atkSpd*0.7)}` : undefined} />
+        {!blitzed && <CombatBox tag={canDodge?"good":"danger"} label={canDodge?"Can dodge":"Cannot dodge"} body={`Dodge score ${Math.round(d.dodge)} vs attack speed ${Math.round(atkSpd)}. Dodge beats speed, not power.`} />}
+        <p style={{ ...sectionLbl, marginTop:"1.5rem" }}>Damage result</p>
+        <div style={grid}>
+          <CombatStatCard label="Attack power" value={Math.round(atkPow)} />
+          {clashType !== "none" && !blitzed && <CombatStatCard label="Your clash power" value={myPow} sub={selfDmg>0?`+${selfDmg} self-damage`:undefined} />}
+          {armor > 0 && <CombatStatCard label="Armor absorbed" value={Math.round(armor)} />}
+          <CombatStatCard label="Damage taken" value={Math.round(finalDmg)} />
+        </div>
+        <CombatBox tag={inj.cls} label={inj.label} body={inj.desc} tier={inj.tier} />
+        {selfDmg > 0 && <CombatBox tag="danger" label="Self-damage warning" body="Your clash power exceeded your safe output. Both values stack as a single injury threshold." />}
+      </>
+    );
+  }
+
+  function renderOutgoing() {
+    const atk = combatAtk(outType, d, outWpn, outMana);
+    const lim = outType === "magic" ? d.magicSafe : d.safeOut;
+    const inj = combatInjTier(atk.power);
+    let targetSection = null;
+    if (tgtDex > 0 || tgtSta > 0) {
+      const tFort = tgtSta * 1.25;
+      const tRv = stealth ? { label:"Partial (ambushed)", tag:"warn" as const, mult:0.5, dodge:false, desc:"Stealth ambush forces partial reaction. They clash at 50% power." } : combatReaction((tgtDex*0.9)+(tFort*0.45), atk.speed, false);
+      const tDodge = Math.round(tgtDex * 1.25);
+      const tCanDodge = tRv.dodge && tDodge >= atk.speed;
+      targetSection = (
+        <>
+          <p style={{ ...sectionLbl, marginTop:"1.5rem" }}>Can they react to you?</p>
+          <div style={grid}><CombatStatCard label="Their reaction" value={Math.round((tgtDex*0.9)+(tFort*0.45))} /><CombatStatCard label="Your speed" value={atk.speed} /><CombatStatCard label="Their dodge" value={tDodge} /></div>
+          <CombatBox tag={tRv.tag} label={tRv.label} body={tRv.desc} sub={`70% threshold: ${Math.round(atk.speed*0.7)}`} />
+          {!tRv.label.includes("blitzed") && <CombatBox tag={tCanDodge?"danger":"good"} label={tCanDodge?"They can dodge":"They cannot dodge"} body={`Their dodge ${tDodge} vs your speed ${atk.speed}.`} />}
+        </>
+      );
+    }
+    return (
+      <>
+        <div style={{ marginBottom:"1.5rem" }}>
+          <p style={sectionLbl}>My attack</p>
+          <div style={grid2}>
+            <div style={fld}><label style={lbl}>Attack type</label><select value={outType} onChange={e=>setOutType(e.target.value)}><option value="heavy">Heavy / power (STR)</option><option value="agile">Precision / agile (DEX)</option><option value="magic">Magic (AFF)</option></select></div>
+            <div style={fld}><label style={lbl}>Weapon modifier</label><input type="number" value={outWpn} onChange={e=>setOutWpn(Number(e.target.value)||0)} /></div>
+            <div style={fld}><label style={lbl}>Mana cost (magic)</label><input type="number" min={0} value={outMana} onChange={e=>setOutMana(Number(e.target.value)||0)} /></div>
+          </div>
+          <label style={checkLbl}><input type="checkbox" checked={stealth} onChange={e=>setStealth(e.target.checked)} /> Attacking from stealth (ambush bonus — target forced to partial/50%)</label>
+        </div>
+        <div style={{ marginBottom:"1.5rem" }}>
+          <p style={sectionLbl}>Target reaction check (optional)</p>
+          <div style={grid2}>
+            <div style={fld}><label style={lbl}>Target DEX</label><input type="number" min={0} value={tgtDex} onChange={e=>setTgtDex(Number(e.target.value)||0)} /><small style={{ fontSize:11, color:"var(--color-text-tertiary)" }}>Leave 0 to skip</small></div>
+            <div style={fld}><label style={lbl}>Target STA</label><input type="number" min={0} value={tgtSta} onChange={e=>setTgtSta(Number(e.target.value)||0)} /></div>
+          </div>
+        </div>
+        <p style={sectionLbl}>Your attack output</p>
+        <div style={grid}><CombatStatCard label="Attack power" value={atk.power} /><CombatStatCard label="Attack speed" value={atk.speed} /><CombatStatCard label="Safe output" value={Math.round(lim)} /></div>
+        <CombatBox tag={atk.power > lim ? "danger" : "good"} label={atk.power > lim ? "Over safe output" : "Within safe output"} body={atk.power > lim ? `Your attack power (${atk.power}) exceeds your safe output (${Math.round(lim)}) by ${Math.round(atk.power-lim)}. You will take self-damage equal to that overage.` : "No self-damage. This attack is within your physical/magical limits."} />
+        {stealth && <CombatBox tag="info" label="Ambush active" body="Target is forced to partial reaction (50% clash power) regardless of their reaction score. No dodge." />}
+        <p style={{ ...sectionLbl, marginTop:"1.5rem" }}>Injury if uncontested</p>
+        <CombatBox tag={inj.cls} label={inj.label} body={inj.desc} tier={inj.tier} />
+        {targetSection}
+      </>
+    );
+  }
+
+  function renderGrapple() {
+    const grapPow = oppStr + oppSta;
+    const escPow = escType === "power" ? (d.str*1.2)+(d.sta*0.8)+sitMod : (d.dex*1.2)+(d.sta*0.8)+sitMod;
+    const canEsc = escPow > grapPow;
+    return (
+      <>
+        <div style={{ marginBottom:"1.5rem" }}>
+          <p style={sectionLbl}>Grapple / escape</p>
+          <div style={grid2}>
+            <div style={fld}><label style={lbl}>Opponent STR</label><input type="number" min={0} value={oppStr} onChange={e=>setOppStr(Number(e.target.value)||0)} /></div>
+            <div style={fld}><label style={lbl}>Opponent STA</label><input type="number" min={0} value={oppSta} onChange={e=>setOppSta(Number(e.target.value)||0)} /></div>
+            <div style={fld}><label style={lbl}>Escape method</label><select value={escType} onChange={e=>setEscType(e.target.value)}><option value="power">Power escape (STR + STA)</option><option value="slip">Slip escape (DEX + STA)</option></select></div>
+            <div style={fld}><label style={lbl}>Situational modifier</label><input type="number" value={sitMod} onChange={e=>setSitMod(Number(e.target.value)||0)} /></div>
+          </div>
+        </div>
+        <p style={sectionLbl}>Results</p>
+        <div style={grid}><CombatStatCard label="Opponent grapple" value={Math.round(grapPow)} /><CombatStatCard label="Your escape power" value={Math.round(escPow)} /><CombatStatCard label="Your grapple power" value={Math.round(d.str+d.sta)} sub="If you initiate" /></div>
+        <CombatBox tag={canEsc?"good":"danger"} label={canEsc?"Can escape":"Cannot escape"} body={canEsc ? `Your escape power (${Math.round(escPow)}) beats the grapple (${Math.round(grapPow)}) by ${Math.round(escPow-grapPow)}.` : `You are ${Math.round(grapPow-escPow)} short. You need an escape power above ${Math.round(grapPow)}.`} />
+        <CombatBox tag="info" label="Grapple penalty" body="While holding a conscious enemy, your reaction score and attack speed take a 20% penalty. Magic restraints are exempt." />
+      </>
+    );
+  }
+
+  function renderInjuries() {
+    const eq = [injT1*1, injT2*2, injT3*4, injT4*8, injT5*16];
+    const total = eq.reduce((a,b)=>a+b,0);
+    const pct = Math.min(100, Math.round((total/16)*100));
+    const barColor = pct>=100?"#8b1a1a":pct>=80?"#e24b4a":pct>=50?"#f0892a":"#63d080";
+    let stag: string, scls: "good"|"warn"|"danger", sdesc: string;
+    if (total===0)      { stag="No injuries"; scls="good"; sdesc="Clean bill of health."; }
+    else if (total>=16) { stag="At maximum — possible death"; scls="danger"; sdesc="You have reached the 16 T1-equivalent maximum. Any combination other than pure T1s may be lethal if narratively appropriate."; }
+    else if (pct>=80)   { stag="Critical — unconsciousness likely"; scls="danger"; sdesc="You have reached 80% of your bodily maximum. Unconsciousness may occur when narratively appropriate."; }
+    else if (pct>=50)   { stag="Serious"; scls="warn"; sdesc="Over half your injury capacity is used. Seek treatment soon."; }
+    else                { stag="Manageable"; scls="good"; sdesc="You are within safe injury range, but accumulation is something to watch."; }
+    const debuffs = [...(injT2>0?[`T2 ×${injT2}: Stamina −${injT2*5}%`]:[]), ...(injT3>0?[`T3 ×${injT3}: Output −${injT3*5}%`]:[]), ...(injT4>0?["T4: DEX/STA/Output −30%, shock within 1 turn"]:[]), ...(injT5>0?["T5: All stats −50%, may be instantly fatal"]:[])];
+    return (
+      <>
+        <div style={{ marginBottom:"1.5rem" }}>
+          <p style={sectionLbl}>Current injuries</p>
+          {([["T1",injT1,setInjT1,eq[0]],["T2",injT2,setInjT2,eq[1]],["T3",injT3,setInjT3,eq[2]],["T4",injT4,setInjT4,eq[3]],["T5",injT5,setInjT5,eq[4]]] as [string,number,(v:number)=>void,number][]).map(([l,v,s,e])=>(
+            <div key={l} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+              <label style={{ fontSize:13, color:"var(--color-text-secondary)", minWidth:50 }}>{l} count</label>
+              <input type="number" min={0} value={v} onChange={ev=>s(Math.max(0,Number(ev.target.value)||0))} style={{ width:70 }} />
+              <span style={{ fontSize:12, color:"var(--color-text-tertiary)", minWidth:80 }}>= {e} T1e</span>
+            </div>
+          ))}
+        </div>
+        <p style={sectionLbl}>Injury load</p>
+        <div style={grid}><CombatStatCard label="Total T1-equivalent" value={`${total} / 16`} /><CombatStatCard label="Load %" value={`${pct}%`} /></div>
+        <div style={{ background:"var(--color-background-secondary)", borderRadius:4, height:10, overflow:"hidden", margin:"8px 0 12px" }}>
+          <div style={{ height:"100%", borderRadius:4, background:barColor, width:`${pct}%`, transition:"width .3s" }} />
+        </div>
+        <CombatBox tag={scls} label={stag} body={sdesc + (total>=16&&injT2===0&&injT3===0&&injT4===0&&injT5===0?" Note: 16 pure T1s only causes unconsciousness, not death.":"")} />
+        {debuffs.length>0 && <div style={{ border:"0.5px solid var(--color-border-tertiary)", borderRadius:"var(--border-radius-md)", padding:"13px 15px", marginBottom:8 }}><CombatTag cls="info">Active debuffs</CombatTag><p style={{ margin:0, fontSize:13, color:"var(--color-text-secondary)", lineHeight:1.6 }}>{debuffs.join(" · ")}</p></div>}
+      </>
+    );
+  }
+
+  function shareURL() {
+    const p = new URLSearchParams({ str:String(str), dex:String(dex), sta:String(sta), aff:String(aff), man:String(man) });
+    const url = `${window.location.href.split("?")[0]}?${p}`;
+    navigator.clipboard.writeText(url).then(()=>setShareMsg("Copied!")).catch(()=>setShareMsg(url));
+    setTimeout(()=>setShareMsg(""), 3000);
   }
 
   return (
-    <section className="grid">
-      <div className="card">
-        <h2>Derived Stats Calculator</h2>
-        <div className="stats-grid">
-          {(Object.keys(STAT_LABELS) as Array<keyof CoreStats>).map((key) => (
-            <label key={key}>{STAT_LABELS[key]}<input type="number" min={0} value={stats[key]} onChange={(event) => setStats((prev) => ({ ...prev, [key]: Number(event.target.value) }))} /></label>
-          ))}
+    <section className="card" style={{ maxWidth:860 }}>
+      <div className="card-title-row">
+        <div>
+          <span className="activity-type-label">Combat Tools</span>
+          <h2>Combat Calculator</h2>
+          <p className="muted-text">Reaction checks, damage, injury tiers, grapple, and injury load — all from the actual Railbound rules.</p>
         </div>
-        <button onClick={calculate}><Calculator size={16} /> Calculate</button>
       </div>
-
-      <div className="card">
-        <h2>Results</h2>
-        {!derived ? <p>Run the calculator to see derived stats.</p> : (
-          <div className="summary vertical">
-            {Object.entries(derived).map(([key, value]) => (
-              <div key={key}><span>{key.replaceAll("_", " ")}</span><strong>{String(value)}</strong></div>
-            ))}
-          </div>
-        )}
+      <div style={{ display:"flex", gap:6, marginBottom:"1.5rem", flexWrap:"wrap" }}>
+        <ModeTab id="incoming" label="Incoming attack" />
+        <ModeTab id="outgoing" label="My attack output" />
+        <ModeTab id="grapple"  label="Grapple / escape" />
+        <ModeTab id="injuries" label="Injury tracker"   />
+      </div>
+      {statsSection}
+      <hr style={{ border:"none", borderTop:"0.5px solid var(--color-border-tertiary)", margin:"0 0 1.5rem" }} />
+      {mode === "incoming"  && renderIncoming()}
+      {mode === "outgoing"  && renderOutgoing()}
+      {mode === "grapple"   && renderGrapple()}
+      {mode === "injuries"  && renderInjuries()}
+      <hr style={{ border:"none", borderTop:"0.5px solid var(--color-border-tertiary)", margin:"1.5rem 0 1rem" }} />
+      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+        <button className="ghost" onClick={shareURL} style={{ fontSize:12 }}>Copy stat link</button>
+        {shareMsg && <span style={{ fontSize:12, color:"var(--color-text-tertiary)" }}>{shareMsg}</span>}
       </div>
     </section>
   );
