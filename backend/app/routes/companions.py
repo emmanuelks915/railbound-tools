@@ -145,3 +145,110 @@ def save_companion(character_id:UUID,payload:dict[str,Any]=Body(default={}),acto
         rows=_rows((sb.table("source_beasts").update(row).eq("character_id",cid) if exists else sb.table("source_beasts").insert(row)).execute())
     saved=rows[0] if rows else row; stats=_stats(sb,cid,gid)
     return {"message":"Source Beast saved.","beast":saved,"computed_stats":_computed(saved,stats),"type_rules":RULES.get(typ,RULES["utility"])}
+
+
+def _stat_xp_cost(current, target):
+    if target <= current: return 0
+    brackets = [(50,1),(150,2),(250,4),(350,6),(450,8),(550,10),(650,12),(750,14)]
+    total, pos = 0, current
+    while pos < target:
+        rate, next_ceil = 14, target
+        for ceil, cost in brackets:
+            if pos < ceil: rate=cost; next_ceil=min(ceil,target); break
+        total += (next_ceil - pos) * rate
+        pos = next_ceil
+    return total
+
+@router.post("/{character_id}/skill-request")
+def request_beast_skill(character_id: UUID, payload: dict=Body(default={}), actor_discord_id: int|None=Depends(actor_from_header)):
+    a=_actor(actor_discord_id)
+    sb=get_supabase()
+    cid=str(character_id)
+    c=_char(sb,cid)
+    if not _can(c,a): raise HTTPException(status_code=403,detail="You can only request skills for your own companion.")
+    gid=int(c.get("guild_id") or get_guild_id())
+    if not _eligible(_traits(sb,cid,gid)): raise HTTPException(status_code=403,detail="This OC does not have the Loyal Companion trait.")
+    skill_key=str(payload.get("skill_key") or "").strip()
+    if not skill_key: raise HTTPException(status_code=400,detail="skill_key is required.")
+    skill_rows=_safe(sb.table("source_beast_skill_definitions").select("*").eq("guild_id",gid).eq("skill_key",skill_key).eq("is_active",True).limit(1))
+    if not skill_rows: raise HTTPException(status_code=404,detail="Beast skill not found or not available.")
+    skill=skill_rows[0]
+    if not skill.get("is_purchasable"): raise HTTPException(status_code=400,detail="This beast skill is not yet available for purchase.")
+    cost=int(skill.get("cost") or 0)
+    raw_prereqs=skill.get("prerequisites") or []
+    if isinstance(raw_prereqs,str): raw_prereqs=[p.strip() for p in raw_prereqs.split(",") if p.strip()]
+    elif isinstance(raw_prereqs,list): raw_prereqs=[str(p).strip() for p in raw_prereqs if p]
+    prereq_keys=[p for p in raw_prereqs if p and p.lower() not in ("none","n/a","")]
+    if prereq_keys:
+        owned=_safe(sb.table("skill_purchase_requests").select("skill_key,status").eq("guild_id",gid).eq("character_id",cid).eq("source_label","Beast Skill").in_("skill_key",prereq_keys).limit(50))
+        owned_approved={str(r.get("skill_key")) for r in owned if str(r.get("status") or "").lower() in ("approved","accepted")}
+        missing=[k for k in prereq_keys if k not in owned_approved]
+        if missing:
+            missing_skills=_safe(sb.table("source_beast_skill_definitions").select("skill_key,name").eq("guild_id",gid).in_("skill_key",missing).limit(10))
+            missing_names=[s.get("name") or s.get("skill_key") for s in missing_skills] or missing
+            raise HTTPException(status_code=400,detail=f"Prerequisites not met. You need: {', '.join(missing_names)}.")
+    existing_requests=_safe(sb.table("skill_purchase_requests").select("request_id,status").eq("guild_id",gid).eq("character_id",cid).eq("skill_key",skill_key).eq("source_label","Beast Skill").limit(10))
+    for req in existing_requests:
+        status=str(req.get("status") or "").lower()
+        if status=="pending": raise HTTPException(status_code=409,detail="You already have a pending request for this beast skill.")
+        if status in ("approved","accepted"): raise HTTPException(status_code=409,detail="Your companion already has this skill.")
+    wallet=_wallet(sb,cid,gid)
+    available=int(wallet.get("available_xp") or 0)
+    if cost > 0 and available < cost: raise HTTPException(status_code=400,detail=f"Not enough XP. You have {available} XP, this skill costs {cost} XP.")
+    insert_row={"guild_id":gid,"character_id":cid,"skill_key":skill_key,"skill_name":str(skill.get("name") or skill_key),"cost":cost,"status":"pending","requested_by_discord_id":a,"submitter_note":str(payload.get("note") or "")[:500],"source_label":"Beast Skill","request_type":"skill"}
+    try:
+        result_rows=_rows(sb.table("skill_purchase_requests").insert(insert_row).execute())
+        result=result_rows[0] if result_rows else insert_row
+    except Exception as exc: raise HTTPException(status_code=500,detail=f"Could not submit beast skill request: {exc}")
+    return {"message":f"Request submitted for {skill.get('name') or skill_key}. Staff will review it shortly.","request":result,"xp_cost":cost,"xp_available":available}
+
+@router.post("/{character_id}/stat-request")
+def request_beast_stat(character_id: UUID, payload: dict=Body(default={}), actor_discord_id: int|None=Depends(actor_from_header)):
+    a=_actor(actor_discord_id)
+    sb=get_supabase()
+    cid=str(character_id)
+    c=_char(sb,cid)
+    if not _can(c,a): raise HTTPException(status_code=403,detail="You can only request stat changes for your own companion.")
+    gid=int(c.get("guild_id") or get_guild_id())
+    if not _eligible(_traits(sb,cid,gid)): raise HTTPException(status_code=403,detail="This OC does not have the Loyal Companion trait.")
+    stat_key=str(payload.get("stat_key") or "").strip().lower()
+    if stat_key not in CORE_STATS: raise HTTPException(status_code=400,detail=f"stat_key must be one of: {', '.join(CORE_STATS)}.")
+    try: target_value=int(payload.get("target_value") or 0)
+    except: raise HTTPException(status_code=400,detail="target_value must be a number.")
+    if target_value < 1 or target_value > 750: raise HTTPException(status_code=400,detail="Target value must be between 1 and 750.")
+    beast_rows=_safe(sb.table("source_beasts").select("*").eq("character_id",cid).limit(1))
+    if not beast_rows: raise HTTPException(status_code=404,detail="No LC Unit found. Save your LC Unit profile first.")
+    beast=beast_rows[0]
+    current_value=int(beast.get(f"base_{stat_key}") or 5)
+    if target_value <= current_value: raise HTTPException(status_code=400,detail=f"Target ({target_value}) must be higher than current base ({current_value}).")
+    existing=_safe(sb.table("skill_purchase_requests").select("request_id,status").eq("guild_id",gid).eq("character_id",cid).eq("skill_key",f"beast_stat_{stat_key}").eq("source_label","Beast Stat").eq("status","pending").limit(5))
+    if existing: raise HTTPException(status_code=409,detail=f"You already have a pending stat request for {stat_key}.")
+    cost=_stat_xp_cost(current_value,target_value)
+    wallet=_wallet(sb,cid,gid)
+    available=int(wallet.get("available_xp") or 0)
+    if cost > 0 and available < cost: raise HTTPException(status_code=400,detail=f"Not enough XP. Cost: {cost} XP, available: {available} XP.")
+    labels={"strength":"Strength","dexterity":"Dexterity","stamina":"Stamina","magic_affinity":"Magic Affinity","mana":"Mana"}
+    insert_row={"guild_id":gid,"character_id":cid,"skill_key":f"beast_stat_{stat_key}","skill_name":f"Beast Stat — {labels.get(stat_key,stat_key)} {current_value} → {target_value}","cost":cost,"status":"pending","requested_by_discord_id":a,"submitter_note":str(payload.get("note") or "") or f"Raise {labels.get(stat_key,stat_key)} from {current_value} to {target_value}.","source_label":"Beast Stat","request_type":"skill"}
+    try:
+        result_rows=_rows(sb.table("skill_purchase_requests").insert(insert_row).execute())
+        result=result_rows[0] if result_rows else insert_row
+    except Exception as exc: raise HTTPException(status_code=500,detail=f"Could not submit stat request: {exc}")
+    return {"message":f"Stat request submitted. Raising {labels.get(stat_key,stat_key)} from {current_value} to {target_value} ({cost} XP).","request":result,"xp_cost":cost,"xp_available":available}
+
+@router.put("/{character_id}/base-stats")
+def update_base_stats(character_id: UUID, payload: dict=Body(default={}), actor_discord_id: int|None=Depends(actor_from_header)):
+    a=_actor(actor_discord_id)
+    if not is_staff(a): raise HTTPException(status_code=403,detail="Staff only.")
+    sb=get_supabase()
+    cid=str(character_id)
+    c=_char(sb,cid)
+    gid=int(c.get("guild_id") or get_guild_id())
+    stat_updates={f"base_{k}":_int(payload,f"base_{k}") for k in CORE_STATS}
+    xp_update={"xp":_int(payload,"xp",0)} if "xp" in payload else {}
+    existing=_safe(sb.table("source_beasts").select("character_id").eq("character_id",cid).limit(1))
+    if not existing: raise HTTPException(status_code=404,detail="No LC Unit found for this OC. Save the LC Unit first.")
+    sb.table("source_beasts").update({**stat_updates,**xp_update}).eq("character_id",cid).execute()
+    rows=_safe(sb.table("source_beasts").select("*").eq("character_id",cid).limit(1))
+    saved=rows[0] if rows else {}
+    stats=_stats(sb,cid,gid)
+    return {"message":"Base stats updated.","beast":saved,"computed_stats":_computed(saved,stats)}
