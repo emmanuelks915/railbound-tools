@@ -5285,6 +5285,34 @@ function CompanionDashboard({
                 </div>
               </div>
 
+
+              <div className="card">
+                <h2>Derived Stats</h2>
+                <p className="muted-text">Calculated from your beast's final stats.</p>
+                {(() => {
+                  const STR = computed.strength?.final ?? 0;
+                  const DEX = computed.dexterity?.final ?? 0;
+                  const STA = computed.stamina?.final ?? 0;
+                  const MAN = computed.mana?.final ?? 0;
+                  const fortitude = Math.floor(STA * 1.25);
+                  const reaction = Math.floor((DEX * 0.9) + (fortitude * 0.45));
+                  const derived: [string, number][] = [
+                    ["Reaction Score", reaction],
+                    ["Fortitude", fortitude],
+                    ["Safe Output", Math.floor(fortitude * 1.15)],
+                    ["Magic Safe Output", Math.floor((fortitude * 0.6) + (MAN * 0.8))],
+                    ["AP", Math.max(1, Math.floor(fortitude / 150))],
+                    ["Carry Capacity", 4 + Math.floor(STR / 150)],
+                  ];
+                  return (
+                    <div className="summary vertical" style={{ marginTop: "0.75rem" }}>
+                      {derived.map(([label, value]) => (
+                        <div key={label}><span>{label}</span><strong>{value}</strong></div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
           </section>
         ) : null}
