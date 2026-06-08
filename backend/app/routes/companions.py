@@ -138,7 +138,7 @@ def get_companion(character_id: UUID, actor_discord_id:int|None=Depends(actor_fr
     gid=int(c.get("guild_id") or get_guild_id()); traits=_traits(sb,cid,gid); elig=_eligible(traits)
     rows=_safe(sb.table("source_beasts").select("*").eq("character_id",cid).limit(1))
     beast=rows[0] if rows else _default(cid,gid); stats=_stats(sb,cid,gid); typ=str(beast.get("beast_type") or "utility")
-    return {"eligible":elig,"character":{"character_id":cid,"name":c.get("name")},"loyal_companion_trait":next((t for t in traits if _eligible([t])),None),"beast":beast,"oc_stats":stats,"computed_stats":_computed(beast,stats),"type_rules":RULES.get(typ,RULES["utility"]),"allowed_types":["combat","mount","utility"],"wallet":{"available_xp":0}}
+    return {"eligible":elig,"character":{"character_id":cid,"name":c.get("name")},"loyal_companion_trait":next((t for t in traits if _eligible([t])),None),"beast":beast,"oc_stats":stats,"computed_stats":_computed(beast,stats),"type_rules":RULES.get(typ,RULES["utility"]),"allowed_types":["combat","mount","utility"],"wallet":(lambda r:r[0] if r else {"available_xp":0})(_safe(sb.table("oc_xp_wallets").select("available_xp,total_spent_xp").eq("character_id",cid).limit(1)))}
 @router.put("/{character_id}")
 def save_companion(character_id:UUID,payload:dict[str,Any]=Body(default={}),actor_discord_id:int|None=Depends(actor_from_header)):
     a=_actor(actor_discord_id); sb=get_supabase(); cid=str(character_id); c=_char(sb,cid)
