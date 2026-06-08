@@ -1198,3 +1198,17 @@ def _apply_skill_purchase_approval(
             or ("Backfilled from already-approved skill request." if already_reviewed else "Skill purchase approved.")
         ),
     }).execute()
+    # Beast stat hook — auto-update source_beasts when a beast_stat_ request is approved
+    if skill_key.startswith("beast_stat_"):
+        stat_key = skill_key[len("beast_stat_"):]
+        valid_stats = ["strength", "dexterity", "stamina", "magic_affinity", "mana"]
+        if stat_key in valid_stats:
+            import re as _re
+            note = str(request_row.get("submitter_note") or "")
+            match = _re.search(r"from\s+(\d+)\s+to\s+(\d+)", note)
+            if match:
+                target_value = int(match.group(2))
+                sb.table("source_beasts").update({
+                    f"base_{stat_key}": target_value
+                }).eq("character_id", character_id).execute()
+
