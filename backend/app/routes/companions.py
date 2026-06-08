@@ -54,11 +54,11 @@ def _traits(sb,cid,gid):
 def _eligible(traits):
     return any("loyal_companion" in str(t.get("slug") or "").lower().replace("-","_").replace(" ","_") or "loyal companion" in str(t.get("name") or "").lower() for t in traits)
 def _stats(sb,cid,gid):
-    r=_safe(sb.table("oc_stats").select("stat_key,stat_value,value").eq("guild_id",gid).eq("character_id",cid).limit(100))
+    r=_safe(sb.table("oc_stats").select("stat_key,stat_value").eq("character_id",cid).in_("stat_key",CORE_STATS).limit(100))
     out={k:0 for k in CORE_STATS}
     for x in r:
         k=str(x.get("stat_key") or "")
-        if k in out: out[k]=int((x.get("stat_value") if x.get("stat_value") is not None else x.get("value")) or 0)
+        if k in out: out[k]=int(x.get("stat_value") or 0)
     return out
 def _default(cid,gid):
     return {"guild_id":gid,"character_id":cid,"beast_name":"","beast_type":"utility","description":"","image_url":"","xp":0,"base_strength":5,"base_dexterity":5,"base_stamina":5,"base_magic_affinity":5,"base_mana":5,"current_skills":"","notes":""}
