@@ -929,7 +929,7 @@ def _with_computed_derived_stats(stats: dict[str, Any]) -> dict[str, Any]:
     fortitude = stamina * 1.25
 
     computed = {
-        "reaction_score": dexterity * 1.5,
+        "reaction_score": int((dexterity * 0.9) + (fortitude * 0.45)),
         "dodge": dexterity * 1.25,
         "fortitude": fortitude,
         "safe_output": fortitude * 1.15,

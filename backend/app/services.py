@@ -87,15 +87,15 @@ def derived_stats_from_core(stats: dict[str, int]) -> dict[str, float]:
     stamina = int(stats.get("stamina") or 0)
     mana = int(stats.get("mana") or 0)
 
-    reaction = dexterity * 1.5
     fortitude = stamina * 1.25
+    reaction = int((dexterity * 0.9) + (fortitude * 0.45))
     safe_output = fortitude * 1.15
     magic_safe_output = (fortitude * 0.6) + (mana * 0.8)
     ap = 1 + (fortitude / 150)
     carry_capacity = 4 + (strength / 150)
 
     return {
-        "reaction_score": round(reaction, 2),
+        "reaction_score": reaction,
         "fortitude": round(fortitude, 2),
         "safe_output": round(safe_output, 2),
         "magic_safe_output": round(magic_safe_output, 2),
