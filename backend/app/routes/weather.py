@@ -29,7 +29,7 @@ SUPABASE_KEY       = os.getenv("SUPABASE_SERVICE_KEY")
 
 def get_supabase() -> Client:
     url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_ANON_KEY")
     return create_client(url, key)
 
 # ── condition display metadata ──────────────────────────────────────────────
