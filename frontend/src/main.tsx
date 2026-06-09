@@ -7463,6 +7463,11 @@ function DerivedStatsCalculator({ discordId = "", selectedCharacterId = "", setS
   function renderOutgoing() {
     const atk = combatAtk(outType, d, outWpn, outMana);
     const lim = outType === "magic" ? d.magicSafe : d.safeOut;
+    const magicSpeedAffCap = Math.round(d.aff * 1.4);
+    const magicSpeedFortManaCap = Math.round(d.fort + d.man * 0.6);
+    const attackSpeedSub = outType === "magic"
+      ? `Lower of AFF × 1.4 (${magicSpeedAffCap}) and Fortitude + MAN × 0.6 (${magicSpeedFortManaCap})`
+      : undefined;
     const inj = combatInjTier(atk.power);
     let targetSection = null;
     if (tgtDex > 0 || tgtSta > 0) {
@@ -7498,7 +7503,7 @@ function DerivedStatsCalculator({ discordId = "", selectedCharacterId = "", setS
           </div>
         </div>
         <p style={sectionLbl}>Your attack output</p>
-        <div style={grid}><CombatStatCard label="Attack power" value={atk.power} /><CombatStatCard label="Attack speed" value={atk.speed} /><CombatStatCard label="Safe output" value={Math.round(lim)} /></div>
+        <div style={grid}><CombatStatCard label="Attack power" value={atk.power} /><CombatStatCard label="Attack speed" value={atk.speed} sub={attackSpeedSub} /><CombatStatCard label="Safe output" value={Math.round(lim)} /></div>
         <CombatBox tag={atk.power > lim ? "danger" : "good"} label={atk.power > lim ? "Over safe output" : "Within safe output"} body={atk.power > lim ? `Your attack power (${atk.power}) exceeds your safe output (${Math.round(lim)}) by ${Math.round(atk.power-lim)}. You will take self-damage equal to that overage.` : "No self-damage. This attack is within your physical/magical limits."} />
         {stealth && <CombatBox tag="info" label="Ambush active" body="Target is forced to partial reaction (50% clash power) regardless of their reaction score. No dodge." />}
         <p style={{ ...sectionLbl, marginTop:"1.5rem" }}>Injury if uncontested</p>
