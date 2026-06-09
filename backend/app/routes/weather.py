@@ -326,7 +326,12 @@ async def roll_forecast(season: str = "spring", week_start: str = None):
         }
         rows.append(row)
 
-    result = sb.table("weather_conditions").upsert(rows, on_conflict="region,week_start").execute()
+    for row in rows:
+            try:
+                sb.table("weather_conditions").insert(row).execute()
+            except Exception:
+                sb.table("weather_conditions").update(row).eq("region", row["region"]).eq("week_start", ws).eq("is_active", True).execute()
+        result = type("R", (), {"data": rows})()
     return {"ok": True, "rows": result.data, "note": "Seeded blank rows — run SQL migration to enable dice-table rolling"}
 
 
@@ -371,9 +376,10 @@ async def get_conditions(week_start: str = None):
 @router.post("/conditions")
 async def create_condition(payload: dict):
     """Create or upsert a weather condition."""
-    result = get_supabase().table("weather_conditions").upsert(
-        payload, on_conflict="region,week_start"
-    ).execute()
+    try:
+        result = get_supabase().table("weather_conditions").insert(payload).execute()
+    except Exception:
+        result = get_supabase().table("weather_conditions").update(payload).eq("region", payload["region"]).eq("week_start", payload["week_start"]).eq("is_active", True).execute()
     return {"ok": True, "data": result.data}
 
 
