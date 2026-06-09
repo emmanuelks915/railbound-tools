@@ -123,41 +123,12 @@ const CLIMATE_PROFILES = {
 };
 
 async function generateWeatherSuggestion(regionId, season) {
-  const profile = CLIMATE_PROFILES[regionId];
-  const regionLabel = REGIONS.find(r => r.id === regionId)?.label ?? regionId;
-  if (!profile) return null;
-
-  const prompt = `You are the weather loremaster for Doranswyr, a fictional continent in an early industrial-era roleplay server called Railbound.
-
-Generate a weekly weather forecast for ${regionLabel} during ${season}.
-
-Climate profile: ${profile.climate}
-
-Return ONLY a JSON object with exactly these fields:
-{
-  "condition": one of: CLEAR, OVERCAST, HEAVY_RAIN, THUNDERSTORM, FOG, SANDSTORM, BLIZZARD, ICE_STORM, HEATWAVE, GALE, NAMED_STORM, SOURCE_ANOMALY,
-  "intensity": one of: LIGHT, MODERATE, SEVERE,
-  "forecast_title": a short evocative title (e.g. "The Widow's Knell" for a named storm, or "Dry Heat" for a heatwave),
-  "short_desc": one punchy sentence describing what this means for travelers (max 80 chars),
-  "forecast_body": 2-3 sentences of rich RP flavour text describing how this weather feels, sounds, and looks in ${regionLabel}. Write it like a weather report for adventurers. Do not mention game mechanics.
-}
-
-Match the condition to what is climatically realistic for this region and season. Named storms and Source anomalies should be rare. No explanation, no markdown, just the JSON object.`;
-
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const data = await apiFetch("/api/weather/suggest", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
-        messages: [{ role: "user", content: prompt }],
-      }),
+      body: JSON.stringify({ region_id: regionId, season }),
     });
-    const data = await response.json();
-    const text = data.content?.find(b => b.type === "text")?.text ?? "";
-    const clean = text.replace(/```json|```/g, "").trim();
-    return JSON.parse(clean);
+    return data.suggestion ?? null;
   } catch {
     return null;
   }
@@ -241,6 +212,7 @@ function RegionCard({ row, onEdit, suggesting = false, regionId }) {
               {row.short_desc}
             </div>
           )}
+
           {row.override_note && (
             <div style={{
               fontSize: 11, color: "var(--color-text-secondary)",
@@ -278,6 +250,11 @@ function EditModal({ regionId, existing, suggestion, weekStart, staffName, onSav
     is_indefinite:     seed.is_indefinite   ?? false,
     is_source_anomaly: seed.is_source_anomaly ?? false,
     override_note:     seed.override_note   ?? "",
+    temp_low:          seed.temp_low        ?? "",
+    temp_high:         seed.temp_high       ?? "",
+    humidity:          seed.humidity        ?? "",
+    wind:              seed.wind            ?? "MODERATE_WIND",
+    visibility:        seed.visibility      ?? "CLEAR",
   });
   const hasSuggestion = !existing && !!suggestion;
   const [saving, setSaving] = useState(false);
@@ -303,6 +280,11 @@ function EditModal({ regionId, existing, suggestion, weekStart, staffName, onSav
       is_indefinite:     form.is_indefinite,
       is_source_anomaly: form.is_source_anomaly,
       override_note:     form.override_note,
+      temp_low:          form.temp_low !== "" ? Number(form.temp_low) : null,
+      temp_high:         form.temp_high !== "" ? Number(form.temp_high) : null,
+      humidity:          form.humidity !== "" ? Number(form.humidity) : null,
+      wind:              form.wind || null,
+      visibility:        form.visibility || null,
       week_start:        weekStart,
       set_by:            staffName,
       is_active:         true,
@@ -422,6 +404,36 @@ function EditModal({ regionId, existing, suggestion, weekStart, staffName, onSav
               placeholder="e.g. Seas are impassable. Rail only."
             />
           </label>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)" }}>Low °C</span>
+              <input type="number" value={form.temp_low} onChange={e => set("temp_low", e.target.value)} placeholder="e.g. 8" />
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)" }}>High °C</span>
+              <input type="number" value={form.temp_high} onChange={e => set("temp_high", e.target.value)} placeholder="e.g. 22" />
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)" }}>Humidity %</span>
+              <input type="number" min="0" max="100" value={form.humidity} onChange={e => set("humidity", e.target.value)} placeholder="e.g. 65" />
+            </label>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)" }}>Wind</span>
+              <select value={form.wind} onChange={e => set("wind", e.target.value)}>
+                {["CALM","LIGHT_BREEZE","MODERATE_WIND","STRONG_WIND","GALE_FORCE"].map(w => <option key={w} value={w}>{w.replace(/_/g," ")}</option>)}
+              </select>
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)" }}>Visibility</span>
+              <select value={form.visibility} onChange={e => set("visibility", e.target.value)}>
+                {["CLEAR","HAZY","POOR","NEAR_ZERO"].map(v => <option key={v} value={v}>{v.replace(/_/g," ")}</option>)}
+              </select>
+            </label>
+          </div>
 
           <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)" }}>Forecast body</span>

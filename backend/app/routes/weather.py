@@ -96,6 +96,22 @@ def build_effects_string(effects: dict) -> str:
     return "  ".join(parts)
 
 
+WIND_LABELS = {
+    "CALM": "Calm",
+    "LIGHT_BREEZE": "Light breeze",
+    "MODERATE_WIND": "Moderate wind",
+    "STRONG_WIND": "Strong wind",
+    "GALE_FORCE": "Gale force",
+}
+
+VISIBILITY_LABELS = {
+    "CLEAR": "Clear",
+    "HAZY": "Hazy",
+    "POOR": "Poor",
+    "NEAR_ZERO": "Near zero",
+}
+
+
 def build_embed(row: dict) -> dict:
     """Build a single Discord embed for one region's forecast."""
     condition   = row["condition"]
@@ -103,44 +119,73 @@ def build_embed(row: dict) -> dict:
     emoji       = CONDITION_EMOJI.get(condition, "🌡️")
     color       = INTENSITY_COLOR.get(intensity, 0x888780)
 
-    # Override color for special conditions
     if row.get("is_source_anomaly"):
         color = 0x1D9E75
     elif condition == "NAMED_STORM":
         color = 0xE24B4A
 
-    title = f"{emoji}  {row['forecast_title'] or REGION_LABELS.get(row['region'], row['region'])}"
+    region_label = REGION_LABELS.get(row["region"], row["region"])
+    title = f"{emoji}  {row.get('forecast_title') or region_label}"
 
     fields = []
 
+    # Forecast body
     if row.get("forecast_body"):
         fields.append({
-            "name": "Forecast",
+            "name": "📋  Forecast",
             "value": row["forecast_body"][:1024],
             "inline": False,
         })
 
+    # Temperature, humidity, wind, visibility as inline fields
+    temp_low  = row.get("temp_low")
+    temp_high = row.get("temp_high")
+    humidity  = row.get("humidity")
+    wind      = row.get("wind")
+    visibility = row.get("visibility")
+
+    if temp_low is not None or temp_high is not None:
+        temp_str = ""
+        if temp_low is not None and temp_high is not None:
+            temp_str = f"🔻 {temp_low}°C  /  🔺 {temp_high}°C"
+        elif temp_high is not None:
+            temp_str = f"🔺 {temp_high}°C"
+        else:
+            temp_str = f"🔻 {temp_low}°C"
+        fields.append({"name": "🌡️  Temperature", "value": temp_str, "inline": True})
+
+    if humidity is not None:
+        fields.append({"name": "💧  Humidity", "value": f"{humidity}%", "inline": True})
+
+    if wind:
+        fields.append({"name": "🌬️  Wind", "value": WIND_LABELS.get(wind, wind), "inline": True})
+
+    if visibility:
+        fields.append({"name": "👁️  Visibility", "value": VISIBILITY_LABELS.get(visibility, visibility), "inline": True})
+
+    # Mechanical effects
     effects_str = build_effects_string(row.get("effects") or {})
     fields.append({
-        "name": "Mechanical effects",
+        "name": "⚔️  Combat & travel effects",
         "value": effects_str,
         "inline": False,
     })
 
+    # Flags
     badges = []
     if row.get("is_indefinite"):
         badges.append("📌 Indefinite — ongoing arc event")
     if row.get("is_source_anomaly"):
         badges.append("✨ Source anomaly")
     if badges:
-        fields.append({"name": "Flags", "value": "\n".join(badges), "inline": False})
+        fields.append({"name": "⚠️  Flags", "value": "\n".join(badges), "inline": False})
 
     return {
         "title":  title,
         "color":  color,
         "fields": fields,
         "footer": {
-            "text": f"{REGION_LABELS.get(row['region'], row['region'])}  •  {intensity.title()}  •  {row['short_desc'] or ''}",
+            "text": f"{region_label}  •  {intensity.title()} {condition.replace('_', ' ').title()}  •  {row.get('short_desc') or ''}",
         },
     }
 
@@ -344,3 +389,87 @@ async def archive_week():
     """Archive current week conditions."""
     result = get_supabase().rpc("archive_current_week").execute()
     return {"ok": True, "archived": result.data}
+
+
+class SuggestWeatherRequest(BaseModel):
+    region_id: str
+    season: str
+
+
+CLIMATE_PROFILES = {
+    "lumenhold":     {"climate": "Rain shadow desert. Scorching days, freezing nights. Almost no rain. Sandstorms common.", "temp": {"spring": (8,28), "summer": (18,42), "autumn": (6,24), "winter": (-2,12)}},
+    "flywheel":      {"climate": "Mountain river basin. Heavy precipitation year-round. Persistent low cloud. Snow above the dam in winter.", "temp": {"spring": (4,14), "summer": (12,22), "autumn": (4,14), "winter": (-4,4)}},
+    "cinder":        {"climate": "High mountain pass. Blizzards in winter. Short warm summers. Snowmelt floods in spring. Volcanic warmth near the city.", "temp": {"spring": (0,10), "summer": (8,18), "autumn": (-2,8), "winter": (-10,0)}},
+    "high_sable":    {"climate": "Exposed cliff face. Constant wind scour. Brutal winters. Short summer thaw. Fog rolls up from the valley.", "temp": {"spring": (2,10), "summer": (10,18), "autumn": (0,8), "winter": (-8,-2)}},
+    "gearford":      {"climate": "Central highland continental. Warm summers, cold winters. Spring storms. Industrial smog creates localized fog.", "temp": {"spring": (6,16), "summer": (14,26), "autumn": (4,14), "winter": (-4,4)}},
+    "thornwick":     {"climate": "Dense old-growth frontier forest. Perpetually misty. Cool year-round. Heavy autumn rain. Rare sunny days.", "temp": {"spring": (6,14), "summer": (12,20), "autumn": (4,12), "winter": (-2,6)}},
+    "ashgate":       {"climate": "Eastern transition zone. Variable weather from multiple fronts. Warm dry summers. Stormy unpredictable autumn.", "temp": {"spring": (8,18), "summer": (16,28), "autumn": (6,16), "winter": (0,8)}},
+    "morthand":      {"climate": "Cold northern coast. Overcast and grey most of the year. Coastal storms. Heavy snow. Short bright summers.", "temp": {"spring": (2,10), "summer": (10,18), "autumn": (0,8), "winter": (-6,2)}},
+    "brassmere":     {"climate": "Humid southern coastal port. Frequent sea mist. Hot muggy summers. Industrial smog compounds fog.", "temp": {"spring": (10,20), "summer": (18,30), "autumn": (8,18), "winter": (4,12)}},
+    "citadel":       {"climate": "Southeast coast Mediterranean-like. Warmest and driest city. Hot summers, mild winters. Eastern sea storms in autumn.", "temp": {"spring": (12,22), "summer": (20,34), "autumn": (10,20), "winter": (4,14)}},
+    "ragged_signal": {"climate": "Exposed southern tip. Open ocean on three sides. Storms arrive fast. Fierce winds year-round.", "temp": {"spring": (8,16), "summer": (14,22), "autumn": (6,14), "winter": (0,8)}},
+    "gilded_index":  {"climate": "Western peninsula. Maritime climate. Constant Atlantic wind. Heavy rain in winter, clear breezy summers.", "temp": {"spring": (8,16), "summer": (14,22), "autumn": (6,14), "winter": (2,10)}},
+    "black_spur":    {"climate": "Northern forest near the coast. Cold and wet. Frequent sea fog. Heavy snow in winter.", "temp": {"spring": (2,10), "summer": (10,18), "autumn": (0,8), "winter": (-6,2)}},
+    "iron_covenant": {"climate": "Eastern forest, inland. Temperate with cold winters. Moderate rainfall year-round.", "temp": {"spring": (4,14), "summer": (12,22), "autumn": (2,12), "winter": (-4,4)}},
+    "outlands":      {"climate": "Open wilderness between city-states. Exposed to all weather fronts. Conditions vary wildly.", "temp": {"spring": (4,16), "summer": (12,26), "autumn": (2,14), "winter": (-6,6)}},
+}
+
+REGION_ZONES = {
+    "lumenhold": "Desert", "flywheel": "Mountain basin", "cinder": "High pass",
+    "high_sable": "Cliff face", "gearford": "Central highland", "thornwick": "Deep forest",
+    "ashgate": "Eastern transition", "morthand": "Northern coast", "brassmere": "Southern coast",
+    "citadel": "Southeast coast", "ragged_signal": "Southern tip", "gilded_index": "Western peninsula",
+    "black_spur": "Northern forest", "iron_covenant": "Eastern forest", "outlands": "Wilderness",
+}
+
+
+@router.post("/suggest")
+async def suggest_weather(body: SuggestWeatherRequest):
+    """Generate an AI weather suggestion for a region+season via Claude."""
+    import anthropic
+    profile = CLIMATE_PROFILES.get(body.region_id)
+    zone = REGION_ZONES.get(body.region_id, body.region_id)
+    region_label = body.region_id.replace("_", " ").title()
+    if not profile:
+        raise HTTPException(status_code=400, detail="Unknown region")
+
+    temps = profile["temp"].get(body.season, (5, 20))
+    low, high = temps
+
+    prompt = f"""You are the weather loremaster for Doranswyr, a fictional continent in an early industrial-era roleplay server called Railbound.
+
+Generate a weekly weather forecast for {region_label} ({zone}) during {body.season}.
+
+Climate profile: {profile["climate"]}
+Typical temperature range this season: {low}°C low / {high}°C high
+
+Return ONLY a valid JSON object with exactly these fields, no markdown, no explanation:
+{{
+  "condition": one of CLEAR|OVERCAST|HEAVY_RAIN|THUNDERSTORM|FOG|SANDSTORM|BLIZZARD|ICE_STORM|HEATWAVE|GALE|NAMED_STORM,
+  "intensity": one of LIGHT|MODERATE|SEVERE,
+  "forecast_title": "short evocative title, 2-5 words",
+  "short_desc": "one punchy sentence for travelers, max 80 chars",
+  "forecast_body": "2-3 sentences of rich RP flavour. How it feels, sounds, smells. No game mechanics.",
+  "temp_low": {low},
+  "temp_high": {high},
+  "humidity": a percentage integer 0-100 realistic for this climate and condition,
+  "wind": one of CALM|LIGHT_BREEZE|MODERATE_WIND|STRONG_WIND|GALE_FORCE,
+  "visibility": one of CLEAR|HAZY|POOR|NEAR_ZERO
+}}"""
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not set")
+
+    client = anthropic.Anthropic(api_key=api_key)
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=512,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    text = message.content[0].text.strip()
+    text = text.replace("```json", "").replace("```", "").strip()
+
+    import json
+    suggestion = json.loads(text)
+    return {"ok": True, "suggestion": suggestion}
