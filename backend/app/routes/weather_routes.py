@@ -268,3 +268,41 @@ async def get_current_weather(region: str = None):
 
     result = query.execute()
     return {"week_start": week_start.isoformat(), "conditions": result.data}
+
+
+@router.get("/conditions")
+async def get_conditions(week_start: str = None):
+    """Fetch active conditions for a given week (staff dashboard)."""
+    from datetime import date
+    ws = week_start or date.today().isoformat()
+    result = (
+        supabase.table("weather_conditions")
+        .select("*")
+        .eq("week_start", ws)
+        .eq("is_active", True)
+        .execute()
+    )
+    return {"conditions": result.data}
+
+
+@router.post("/conditions")
+async def create_condition(payload: dict):
+    """Create or upsert a weather condition."""
+    result = supabase.table("weather_conditions").upsert(
+        payload, on_conflict="region,week_start"
+    ).execute()
+    return {"ok": True, "data": result.data}
+
+
+@router.patch("/conditions/{condition_id}")
+async def update_condition(condition_id: str, payload: dict):
+    """Update an existing weather condition."""
+    result = supabase.table("weather_conditions").update(payload).eq("id", condition_id).execute()
+    return {"ok": True, "data": result.data}
+
+
+@router.post("/archive")
+async def archive_week():
+    """Archive current week conditions."""
+    result = supabase.rpc("archive_current_week").execute()
+    return {"ok": True, "archived": result.data}

@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap');
 /* railbound_theme - loaded */
 :root {
 
@@ -9041,7 +9042,6 @@ button.danger:hover:not(:disabled) {
   100% { background-position:  600px 0; }
 }
 
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap');
 
 h1 {
   font-family: 'Syne', sans-serif !important;

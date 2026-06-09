@@ -1,10 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
-import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
+async function apiFetch(path, options = {}, discordId) {
+  const headers = new Headers(options.headers || {});
+  headers.set("Content-Type", "application/json");
+  const authToken = localStorage.getItem("railbound_auth_token");
+  if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
+  if (discordId) headers.set("X-Discord-Id", discordId);
+  const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.detail || "Request failed.");
+  return data;
+}
 
 // ── constants ────────────────────────────────────────────────────────────────
 
@@ -211,15 +219,14 @@ function EditModal({ regionId, existing, weekStart, staffName, onSave, onClose }
       is_active:         true,
     };
 
-    const { error: err } = existing?.id
-      ? await supabase.from("weather_conditions").update(payload).eq("id", existing.id)
-      : await supabase.from("weather_conditions").upsert(payload, {
-          onConflict: "region,week_start",
-          ignoreDuplicates: false,
-        });
-
-    if (err) { setError(err.message); setSaving(false); return; }
-    onSave();
+    try {
+      if (existing?.id) {
+        await apiFetch(`/api/weather/conditions/${existing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+      } else {
+        await apiFetch("/api/weather/conditions", { method: "POST", body: JSON.stringify(payload) });
+      }
+      onSave();
+    } catch (e) { setError(e.message); setSaving(false); return; }
   }
 
   const labelStyle = { fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 4, display: "block" };
@@ -365,12 +372,10 @@ export default function WeatherDashboard({ staffName = "Staff" }) {
 
   const fetchConditions = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("weather_conditions")
-      .select("*")
-      .eq("week_start", weekStart)
-      .eq("is_active", true);
-    setConditions(data ?? []);
+    try {
+      const data = await apiFetch(`/api/weather/conditions?week_start=${weekStart}`);
+      setConditions(data.conditions ?? []);
+    } catch { setConditions([]); }
     setLoading(false);
   }, [weekStart]);
 
@@ -378,12 +383,10 @@ export default function WeatherDashboard({ staffName = "Staff" }) {
 
   async function handleRoll() {
     setRolling(true);
-    const { error } = await supabase.rpc("roll_weekly_forecast", {
-      p_season: season,
-      p_week_start: weekStart,
-    });
-    if (error) { showToast(error.message, "error"); }
-    else { showToast("Rolled forecast for all regions — review and edit before posting."); }
+    try {
+      await apiFetch(`/api/weather/roll?season=${season}&week_start=${weekStart}`, { method: "POST" });
+      showToast("Rolled forecast for all regions — review and edit before posting.");
+    } catch (e) { showToast(e.message, "error"); }
     await fetchConditions();
     setRolling(false);
   }
@@ -391,9 +394,10 @@ export default function WeatherDashboard({ staffName = "Staff" }) {
   async function handleArchive() {
     if (!confirm("Archive this week's forecasts and clear non-indefinite conditions?")) return;
     setArchiving(true);
-    const { error } = await supabase.rpc("archive_current_week");
-    if (error) { showToast(error.message, "error"); }
-    else { showToast("Week archived. Roll new forecasts when ready."); }
+    try {
+      await apiFetch("/api/weather/archive", { method: "POST" });
+      showToast("Week archived. Roll new forecasts when ready.");
+    } catch (e) { showToast(e.message, "error"); }
     await fetchConditions();
     setArchiving(false);
   }
