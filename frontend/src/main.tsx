@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Calculator, Check, ClipboardList, Home, Package, Plus, RefreshCw, Save, Send, ShieldCheck, Sparkles, Store, UserRound, X, Users } from "lucide-react";
 import "./styles.css";
@@ -6076,6 +6076,14 @@ function StaffQueue({ discordId }: { discordId: string }) {
         setMessage("Enter the XP amount to remove.");
         return;
       }
+    } else if (action === "remove_currency") {
+      endpoint = "/api/staff/maintenance/currency/remove";
+      body.amount = Number(maintenanceForm.amount || 0);
+      body.currency_id = resourceForm.currency_id;
+      if (!body.amount || body.amount <= 0) {
+        setMessage("Enter the currency amount to remove.");
+        return;
+      }
     } else if (action === "remove_skill") {
       endpoint = "/api/staff/maintenance/skill/remove";
       body.skill_key = maintenanceForm.skill_key;
@@ -6807,6 +6815,7 @@ function StaffQueue({ discordId }: { discordId: string }) {
                 <option value="preview_city_lore_roles">Preview City Lore Role Backfill</option>
                 <option value="backfill_city_lore_roles">Backfill City Lore Roles</option>
                 <option value="remove_xp">Remove XP</option>
+                <option value="remove_currency">Remove Currency</option>
                 <option value="remove_skill">Remove Skill</option>
                 <option value="remove_trait">Remove Trait</option>
                 <option value="grant_custom_skill">Grant Hidden Custom Skill</option>
@@ -6966,6 +6975,40 @@ function StaffQueue({ discordId }: { discordId: string }) {
                 <span>XP to Remove</span>
                 <input type="number" min="1" value={maintenanceForm.amount} onChange={(event) => setMaintenanceForm((current) => ({ ...current, amount: event.target.value }))} placeholder="Example: 67" />
               </label>
+            ) : null}
+
+            {maintenanceForm.action === "remove_currency" ? (
+              <>
+                <label>
+                  <span>Currency to Remove</span>
+                  <select
+                    value={resourceForm.currency_id}
+                    onChange={(event) =>
+                      setResourceForm((current) => ({ ...current, currency_id: event.target.value }))
+                    }
+                  >
+                    <option value="">Primary currency</option>
+                    {resourceCurrencies.map((currency: any) => (
+                      <option key={currency.currency_id} value={currency.currency_id}>
+                        {currency.emoji ? `${currency.emoji} ` : ""}{currency.name} ({currency.ticker})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Currency Amount to Remove</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={maintenanceForm.amount}
+                    onChange={(event) =>
+                      setMaintenanceForm((current) => ({ ...current, amount: event.target.value }))
+                    }
+                    placeholder="Example: 50"
+                  />
+                </label>
+              </>
             ) : null}
 
             {maintenanceForm.action === "remove_skill" ? (

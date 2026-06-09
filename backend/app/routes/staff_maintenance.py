@@ -66,6 +66,158 @@ def remove_xp(payload: dict[str, Any] = Body(default={}), actor_discord_id: int 
     _log(sb, "xp_removed", "XP removed", staff_id, character, reason, {"amount": amount, "old_available_xp": available, "new_available_xp": new_available})
     return {"ok": True, "message": f"Removed {amount} XP from {character.get('name') or 'OC'}.", "wallet": updated[0] if updated else None}
 
+
+
+def _maintenance_currency(sb, currency_id: str | None) -> dict[str, Any]:
+    gid = get_guild_id()
+    rows: list[dict[str, Any]] = []
+
+    if currency_id:
+        rows = _as_list(
+            sb.table("currencies")
+            .select("*")
+            .eq("guild_id", gid)
+            .eq("currency_id", currency_id)
+            .limit(1)
+            .execute()
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="Currency not found.")
+    else:
+        rows = _as_list(
+            sb.table("currencies")
+            .select("*")
+            .eq("guild_id", gid)
+            .eq("is_primary", True)
+            .eq("is_enabled", True)
+            .limit(1)
+            .execute()
+        )
+        if not rows:
+            rows = _as_list(
+                sb.table("currencies")
+                .select("*")
+                .eq("guild_id", gid)
+                .eq("is_enabled", True)
+                .limit(1)
+                .execute()
+            )
+
+    if not rows:
+        raise HTTPException(status_code=400, detail="No enabled currency found.")
+
+    return rows[0]
+
+
+@router.post("/currency/remove")
+def remove_currency(payload: dict[str, Any] = Body(default={}), actor_discord_id: int | None = Depends(actor_from_header)):
+    staff_id = _staff(actor_discord_id)
+    sb = get_supabase()
+
+    character_id = str(payload.get("character_id") or "").strip()
+    currency_id = str(payload.get("currency_id") or "").strip() or None
+    reason = str(payload.get("reason") or payload.get("staff_note") or "").strip()
+
+    try:
+        amount = int(payload.get("amount") or 0)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Amount must be a whole number.")
+
+    if not character_id:
+        raise HTTPException(status_code=400, detail="Choose an OC.")
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than 0.")
+    if not reason:
+        raise HTTPException(status_code=400, detail="A staff reason is required.")
+
+    character = _character(sb, character_id)
+    currency = _maintenance_currency(sb, currency_id)
+
+    cid = str(currency.get("currency_id") or currency.get("id") or "")
+    ticker = currency.get("ticker") or currency.get("name") or "currency"
+
+    if not cid:
+        raise HTTPException(status_code=400, detail="Currency ID could not be determined.")
+
+    wallet_rows = _as_list(
+        sb.table("wallets")
+        .select("*")
+        .eq("character_id", character_id)
+        .eq("currency_id", cid)
+        .limit(1)
+        .execute()
+    )
+
+    if not wallet_rows:
+        raise HTTPException(status_code=400, detail=f"OC does not have a {ticker} wallet yet.")
+
+    wallet = wallet_rows[0]
+    old_balance = int(wallet.get("balance") or 0)
+
+    if old_balance < amount:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot remove {amount} {ticker}. OC only has {old_balance}.",
+        )
+
+    new_balance = old_balance - amount
+
+    updated = _as_list(
+        sb.table("wallets")
+        .update({"balance": new_balance})
+        .eq("character_id", character_id)
+        .eq("currency_id", cid)
+        .execute()
+    )
+
+    tx_rows = []
+    tx_payload = {
+        "guild_id": get_guild_id(),
+        "currency_id": cid,
+        "from_character_id": character_id,
+        "to_character_id": None,
+        "amount": amount,
+        "reason": reason,
+        "actor_discord_id": staff_id,
+    }
+
+    for tx_type in ("BURN", "WITHDRAW", "ADJUSTMENT", "STAFF_REMOVE"):
+        try:
+            tx_rows = _as_list(
+                sb.table("transactions")
+                .insert({**tx_payload, "tx_type": tx_type})
+                .execute()
+            )
+            break
+        except Exception:
+            tx_rows = []
+
+    _log(
+        sb,
+        "currency_removed",
+        f"{ticker} removed",
+        staff_id,
+        character,
+        reason,
+        {
+            "amount": amount,
+            "currency_id": cid,
+            "currency": ticker,
+            "old_balance": old_balance,
+            "new_balance": new_balance,
+        },
+    )
+
+    return {
+        "ok": True,
+        "message": f"Removed {amount} {ticker} from {character.get('name') or 'OC'}.",
+        "character": character,
+        "currency": currency,
+        "wallet": updated[0] if updated else {**wallet, "balance": new_balance},
+        "transaction": tx_rows[0] if tx_rows else None,
+    }
+
+
 @router.post("/skill/remove")
 def remove_skill(payload: dict[str, Any] = Body(default={}), actor_discord_id: int | None = Depends(actor_from_header)):
     staff_id = _staff(actor_discord_id); sb = get_supabase(); gid = get_guild_id()
