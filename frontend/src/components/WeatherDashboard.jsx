@@ -237,7 +237,7 @@ function RegionCard({ row, onEdit, suggesting = false, regionId }) {
   );
 }
 
-function EditModal({ regionId, existing, suggestion, weekStart, staffName, onSave, onClose }) {
+function EditModal({ regionId, existing, suggestion, weekStart, staffName, season, onSave, onClose }) {
   const region = REGIONS.find(r => r.id === regionId);
   const seed = existing ?? suggestion ?? {};
   const [form, setForm] = useState({
@@ -731,6 +731,7 @@ export default function WeatherDashboard({ staffName = "Staff" }) {
           existing={editTarget.existing}
           suggestion={editTarget.suggestion}
           weekStart={weekStart}
+          season={season}
           staffName={staffName}
           onSave={async () => {
             setEditTarget(null);
