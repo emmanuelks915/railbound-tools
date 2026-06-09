@@ -26,7 +26,11 @@ WEATHER_CHANNEL_ID = os.getenv("DISCORD_WEATHER_CHANNEL_ID")
 SUPABASE_URL       = os.getenv("SUPABASE_URL")
 SUPABASE_KEY       = os.getenv("SUPABASE_SERVICE_KEY")
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+def get_supabase() -> Client:
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    return create_client(url, key)
 
 # ── condition display metadata ──────────────────────────────────────────────
 
@@ -171,7 +175,7 @@ async def post_weather_to_discord(body: PostWeatherRequest):
     """
     # 1. Fetch all active conditions for this week
     result = (
-        supabase.table("weather_conditions")
+        get_supabase().table("weather_conditions")
         .select("*")
         .eq("week_start", body.weekStart)
         .eq("is_active", True)
@@ -230,7 +234,7 @@ async def post_weather_to_discord(body: PostWeatherRequest):
 
     # 5. Store the first message ID back to supabase so we can edit next time
     if message_ids:
-        supabase.table("weather_conditions").update(
+        get_supabase().table("weather_conditions").update(
             {"discord_message_id": message_ids[0]}
         ).eq("week_start", body.weekStart).eq("is_active", True).execute()
 
@@ -240,7 +244,7 @@ async def post_weather_to_discord(body: PostWeatherRequest):
 @router.post("/roll")
 async def roll_forecast(season: str, week_start: str = None):
     """Trigger the DB roll function. Called by the dashboard Roll button."""
-    result = supabase.rpc("roll_weekly_forecast", {
+    result = get_supabase().rpc("roll_weekly_forecast", {
         "p_season": season,
         "p_week_start": week_start,
     }).execute()
@@ -258,7 +262,7 @@ async def get_current_weather(region: str = None):
     week_start = today - __import__("datetime").timedelta(days=today.weekday())
 
     query = (
-        supabase.table("weather_conditions")
+        get_supabase().table("weather_conditions")
         .select("region,condition,intensity,forecast_title,short_desc,effects,is_source_anomaly,is_indefinite")
         .eq("week_start", week_start.isoformat())
         .eq("is_active", True)
@@ -276,7 +280,7 @@ async def get_conditions(week_start: str = None):
     from datetime import date
     ws = week_start or date.today().isoformat()
     result = (
-        supabase.table("weather_conditions")
+        get_supabase().table("weather_conditions")
         .select("*")
         .eq("week_start", ws)
         .eq("is_active", True)
@@ -288,7 +292,7 @@ async def get_conditions(week_start: str = None):
 @router.post("/conditions")
 async def create_condition(payload: dict):
     """Create or upsert a weather condition."""
-    result = supabase.table("weather_conditions").upsert(
+    result = get_supabase().table("weather_conditions").upsert(
         payload, on_conflict="region,week_start"
     ).execute()
     return {"ok": True, "data": result.data}
@@ -297,12 +301,12 @@ async def create_condition(payload: dict):
 @router.patch("/conditions/{condition_id}")
 async def update_condition(condition_id: str, payload: dict):
     """Update an existing weather condition."""
-    result = supabase.table("weather_conditions").update(payload).eq("id", condition_id).execute()
+    result = get_supabase().table("weather_conditions").update(payload).eq("id", condition_id).execute()
     return {"ok": True, "data": result.data}
 
 
 @router.post("/archive")
 async def archive_week():
     """Archive current week conditions."""
-    result = supabase.rpc("archive_current_week").execute()
+    result = get_supabase().rpc("archive_current_week").execute()
     return {"ok": True, "archived": result.data}
