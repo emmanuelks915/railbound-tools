@@ -103,7 +103,67 @@ function ConditionBadge({ condition }) {
   );
 }
 
-function RegionCard({ row, onEdit }) {
+
+const CLIMATE_PROFILES = {
+  lumenhold:     { climate: "Rain shadow desert. Scorching days, freezing nights. Almost no rain. Rare coastal fog from western sea. Sandstorms common in summer.", biome: "desert" },
+  flywheel:      { climate: "Mountain river basin with orographic lift. Heavy precipitation year-round. Persistent low cloud. Snow above the dam in winter. Mild valley temps.", biome: "mountain" },
+  cinder:        { climate: "High mountain pass. Fierce winds and blizzards in winter. Short warm summers. Snowmelt floods in spring. Volcanic geothermal warmth near the city.", biome: "highland" },
+  high_sable:    { climate: "Exposed cliff face, elevated. Constant wind scour. Brutal winters with ice storms. Short summer thaw. Fog rolls up from the valley below.", biome: "cliff" },
+  gearford:      { climate: "Central highland continental. Warm summers, cold winters. Spring storms roll through the mountain gap. Industrial steam creates localized fog and smog.", biome: "continental" },
+  thornwick:     { climate: "Dense old-growth frontier forest. Perpetually misty and damp from forest moisture cycle. Cool year-round. Heavy autumn rain. Rare sunny days.", biome: "forest" },
+  ashgate:       { climate: "Eastern transition zone at trade crossroads. Variable weather from multiple fronts. Warm dry summers. Stormy unpredictable autumn. Mild winters.", biome: "transition" },
+  morthand:      { climate: "Cold northern coast. Overcast and grey most of the year. Coastal storms in autumn and spring. Heavy snow. Short bright summers with sea fog.", biome: "northern coast" },
+  brassmere:     { climate: "Humid southern coastal port on the Mere. Frequent sea mist. Hot muggy summers. Mild winters. Atlantic-style storms. Industrial smog compounds natural fog.", biome: "coastal industrial" },
+  citadel:       { climate: "Southeast coast Mediterranean-like. Warmest and driest city. Hot summers, mild winters. Eastern sea storms in autumn. Occasional drought years.", biome: "mediterranean" },
+  ragged_signal: { climate: "Exposed southern tip peninsula. Open ocean on three sides. Storms arrive fast with little warning. Fierce winds. Volatile year-round. Highest storm frequency in winter.", biome: "exposed peninsula" },
+  gilded_index:  { climate: "Western peninsula cut off by water on three sides. Maritime climate. Moderate temps year-round. Constant Atlantic wind. Heavy rain in winter, clear breezy summers.", biome: "maritime" },
+  black_spur:    { climate: "Northern forest near the coast. Cold and wet. Frequent fog rolling in from the sea. Heavy snow in winter. Cool summers.", biome: "northern forest" },
+  iron_covenant: { climate: "Eastern forest, inland. Temperate with cold winters. Moderate rainfall year-round. Less extreme than Thornwick but still heavily forested and damp.", biome: "temperate forest" },
+  outlands:      { climate: "Open wilderness between city-states. Exposed to all weather fronts with no shelter. Conditions vary wildly by sub-region.", biome: "wilderness" },
+};
+
+async function generateWeatherSuggestion(regionId, season) {
+  const profile = CLIMATE_PROFILES[regionId];
+  const regionLabel = REGIONS.find(r => r.id === regionId)?.label ?? regionId;
+  if (!profile) return null;
+
+  const prompt = `You are the weather loremaster for Doranswyr, a fictional continent in an early industrial-era roleplay server called Railbound.
+
+Generate a weekly weather forecast for ${regionLabel} during ${season}.
+
+Climate profile: ${profile.climate}
+
+Return ONLY a JSON object with exactly these fields:
+{
+  "condition": one of: CLEAR, OVERCAST, HEAVY_RAIN, THUNDERSTORM, FOG, SANDSTORM, BLIZZARD, ICE_STORM, HEATWAVE, GALE, NAMED_STORM, SOURCE_ANOMALY,
+  "intensity": one of: LIGHT, MODERATE, SEVERE,
+  "forecast_title": a short evocative title (e.g. "The Widow's Knell" for a named storm, or "Dry Heat" for a heatwave),
+  "short_desc": one punchy sentence describing what this means for travelers (max 80 chars),
+  "forecast_body": 2-3 sentences of rich RP flavour text describing how this weather feels, sounds, and looks in ${regionLabel}. Write it like a weather report for adventurers. Do not mention game mechanics.
+}
+
+Match the condition to what is climatically realistic for this region and season. Named storms and Source anomalies should be rare. No explanation, no markdown, just the JSON object.`;
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    const data = await response.json();
+    const text = data.content?.find(b => b.type === "text")?.text ?? "";
+    const clean = text.replace(/```json|```/g, "").trim();
+    return JSON.parse(clean);
+  } catch {
+    return null;
+  }
+}
+
+function RegionCard({ row, onEdit, suggesting = false }) {
   const meta = CONDITION_META[row?.condition] ?? CONDITION_META.OVERCAST;
   const intColor = row ? INTENSITY_COLOR[row.intensity] : INTENSITY_COLOR.MODERATE;
   const isEmpty = !row;
@@ -178,19 +238,21 @@ function RegionCard({ row, onEdit }) {
   );
 }
 
-function EditModal({ regionId, existing, weekStart, staffName, onSave, onClose }) {
+function EditModal({ regionId, existing, suggestion, weekStart, staffName, onSave, onClose }) {
   const region = REGIONS.find(r => r.id === regionId);
+  const seed = existing ?? suggestion ?? {};
   const [form, setForm] = useState({
-    condition:       existing?.condition ?? "OVERCAST",
-    intensity:       existing?.intensity ?? "MODERATE",
-    forecast_title:  existing?.forecast_title ?? "",
-    forecast_body:   existing?.forecast_body ?? "",
-    short_desc:      existing?.short_desc ?? "",
-    effects:         existing?.effects ? JSON.stringify(existing.effects, null, 2) : "{}",
-    is_indefinite:   existing?.is_indefinite ?? false,
-    is_source_anomaly: existing?.is_source_anomaly ?? false,
-    override_note:   existing?.override_note ?? "",
+    condition:         seed.condition       ?? "OVERCAST",
+    intensity:         seed.intensity       ?? "MODERATE",
+    forecast_title:    seed.forecast_title  ?? "",
+    forecast_body:     seed.forecast_body   ?? "",
+    short_desc:        seed.short_desc      ?? "",
+    effects:           seed.effects ? JSON.stringify(seed.effects, null, 2) : "{}",
+    is_indefinite:     seed.is_indefinite   ?? false,
+    is_source_anomaly: seed.is_source_anomaly ?? false,
+    override_note:     seed.override_note   ?? "",
   });
+  const hasSuggestion = !existing && !!suggestion;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -266,6 +328,20 @@ function EditModal({ regionId, existing, weekStart, staffName, onSave, onClose }
           </button>
         </div>
 
+        {hasSuggestion && (
+          <div style={{
+            margin: "0 24px",
+            marginTop: 12,
+            padding: "10px 14px",
+            background: "var(--color-background-info)",
+            borderRadius: 8,
+            display: "flex", alignItems: "center", gap: 8,
+            fontSize: 12, color: "var(--color-text-info)",
+          }}>
+            <i className="ti ti-sparkles" style={{ fontSize: 14 }} aria-hidden />
+            <span>Auto-suggested based on {region?.zone} climate + {season} season. Edit freely.</span>
+          </div>
+        )}
         <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 20, flex: 1 }}>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -411,7 +487,8 @@ export default function WeatherDashboard({ staffName = "Staff" }) {
   const [rolling, setRolling] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [posting, setPosting] = useState(false);
-  const [editTarget, setEditTarget] = useState(null); // { regionId, existing }
+  const [editTarget, setEditTarget] = useState(null); // { regionId, existing, suggestion }
+  const [suggesting, setSuggesting] = useState(false);
   const [toast, setToast] = useState(null);
 
   function showToast(msg, type = "success") {
@@ -590,7 +667,18 @@ export default function WeatherDashboard({ staffName = "Staff" }) {
             <RegionCard
               key={r.id}
               row={getRowForRegion(r.id)}
-              onEdit={(regionId, existing) => setEditTarget({ regionId: regionId ?? r.id, existing })}
+              suggesting={suggesting === r.id}
+              onEdit={async (regionId, existing) => {
+                const rid = regionId ?? r.id;
+                if (!existing) {
+                  setSuggesting(rid);
+                  const suggestion = await generateWeatherSuggestion(rid, season);
+                  setSuggesting(false);
+                  setEditTarget({ regionId: rid, existing: null, suggestion });
+                } else {
+                  setEditTarget({ regionId: rid, existing, suggestion: null });
+                }
+              }}
             />
           ))}
         </div>
@@ -601,6 +689,7 @@ export default function WeatherDashboard({ staffName = "Staff" }) {
         <EditModal
           regionId={editTarget.regionId}
           existing={editTarget.existing}
+          suggestion={editTarget.suggestion}
           weekStart={weekStart}
           staffName={staffName}
           onSave={async () => {
