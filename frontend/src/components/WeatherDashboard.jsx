@@ -163,6 +163,25 @@ Match the condition to what is climatically realistic for this region and season
   }
 }
 
+
+const ZONE_COLORS = {
+  "desert":             { color: "#BA7517", bg: "#FAEEDA" },
+  "mountain":           { color: "#185FA5", bg: "#E6F1FB" },
+  "highland":           { color: "#993C1D", bg: "#FAECE7" },
+  "cliff":              { color: "#5F5E5A", bg: "#F1EFE8" },
+  "continental":        { color: "#3B6D11", bg: "#EAF3DE" },
+  "forest":             { color: "#0F6E56", bg: "#E1F5EE" },
+  "transition":         { color: "#534AB7", bg: "#EEEDFE" },
+  "northern coast":     { color: "#0C447C", bg: "#E6F1FB" },
+  "coastal industrial": { color: "#712B13", bg: "#FAECE7" },
+  "mediterranean":      { color: "#854F0B", bg: "#FAEEDA" },
+  "exposed peninsula":  { color: "#3C3489", bg: "#EEEDFE" },
+  "maritime":           { color: "#085041", bg: "#E1F5EE" },
+  "northern forest":    { color: "#27500A", bg: "#EAF3DE" },
+  "temperate forest":   { color: "#0F6E56", bg: "#E1F5EE" },
+  "wilderness":         { color: "#444441", bg: "#F1EFE8" },
+};
+
 function RegionCard({ row, onEdit, suggesting = false, regionId }) {
   const meta = CONDITION_META[row?.condition] ?? CONDITION_META.OVERCAST;
   const intColor = row ? INTENSITY_COLOR[row.intensity] : INTENSITY_COLOR.MODERATE;
@@ -181,9 +200,16 @@ function RegionCard({ row, onEdit, suggesting = false, regionId }) {
           <div style={{ fontWeight: 500, fontSize: 14, color: "var(--color-text-primary)" }}>
             {regionInfo?.label ?? row?.region ?? regionId}
           </div>
-          <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 1 }}>
-            {regionInfo?.zone ?? ""}
-          </div>
+          {regionInfo?.zone && (() => {
+            const zc = ZONE_COLORS[regionInfo.zone] ?? { color: "var(--color-text-secondary)", bg: "var(--color-background-secondary)" };
+            return (
+              <span style={{
+                display: "inline-block", fontSize: 10, fontWeight: 500,
+                padding: "1px 7px", borderRadius: 10, marginTop: 3,
+                background: zc.bg, color: zc.color,
+              }}>{regionInfo.zone}</span>
+            );
+          })()}
         </div>
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
           {row?.is_indefinite && <Badge label="Indefinite" bg="#EEEDFE" color="#3C3489" />}

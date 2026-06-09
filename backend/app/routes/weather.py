@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from supabase import create_client, Client
 from datetime import date
 
-router = APIRouter()
+router = APIRouter(prefix="/api/weather", tags=["weather"])
 
 DISCORD_TOKEN      = os.getenv("DISCORD_BOT_TOKEN")
 WEATHER_CHANNEL_ID = os.getenv("DISCORD_WEATHER_CHANNEL_ID")
