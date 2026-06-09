@@ -269,7 +269,7 @@ function EditModal({ regionId, existing, weekStart, staffName, onSave, onClose }
             type="text"
             value={form.forecast_title}
             onChange={e => set("forecast_title", e.target.value)}
-            placeholder='e.g. "Named Storm: The Widow\'s Knell"'
+            placeholder="e.g. Named Storm: The Widow's Knell"
           />
         </div>
 
