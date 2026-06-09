@@ -229,119 +229,168 @@ function EditModal({ regionId, existing, weekStart, staffName, onSave, onClose }
     } catch (e) { setError(e.message); setSaving(false); return; }
   }
 
-  const labelStyle = { fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 4, display: "block" };
-  const rowStyle = { display: "flex", flexDirection: "column", gap: 4 };
+  const meta = CONDITION_META[form.condition] ?? { icon: "ti-cloud", color: "#888" };
+  const intColor = INTENSITY_COLOR[form.intensity] ?? INTENSITY_COLOR.MODERATE;
 
   return (
     <div style={{
-      position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      zIndex: 100, padding: 24,
+      position: "fixed", inset: 0, zIndex: 200,
+      display: "flex", alignItems: "stretch", justifyContent: "flex-end",
     }}>
+      <div onClick={onClose} style={{ flex: 1, background: "rgba(0,0,0,0.25)" }} />
       <div style={{
+        width: "min(520px, 100vw)",
         background: "var(--color-background-primary)",
-        border: "0.5px solid var(--color-border-secondary)",
-        borderRadius: 16, padding: 24, width: "100%", maxWidth: 560,
-        display: "flex", flexDirection: "column", gap: 16,
-        maxHeight: "90vh", overflowY: "auto",
+        borderLeft: "0.5px solid var(--color-border-secondary)",
+        display: "flex", flexDirection: "column",
+        overflowY: "auto",
       }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{
+          padding: "20px 24px 16px",
+          borderBottom: "0.5px solid var(--color-border-tertiary)",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          position: "sticky", top: 0,
+          background: "var(--color-background-primary)", zIndex: 1,
+        }}>
           <div>
-            <div style={{ fontWeight: 500, fontSize: 16 }}>{region?.label ?? regionId}</div>
-            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Week of {weekStart}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <i className={`ti ${meta.icon}`} style={{ color: meta.color, fontSize: 18 }} aria-hidden />
+              <span style={{ fontWeight: 500, fontSize: 16 }}>{region?.label ?? regionId}</span>
+            </div>
+            <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 2 }}>
+              Week of {weekStart} · {region?.zone}
+            </div>
           </div>
-          <button onClick={onClose} aria-label="Close">
+          <button onClick={onClose} aria-label="Close" style={{ padding: "6px 8px" }}>
             <i className="ti ti-x" style={{ fontSize: 16 }} aria-hidden />
           </button>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <div style={rowStyle}>
-            <label style={labelStyle}>Condition</label>
-            <select value={form.condition} onChange={e => set("condition", e.target.value)}>
-              {CONDITIONS.map(c => <option key={c} value={c}>{c.replace(/_/g, " ")}</option>)}
-            </select>
+        <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 20, flex: 1 }}>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)" }}>Condition</span>
+              <select value={form.condition} onChange={e => set("condition", e.target.value)}>
+                {CONDITIONS.map(c => <option key={c} value={c}>{c.replace(/_/g, " ")}</option>)}
+              </select>
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)" }}>Intensity</span>
+              <select value={form.intensity} onChange={e => set("intensity", e.target.value)}>
+                {INTENSITIES.map(i => <option key={i} value={i}>{i}</option>)}
+              </select>
+            </label>
           </div>
-          <div style={rowStyle}>
-            <label style={labelStyle}>Intensity</label>
-            <select value={form.intensity} onChange={e => set("intensity", e.target.value)}>
-              {INTENSITIES.map(i => <option key={i} value={i}>{i}</option>)}
-            </select>
+
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 8,
+            padding: "6px 12px", borderRadius: 8, alignSelf: "flex-start",
+            background: intColor.bg, fontSize: 12, fontWeight: 500, color: intColor.text,
+          }}>
+            <i className={`ti ${meta.icon}`} style={{ fontSize: 14 }} aria-hidden />
+            {form.condition.replace(/_/g, " ")} · {form.intensity}
           </div>
-        </div>
 
-        <div style={rowStyle}>
-          <label style={labelStyle}>Forecast title <span style={{ color: "var(--color-text-tertiary)" }}>(shown in Discord embed)</span></label>
-          <input
-            type="text"
-            value={form.forecast_title}
-            onChange={e => set("forecast_title", e.target.value)}
-            placeholder="e.g. Named Storm: The Widow's Knell"
-          />
-        </div>
+          <div style={{ height: "0.5px", background: "var(--color-border-tertiary)" }} />
 
-        <div style={rowStyle}>
-          <label style={labelStyle}>Short description <span style={{ color: "var(--color-text-tertiary)" }}>(one line, embed footer)</span></label>
-          <input
-            type="text"
-            value={form.short_desc}
-            onChange={e => set("short_desc", e.target.value)}
-            placeholder="e.g. Seas are impassable. Rail only."
-          />
-        </div>
-
-        <div style={rowStyle}>
-          <label style={labelStyle}>Forecast body <span style={{ color: "var(--color-text-tertiary)" }}>(full RP description)</span></label>
-          <textarea
-            value={form.forecast_body}
-            onChange={e => set("forecast_body", e.target.value)}
-            rows={4}
-            placeholder="Describe the weather in flavour text..."
-            style={{ resize: "vertical" }}
-          />
-        </div>
-
-        <div style={rowStyle}>
-          <label style={labelStyle}>
-            Mechanical effects <span style={{ color: "var(--color-text-tertiary)" }}>(JSON)</span>
+          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)" }}>
+              Forecast title
+              <span style={{ fontWeight: 400, marginLeft: 6, color: "var(--color-text-tertiary)" }}>shown in Discord embed</span>
+            </span>
+            <input
+              type="text"
+              value={form.forecast_title}
+              onChange={e => set("forecast_title", e.target.value)}
+              placeholder="e.g. Named Storm: The Widow's Knell"
+            />
           </label>
-          <textarea
-            value={form.effects}
-            onChange={e => set("effects", e.target.value)}
-            rows={3}
-            style={{ fontFamily: "var(--font-mono)", fontSize: 12, resize: "vertical" }}
-            placeholder='{"ranged_accuracy": -10, "stamina_outdoor": -5}'
-          />
-        </div>
 
-        <div style={{ display: "flex", gap: 20 }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-            <input type="checkbox" checked={form.is_indefinite} onChange={e => set("is_indefinite", e.target.checked)} />
-            Indefinite (arc event — won't auto-clear)
+          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)" }}>
+              Short description
+              <span style={{ fontWeight: 400, marginLeft: 6, color: "var(--color-text-tertiary)" }}>one line, embed footer</span>
+            </span>
+            <input
+              type="text"
+              value={form.short_desc}
+              onChange={e => set("short_desc", e.target.value)}
+              placeholder="e.g. Seas are impassable. Rail only."
+            />
           </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-            <input type="checkbox" checked={form.is_source_anomaly} onChange={e => set("is_source_anomaly", e.target.checked)} />
-            Source anomaly
+
+          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)" }}>Forecast body</span>
+            <textarea
+              value={form.forecast_body}
+              onChange={e => set("forecast_body", e.target.value)}
+              rows={5}
+              placeholder="Describe the weather in flavour text..."
+              style={{ resize: "vertical" }}
+            />
           </label>
-        </div>
 
-        <div style={rowStyle}>
-          <label style={labelStyle}>Staff note <span style={{ color: "var(--color-text-tertiary)" }}>(internal only, not shown to players)</span></label>
-          <input
-            type="text"
-            value={form.override_note}
-            onChange={e => set("override_note", e.target.value)}
-            placeholder="e.g. Tied to arc event in ch.4"
-          />
-        </div>
+          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)" }}>
+              Mechanical effects
+              <span style={{ fontWeight: 400, marginLeft: 6, color: "var(--color-text-tertiary)" }}>JSON</span>
+            </span>
+            <textarea
+              value={form.effects}
+              onChange={e => set("effects", e.target.value)}
+              rows={3}
+              style={{ fontFamily: "var(--font-mono)", fontSize: 12, resize: "vertical" }}
+              placeholder='{"ranged_accuracy": -10, "stamina_outdoor": -5}'
+            />
+          </label>
 
-        {error && (
-          <div style={{ fontSize: 13, color: "var(--color-text-danger)", background: "var(--color-background-danger)", borderRadius: 8, padding: "8px 12px" }}>
-            {error}
+          <div style={{ height: "0.5px", background: "var(--color-border-tertiary)" }} />
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, cursor: "pointer" }}>
+              <input type="checkbox" checked={form.is_indefinite} onChange={e => set("is_indefinite", e.target.checked)} />
+              <div>
+                <div style={{ fontWeight: 500 }}>Indefinite</div>
+                <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>Arc event — won't auto-clear at week end</div>
+              </div>
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, cursor: "pointer" }}>
+              <input type="checkbox" checked={form.is_source_anomaly} onChange={e => set("is_source_anomaly", e.target.checked)} />
+              <div>
+                <div style={{ fontWeight: 500 }}>Source anomaly</div>
+                <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>Shows with distinct styling on player-facing map</div>
+              </div>
+            </label>
           </div>
-        )}
 
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)" }}>
+              Staff note
+              <span style={{ fontWeight: 400, marginLeft: 6, color: "var(--color-text-tertiary)" }}>internal only</span>
+            </span>
+            <input
+              type="text"
+              value={form.override_note}
+              onChange={e => set("override_note", e.target.value)}
+              placeholder="e.g. Tied to arc event in ch.4"
+            />
+          </label>
+
+          {error && (
+            <div style={{ fontSize: 13, color: "var(--color-text-danger)", background: "var(--color-background-danger)", borderRadius: 8, padding: "10px 14px" }}>
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div style={{
+          padding: "16px 24px",
+          borderTop: "0.5px solid var(--color-border-tertiary)",
+          display: "flex", gap: 8, justifyContent: "flex-end",
+          position: "sticky", bottom: 0,
+          background: "var(--color-background-primary)",
+        }}>
           <button onClick={onClose}>Cancel</button>
           <button onClick={handleSave} disabled={saving} style={{ fontWeight: 500 }}>
             {saving ? "Saving..." : "Save forecast"}
