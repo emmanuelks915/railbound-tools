@@ -425,51 +425,123 @@ REGION_ZONES = {
 
 @router.post("/suggest")
 async def suggest_weather(body: SuggestWeatherRequest):
-    """Generate an AI weather suggestion for a region+season via Claude."""
-    import anthropic
+    """Generate a weather suggestion using climate profiles and season weights — no AI needed."""
+    import random
     profile = CLIMATE_PROFILES.get(body.region_id)
-    zone = REGION_ZONES.get(body.region_id, body.region_id)
-    region_label = body.region_id.replace("_", " ").title()
     if not profile:
         raise HTTPException(status_code=400, detail="Unknown region")
 
-    temps = profile["temp"].get(body.season, (5, 20))
-    low, high = temps
+    season = body.season.lower()
+    temps = profile["temp"].get(season, (5, 20))
+    temp_low, temp_high = temps
 
-    prompt = f"""You are the weather loremaster for Doranswyr, a fictional continent in an early industrial-era roleplay server called Railbound.
+    # Season-weighted condition tables per biome
+    SEASON_WEIGHTS = {
+        "desert":             {"spring": ["CLEAR","CLEAR","SANDSTORM","OVERCAST","HEATWAVE"], "summer": ["CLEAR","CLEAR","HEATWAVE","HEATWAVE","SANDSTORM"], "autumn": ["CLEAR","OVERCAST","SANDSTORM","CLEAR","FOG"], "winter": ["OVERCAST","CLEAR","FOG","HEAVY_RAIN","CLEAR"]},
+        "mountain":           {"spring": ["HEAVY_RAIN","OVERCAST","HEAVY_RAIN","FOG","THUNDERSTORM"], "summer": ["OVERCAST","CLEAR","HEAVY_RAIN","THUNDERSTORM","CLEAR"], "autumn": ["HEAVY_RAIN","THUNDERSTORM","OVERCAST","FOG","HEAVY_RAIN"], "winter": ["BLIZZARD","BLIZZARD","ICE_STORM","OVERCAST","HEAVY_RAIN"]},
+        "highland":           {"spring": ["OVERCAST","HEAVY_RAIN","CLEAR","BLIZZARD","FOG"], "summer": ["CLEAR","OVERCAST","THUNDERSTORM","CLEAR","HEAVY_RAIN"], "autumn": ["HEAVY_RAIN","OVERCAST","GALE","THUNDERSTORM","FOG"], "winter": ["BLIZZARD","ICE_STORM","BLIZZARD","OVERCAST","GALE"]},
+        "cliff":              {"spring": ["GALE","OVERCAST","HEAVY_RAIN","FOG","CLEAR"], "summer": ["CLEAR","GALE","OVERCAST","CLEAR","FOG"], "autumn": ["GALE","HEAVY_RAIN","THUNDERSTORM","OVERCAST","GALE"], "winter": ["ICE_STORM","BLIZZARD","GALE","OVERCAST","ICE_STORM"]},
+        "continental":        {"spring": ["OVERCAST","HEAVY_RAIN","THUNDERSTORM","CLEAR","FOG"], "summer": ["CLEAR","CLEAR","THUNDERSTORM","OVERCAST","HEATWAVE"], "autumn": ["HEAVY_RAIN","OVERCAST","THUNDERSTORM","FOG","CLEAR"], "winter": ["OVERCAST","BLIZZARD","ICE_STORM","OVERCAST","HEAVY_RAIN"]},
+        "forest":             {"spring": ["FOG","HEAVY_RAIN","OVERCAST","FOG","CLEAR"], "summer": ["OVERCAST","FOG","CLEAR","HEAVY_RAIN","THUNDERSTORM"], "autumn": ["HEAVY_RAIN","FOG","OVERCAST","HEAVY_RAIN","THUNDERSTORM"], "winter": ["FOG","BLIZZARD","OVERCAST","ICE_STORM","HEAVY_RAIN"]},
+        "transition":         {"spring": ["OVERCAST","HEAVY_RAIN","CLEAR","THUNDERSTORM","FOG"], "summer": ["CLEAR","CLEAR","HEATWAVE","THUNDERSTORM","OVERCAST"], "autumn": ["THUNDERSTORM","HEAVY_RAIN","GALE","OVERCAST","FOG"], "winter": ["OVERCAST","HEAVY_RAIN","ICE_STORM","CLEAR","BLIZZARD"]},
+        "northern coast":     {"spring": ["FOG","HEAVY_RAIN","OVERCAST","THUNDERSTORM","FOG"], "summer": ["OVERCAST","CLEAR","FOG","HEAVY_RAIN","CLEAR"], "autumn": ["HEAVY_RAIN","THUNDERSTORM","GALE","OVERCAST","FOG"], "winter": ["BLIZZARD","ICE_STORM","GALE","OVERCAST","HEAVY_RAIN"]},
+        "coastal industrial": {"spring": ["FOG","OVERCAST","HEAVY_RAIN","CLEAR","FOG"], "summer": ["OVERCAST","CLEAR","FOG","THUNDERSTORM","HEATWAVE"], "autumn": ["HEAVY_RAIN","THUNDERSTORM","GALE","FOG","OVERCAST"], "winter": ["OVERCAST","HEAVY_RAIN","FOG","GALE","CLEAR"]},
+        "mediterranean":      {"spring": ["CLEAR","OVERCAST","HEAVY_RAIN","CLEAR","THUNDERSTORM"], "summer": ["CLEAR","CLEAR","HEATWAVE","CLEAR","THUNDERSTORM"], "autumn": ["THUNDERSTORM","HEAVY_RAIN","OVERCAST","CLEAR","GALE"], "winter": ["OVERCAST","HEAVY_RAIN","CLEAR","FOG","CLEAR"]},
+        "exposed peninsula":  {"spring": ["HEAVY_RAIN","THUNDERSTORM","OVERCAST","FOG","CLEAR"], "summer": ["CLEAR","GALE","THUNDERSTORM","CLEAR","OVERCAST"], "autumn": ["NAMED_STORM","GALE","THUNDERSTORM","HEAVY_RAIN","OVERCAST"], "winter": ["NAMED_STORM","GALE","ICE_STORM","GALE","HEAVY_RAIN"]},
+        "maritime":           {"spring": ["HEAVY_RAIN","OVERCAST","GALE","FOG","CLEAR"], "summer": ["CLEAR","CLEAR","OVERCAST","GALE","HEAVY_RAIN"], "autumn": ["HEAVY_RAIN","GALE","THUNDERSTORM","OVERCAST","FOG"], "winter": ["GALE","HEAVY_RAIN","OVERCAST","ICE_STORM","GALE"]},
+        "northern forest":    {"spring": ["FOG","HEAVY_RAIN","OVERCAST","FOG","CLEAR"], "summer": ["OVERCAST","CLEAR","FOG","HEAVY_RAIN","CLEAR"], "autumn": ["HEAVY_RAIN","FOG","OVERCAST","THUNDERSTORM","GALE"], "winter": ["BLIZZARD","ICE_STORM","FOG","OVERCAST","HEAVY_RAIN"]},
+        "temperate forest":   {"spring": ["OVERCAST","HEAVY_RAIN","FOG","CLEAR","THUNDERSTORM"], "summer": ["CLEAR","OVERCAST","THUNDERSTORM","CLEAR","FOG"], "autumn": ["HEAVY_RAIN","OVERCAST","FOG","THUNDERSTORM","CLEAR"], "winter": ["OVERCAST","BLIZZARD","ICE_STORM","HEAVY_RAIN","FOG"]},
+        "wilderness":         {"spring": ["OVERCAST","HEAVY_RAIN","CLEAR","THUNDERSTORM","FOG"], "summer": ["CLEAR","HEATWAVE","THUNDERSTORM","CLEAR","OVERCAST"], "autumn": ["HEAVY_RAIN","GALE","OVERCAST","THUNDERSTORM","FOG"], "winter": ["BLIZZARD","ICE_STORM","OVERCAST","GALE","HEAVY_RAIN"]},
+    }
 
-Generate a weekly weather forecast for {region_label} ({zone}) during {body.season}.
+    INTENSITY_WEIGHTS = {
+        "CLEAR": "LIGHT", "OVERCAST": "LIGHT", "FOG": "LIGHT",
+        "HEAVY_RAIN": "MODERATE", "THUNDERSTORM": "MODERATE", "GALE": "MODERATE",
+        "HEATWAVE": "MODERATE", "SANDSTORM": "MODERATE",
+        "BLIZZARD": "SEVERE", "ICE_STORM": "SEVERE", "NAMED_STORM": "SEVERE",
+    }
 
-Climate profile: {profile["climate"]}
-Typical temperature range this season: {low}°C low / {high}°C high
+    WIND_MAP = {
+        "CLEAR": "LIGHT_BREEZE", "OVERCAST": "MODERATE_WIND", "FOG": "CALM",
+        "HEAVY_RAIN": "STRONG_WIND", "THUNDERSTORM": "STRONG_WIND", "GALE": "GALE_FORCE",
+        "HEATWAVE": "LIGHT_BREEZE", "SANDSTORM": "GALE_FORCE",
+        "BLIZZARD": "GALE_FORCE", "ICE_STORM": "STRONG_WIND", "NAMED_STORM": "GALE_FORCE",
+    }
 
-Return ONLY a valid JSON object with exactly these fields, no markdown, no explanation:
-{{
-  "condition": one of CLEAR|OVERCAST|HEAVY_RAIN|THUNDERSTORM|FOG|SANDSTORM|BLIZZARD|ICE_STORM|HEATWAVE|GALE|NAMED_STORM,
-  "intensity": one of LIGHT|MODERATE|SEVERE,
-  "forecast_title": "short evocative title, 2-5 words",
-  "short_desc": "one punchy sentence for travelers, max 80 chars",
-  "forecast_body": "2-3 sentences of rich RP flavour. How it feels, sounds, smells. No game mechanics.",
-  "temp_low": {low},
-  "temp_high": {high},
-  "humidity": a percentage integer 0-100 realistic for this climate and condition,
-  "wind": one of CALM|LIGHT_BREEZE|MODERATE_WIND|STRONG_WIND|GALE_FORCE,
-  "visibility": one of CLEAR|HAZY|POOR|NEAR_ZERO
-}}"""
+    VISIBILITY_MAP = {
+        "CLEAR": "CLEAR", "OVERCAST": "HAZY", "FOG": "NEAR_ZERO",
+        "HEAVY_RAIN": "POOR", "THUNDERSTORM": "POOR", "GALE": "HAZY",
+        "HEATWAVE": "HAZY", "SANDSTORM": "NEAR_ZERO",
+        "BLIZZARD": "NEAR_ZERO", "ICE_STORM": "POOR", "NAMED_STORM": "NEAR_ZERO",
+    }
 
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not set")
+    HUMIDITY_MAP = {
+        "CLEAR": 30, "OVERCAST": 55, "FOG": 90, "HEAVY_RAIN": 85,
+        "THUNDERSTORM": 80, "GALE": 60, "HEATWAVE": 20, "SANDSTORM": 10,
+        "BLIZZARD": 70, "ICE_STORM": 75, "NAMED_STORM": 88,
+    }
 
-    client = anthropic.Anthropic(api_key=api_key)
-    message = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=512,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    text = message.content[0].text.strip()
-    text = text.replace("```json", "").replace("```", "").strip()
+    TITLE_TEMPLATES = {
+        "CLEAR": ["Clear Skies", "Blue Horizon", "Fair Weather", "Open Skies"],
+        "OVERCAST": ["Grey Ceiling", "Heavy Cloud Cover", "Overcast", "Leaden Skies"],
+        "FOG": ["The Thick of It", "Mist and Murk", "Low Visibility", "Morning Fog"],
+        "HEAVY_RAIN": ["Downpour", "Heavy Rain", "The Deluge", "Driving Rain"],
+        "THUNDERSTORM": ["Thunder Rolls", "Storm Front", "Lightning Season", "The Crackle"],
+        "GALE": ["High Winds", "Gale Warning", "The Howl", "Wind Advisory"],
+        "HEATWAVE": ["Dry Heat", "The Bake", "Scorching Week", "No Relief"],
+        "SANDSTORM": ["The Scouring", "Sand and Grit", "Dust Curtain", "Desert Fury"],
+        "BLIZZARD": ["Whiteout", "The Deep Freeze", "Blizzard Conditions", "Buried"],
+        "ICE_STORM": ["Ice Lock", "The Glaze", "Freezing Rain", "Black Ice"],
+        "NAMED_STORM": ["The Widow's Knell", "Iron Tide", "The Grey Fury", "Blackwater Storm", "The Howling Dark"],
+    }
 
-    import json
-    suggestion = json.loads(text)
+    SHORT_DESC_TEMPLATES = {
+        "CLEAR": ["Good traveling weather. Roads are dry.", "Clear skies. No delays expected.", "Favorable conditions across the region."],
+        "OVERCAST": ["Dull but passable. Bring a coat.", "No rain yet, but don't count on it.", "Grey skies, manageable roads."],
+        "FOG": ["Visibility near zero. Travel with caution.", "Fog blankets the region. Rails only.", "Dense mist. Easy to get turned around."],
+        "HEAVY_RAIN": ["Roads are muddy. Expect delays.", "Rivers are swelling. Watch the crossings.", "Wet through and through. Pack dry gear."],
+        "THUNDERSTORM": ["Lightning risk outdoors. Seek shelter.", "Flash flood warnings in low areas.", "Storm cells moving fast. Stay alert."],
+        "GALE": ["Strong winds. Unsecured cargo will not survive.", "Gale force gusts. Travel hazardous.", "Winds knock you sideways. Brace up."],
+        "HEATWAVE": ["Extreme heat. Hydrate or suffer.", "Heat exhaustion risk for outdoor work.", "No shade, no mercy. Travel at night."],
+        "SANDSTORM": ["Sandstorm conditions. Stay indoors.", "Visibility zero. Rail only. No exceptions.", "Grit in everything. Eyes and lungs at risk."],
+        "BLIZZARD": ["Blizzard conditions. All roads closed.", "Whiteout. Do not travel overland.", "Snow is chest-deep in places. Rail or nothing."],
+        "ICE_STORM": ["Ice everywhere. One wrong step.", "Freezing rain coats every surface.", "Dangerous footing. Slow down or don't go."],
+        "NAMED_STORM": ["Named storm active. All travel suspended.", "Seek shelter immediately. This is serious.", "The worst of the season. Do not go outside."],
+    }
+
+    biome = profile.get("biome", "wilderness")
+    table = SEASON_WEIGHTS.get(biome, SEASON_WEIGHTS["wilderness"])
+    season_list = table.get(season, table.get("spring", ["OVERCAST"]))
+    condition = random.choice(season_list)
+    intensity = INTENSITY_WEIGHTS.get(condition, "MODERATE")
+
+    # Small chance to bump severity
+    if random.random() < 0.15 and intensity == "MODERATE":
+        intensity = "SEVERE"
+    elif random.random() < 0.2 and intensity == "LIGHT":
+        intensity = "MODERATE"
+
+    title = random.choice(TITLE_TEMPLATES.get(condition, ["Weather Report"]))
+    short_desc = random.choice(SHORT_DESC_TEMPLATES.get(condition, ["Conditions vary."]))
+    humidity = HUMIDITY_MAP.get(condition, 50) + random.randint(-10, 10)
+    humidity = max(0, min(100, humidity))
+
+    # Add slight temp variation
+    variation = random.randint(-2, 2)
+
+    suggestion = {
+        "condition":      condition,
+        "intensity":      intensity,
+        "forecast_title": title,
+        "short_desc":     short_desc,
+        "forecast_body":  "",
+        "temp_low":       temp_low + variation,
+        "temp_high":      temp_high + variation,
+        "humidity":       humidity,
+        "wind":           WIND_MAP.get(condition, "MODERATE_WIND"),
+        "visibility":     VISIBILITY_MAP.get(condition, "CLEAR"),
+    }
+
     return {"ok": True, "suggestion": suggestion}
+
+
