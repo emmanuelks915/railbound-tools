@@ -7277,7 +7277,7 @@ function combatDerived(str: number, dex: number, sta: number, aff: number, man: 
 function combatAtk(type: string, d: CombatDerived, wpn: number, mc: number) {
   if (type === "heavy") return { power: Math.round((d.str * 1.1) + (d.dex * 0.35) + wpn), speed: Math.round(Math.min(d.dex * 1.25, d.fort)) };
   if (type === "agile") return { power: Math.round((d.dex * 0.65) + (d.str * 0.4) + wpn),  speed: Math.round(Math.min(d.dex * 1.25, d.fort)) };
-  return { power: Math.round((d.aff * 0.9) + (d.man * 0.6) + mc), speed: Math.round(Math.min(d.aff * 1.4, d.fort + d.man * 0.25)) };
+  return { power: Math.round((d.aff * 0.9) + (d.man * 0.6) + mc), speed: Math.round(Math.min(d.aff * 1.4, d.fort + d.man * 0.6)) };
 }
 
 function combatInjTier(dmg: number) {
