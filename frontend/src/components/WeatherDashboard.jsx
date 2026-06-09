@@ -163,10 +163,11 @@ Match the condition to what is climatically realistic for this region and season
   }
 }
 
-function RegionCard({ row, onEdit, suggesting = false }) {
+function RegionCard({ row, onEdit, suggesting = false, regionId }) {
   const meta = CONDITION_META[row?.condition] ?? CONDITION_META.OVERCAST;
   const intColor = row ? INTENSITY_COLOR[row.intensity] : INTENSITY_COLOR.MODERATE;
   const isEmpty = !row;
+  const regionInfo = REGIONS.find(r => r.id === (row?.region ?? regionId));
 
   return (
     <div style={{
@@ -178,10 +179,10 @@ function RegionCard({ row, onEdit, suggesting = false }) {
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
         <div>
           <div style={{ fontWeight: 500, fontSize: 14, color: "var(--color-text-primary)" }}>
-            {REGIONS.find(r => r.id === row?.region)?.label ?? row?.region}
+            {regionInfo?.label ?? row?.region ?? regionId}
           </div>
           <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 1 }}>
-            {REGIONS.find(r => r.id === row?.region)?.zone ?? ""}
+            {regionInfo?.zone ?? ""}
           </div>
         </div>
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -667,6 +668,7 @@ export default function WeatherDashboard({ staffName = "Staff" }) {
             <RegionCard
               key={r.id}
               row={getRowForRegion(r.id)}
+              regionId={r.id}
               suggesting={suggesting === r.id}
               onEdit={async (regionId, existing) => {
                 const rid = regionId ?? r.id;

@@ -242,13 +242,47 @@ async def post_weather_to_discord(body: PostWeatherRequest):
 
 
 @router.post("/roll")
-async def roll_forecast(season: str, week_start: str = None):
-    """Trigger the DB roll function. Called by the dashboard Roll button."""
-    result = get_supabase().rpc("roll_weekly_forecast", {
-        "p_season": season,
-        "p_week_start": week_start,
-    }).execute()
-    return {"ok": True, "rows": result.data}
+async def roll_forecast(season: str = "spring", week_start: str = None):
+    """Trigger the DB roll function. Falls back to seeding blank rows if RPC not available."""
+    from datetime import date, timedelta
+    ws = week_start or (date.today() + timedelta(days=7 - date.today().weekday())).isoformat()
+    sb = get_supabase()
+
+    REGIONS_LIST = [
+        "lumenhold","flywheel","cinder","high_sable","gearford","thornwick",
+        "ashgate","morthand","brassmere","citadel","ragged_signal","gilded_index",
+        "black_spur","iron_covenant","outlands"
+    ]
+
+    # Try the RPC first (requires migration to have been run)
+    try:
+        result = sb.rpc("roll_weekly_forecast", {
+            "p_season": season,
+            "p_week_start": ws,
+        }).execute()
+        return {"ok": True, "rows": result.data}
+    except Exception:
+        pass
+
+    # Fallback: upsert blank OVERCAST rows so the dashboard shows region names
+    rows = []
+    for region in REGIONS_LIST:
+        row = {
+            "region": region,
+            "condition": "OVERCAST",
+            "intensity": "MODERATE",
+            "forecast_title": f"{region.replace('_', ' ').title()} — pending review",
+            "forecast_body": "Auto-seeded. Edit before posting.",
+            "short_desc": "Forecast pending staff review.",
+            "effects": {},
+            "week_start": ws,
+            "set_by": "system",
+            "is_active": True,
+        }
+        rows.append(row)
+
+    result = sb.table("weather_conditions").upsert(rows, on_conflict="region,week_start").execute()
+    return {"ok": True, "rows": result.data, "note": "Seeded blank rows — run SQL migration to enable dice-table rolling"}
 
 
 @router.get("/current")
