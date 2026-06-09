@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Calculator, Check, ClipboardList, Home, Package, Plus, RefreshCw, Save, Send, ShieldCheck, Sparkles, Store, UserRound, X, Users } from "lucide-react";
+import { Calculator, Check, ClipboardList, Home, Package, Plus, RefreshCw, Save, Send, ShieldCheck, Sparkles, Store, UserRound, X, Users, CloudLightning } from "lucide-react";
+import WeatherDashboard from "./components/WeatherDashboard";
 import "./styles.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -21,7 +22,7 @@ type CoreStats = {
   mana: number;
 };
 
-type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "missions" | "companion" | "staff" | "beast_skills" | "combat" | "registry" | "register" | "manage_oc" | "qa" | "shop_owner";
+type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "missions" | "companion" | "staff" | "beast_skills" | "combat" | "registry" | "register" | "manage_oc" | "qa" | "shop_owner" | "weather";
 
 const STAT_LABELS: Record<keyof CoreStats, string> = {
   strength: "Strength",
@@ -172,6 +173,7 @@ function App() {
     ["staff", ShieldCheck, "Staff"],
     ["beast_skills", Sparkles, "Beast Skills"],
     ["combat", ClipboardList, "Combat Calculator"],
+    ["weather", CloudLightning, "Weather"],
   ] as const;
 
     const permissions = usePermissions(discordId);
@@ -285,6 +287,7 @@ return (
       {tab === "staff" && <StaffOnly discordId={discordId}><section className="request-workflow-page"><StaffQueue discordId={discordId} /></section></StaffOnly>}
       {tab === "beast_skills" && <BeastSkillCatalogDashboard discordId={discordId} />}
       {tab === "combat" && <DerivedStatsCalculator discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "weather" && <StaffOnly discordId={discordId}><WeatherDashboard staffName={authUser?.global_name || authUser?.username || discordId} /></StaffOnly>}
     </main>
   );
 }
@@ -6076,14 +6079,6 @@ function StaffQueue({ discordId }: { discordId: string }) {
         setMessage("Enter the XP amount to remove.");
         return;
       }
-    } else if (action === "remove_currency") {
-      endpoint = "/api/staff/maintenance/currency/remove";
-      body.amount = Number(maintenanceForm.amount || 0);
-      body.currency_id = resourceForm.currency_id;
-      if (!body.amount || body.amount <= 0) {
-        setMessage("Enter the currency amount to remove.");
-        return;
-      }
     } else if (action === "remove_skill") {
       endpoint = "/api/staff/maintenance/skill/remove";
       body.skill_key = maintenanceForm.skill_key;
@@ -6815,7 +6810,6 @@ function StaffQueue({ discordId }: { discordId: string }) {
                 <option value="preview_city_lore_roles">Preview City Lore Role Backfill</option>
                 <option value="backfill_city_lore_roles">Backfill City Lore Roles</option>
                 <option value="remove_xp">Remove XP</option>
-                <option value="remove_currency">Remove Currency</option>
                 <option value="remove_skill">Remove Skill</option>
                 <option value="remove_trait">Remove Trait</option>
                 <option value="grant_custom_skill">Grant Hidden Custom Skill</option>
@@ -6975,40 +6969,6 @@ function StaffQueue({ discordId }: { discordId: string }) {
                 <span>XP to Remove</span>
                 <input type="number" min="1" value={maintenanceForm.amount} onChange={(event) => setMaintenanceForm((current) => ({ ...current, amount: event.target.value }))} placeholder="Example: 67" />
               </label>
-            ) : null}
-
-            {maintenanceForm.action === "remove_currency" ? (
-              <>
-                <label>
-                  <span>Currency to Remove</span>
-                  <select
-                    value={resourceForm.currency_id}
-                    onChange={(event) =>
-                      setResourceForm((current) => ({ ...current, currency_id: event.target.value }))
-                    }
-                  >
-                    <option value="">Primary currency</option>
-                    {resourceCurrencies.map((currency: any) => (
-                      <option key={currency.currency_id} value={currency.currency_id}>
-                        {currency.emoji ? `${currency.emoji} ` : ""}{currency.name} ({currency.ticker})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label>
-                  <span>Currency Amount to Remove</span>
-                  <input
-                    type="number"
-                    min="1"
-                    value={maintenanceForm.amount}
-                    onChange={(event) =>
-                      setMaintenanceForm((current) => ({ ...current, amount: event.target.value }))
-                    }
-                    placeholder="Example: 50"
-                  />
-                </label>
-              </>
             ) : null}
 
             {maintenanceForm.action === "remove_skill" ? (
@@ -7277,7 +7237,7 @@ function combatDerived(str: number, dex: number, sta: number, aff: number, man: 
 function combatAtk(type: string, d: CombatDerived, wpn: number, mc: number) {
   if (type === "heavy") return { power: Math.round((d.str * 1.1) + (d.dex * 0.35) + wpn), speed: Math.round(Math.min(d.dex * 1.25, d.fort)) };
   if (type === "agile") return { power: Math.round((d.dex * 0.65) + (d.str * 0.4) + wpn),  speed: Math.round(Math.min(d.dex * 1.25, d.fort)) };
-  return { power: Math.round((d.aff * 0.9) + (d.man * 0.6) + mc), speed: Math.round(Math.min(d.aff * 1.4, d.fort + d.man * 0.6)) };
+  return { power: Math.round((d.aff * 0.9) + (d.man * 0.6) + mc), speed: Math.round(Math.min(d.aff * 1.4, d.fort + d.man * 0.25)) };
 }
 
 function combatInjTier(dmg: number) {
@@ -7463,11 +7423,6 @@ function DerivedStatsCalculator({ discordId = "", selectedCharacterId = "", setS
   function renderOutgoing() {
     const atk = combatAtk(outType, d, outWpn, outMana);
     const lim = outType === "magic" ? d.magicSafe : d.safeOut;
-    const magicSpeedAffCap = Math.round(d.aff * 1.4);
-    const magicSpeedFortManaCap = Math.round(d.fort + d.man * 0.6);
-    const attackSpeedSub = outType === "magic"
-      ? `Lower of AFF × 1.4 (${magicSpeedAffCap}) and Fortitude + MAN × 0.6 (${magicSpeedFortManaCap})`
-      : undefined;
     const inj = combatInjTier(atk.power);
     let targetSection = null;
     if (tgtDex > 0 || tgtSta > 0) {
@@ -7503,7 +7458,7 @@ function DerivedStatsCalculator({ discordId = "", selectedCharacterId = "", setS
           </div>
         </div>
         <p style={sectionLbl}>Your attack output</p>
-        <div style={grid}><CombatStatCard label="Attack power" value={atk.power} /><CombatStatCard label="Attack speed" value={atk.speed} sub={attackSpeedSub} /><CombatStatCard label="Safe output" value={Math.round(lim)} /></div>
+        <div style={grid}><CombatStatCard label="Attack power" value={atk.power} /><CombatStatCard label="Attack speed" value={atk.speed} /><CombatStatCard label="Safe output" value={Math.round(lim)} /></div>
         <CombatBox tag={atk.power > lim ? "danger" : "good"} label={atk.power > lim ? "Over safe output" : "Within safe output"} body={atk.power > lim ? `Your attack power (${atk.power}) exceeds your safe output (${Math.round(lim)}) by ${Math.round(atk.power-lim)}. You will take self-damage equal to that overage.` : "No self-damage. This attack is within your physical/magical limits."} />
         {stealth && <CombatBox tag="info" label="Ambush active" body="Target is forced to partial reaction (50% clash power) regardless of their reaction score. No dodge." />}
         <p style={{ ...sectionLbl, marginTop:"1.5rem" }}>Injury if uncontested</p>
