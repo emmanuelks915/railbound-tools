@@ -1,7 +1,8 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Calculator, Check, ClipboardList, Home, Package, Plus, RefreshCw, Save, Send, ShieldCheck, Sparkles, Store, UserRound, X, Users, CloudLightning } from "lucide-react";
+import { BookOpen, Calculator, Check, ClipboardList, Home, Package, Plus, RefreshCw, Save, Send, ShieldCheck, Sparkles, Store, UserRound, X, Users, CloudLightning } from "lucide-react";
 import WeatherDashboard from "./components/WeatherDashboard";
+import GettingStartedDashboard from "./components/GettingStartedDashboard";
 import "./styles.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -22,7 +23,7 @@ type CoreStats = {
   mana: number;
 };
 
-type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "missions" | "companion" | "staff" | "beast_skills" | "combat" | "registry" | "register" | "manage_oc" | "qa" | "shop_owner" | "weather";
+type Tab = "home" | "getting_started" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "missions" | "companion" | "staff" | "beast_skills" | "combat" | "registry" | "register" | "manage_oc" | "qa" | "shop_owner" | "weather";
 
 const STAT_LABELS: Record<keyof CoreStats, string> = {
   strength: "Strength",
@@ -155,6 +156,7 @@ function App() {
 
   const tabs = [
     ["home", Home, "Dashboard"],
+    ["getting_started", BookOpen, "Getting Started"],
 
     ["oc", UserRound, "OC"],
     ["register", UserRound, "Register OC"],
@@ -269,6 +271,9 @@ return (
           setSelectedCharacterId={setSelectedCharacterId}
           jump={setTab}
         />
+      )}
+      {tab === "getting_started" && (
+        <GettingStartedDashboard discordId={discordId} jump={setTab} />
       )}
       {tab === "activity" && <StaffOnly discordId={discordId}><ActivityDashboard discordId={discordId} /></StaffOnly>}
       {tab === "qa" && <StaffOnly discordId={discordId}><ProductionQADashboard discordId={discordId} jump={setTab} /></StaffOnly>}
