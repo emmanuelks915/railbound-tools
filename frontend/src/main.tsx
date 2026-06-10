@@ -174,7 +174,6 @@ function App() {
     ["activity", ClipboardList, "Activity"],
     ["staff", ShieldCheck, "Staff"],
     ["beast_skills", Sparkles, "Beast Skills"],
-    ["qa", ClipboardList, "QA Checklist"],
     ["weather", CloudLightning, "Weather"],
     ["combat", ClipboardList, "Derived Stats"],
   ] as const;
@@ -274,14 +273,13 @@ return (
         />
       )}
       {tab === "activity" && <StaffOnly discordId={discordId}><ActivityDashboard discordId={discordId} /></StaffOnly>}
-      {tab === "qa" && <StaffOnly discordId={discordId}><ProductionQADashboard discordId={discordId} jump={setTab} /></StaffOnly>}
       {tab === "planner" && <Planner discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "oc" && <OCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} jump={setTab} />}
       {tab === "manage_oc" && <ManageOCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "getting_started" && <GettingStartedDashboard discordId={discordId} jump={setTab} />}
       {tab === "inventory" && <InventoryDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "loadouts" && <LoadoutsDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
-      {tab === "weather" && <StaffOnly discordId={discordId}><WeatherDashboard staffName={authUser?.global_name || authUser?.username || discordId} /></StaffOnly>}
+      {tab === "weather" && <WeatherDashboard staffName={authUser?.global_name || authUser?.username || discordId} />}
       {(tab === "shops" || tab === "shop_owner") && (
         <ShopHubDashboard
           discordId={discordId}
@@ -351,7 +349,7 @@ function canUseTab(permissions: any, tab: Tab) {
 
   if (!allowedTabs.length) {
     // Not yet loaded — hide staff/restricted tabs, show everything else except shop_owner nav
-    return !["staff", "qa", "activity", "shop_owner", "weather"].includes(String(tab));
+    return !["staff", "qa", "activity", "shop_owner", "weather", "combat"].includes(String(tab));
   }
 
   return allowedTabs.includes(tab);
