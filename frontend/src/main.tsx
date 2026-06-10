@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import WeatherDashboard from "./components/WeatherDashboard";
+import GettingStartedDashboard from "./components/GettingStartedDashboard";
 import { createRoot } from "react-dom/client";
-import { Calculator, Check, ClipboardList, Edit, Eye, EyeOff, Home, Package, Plus, RefreshCw, Save, Send, ShieldCheck, ShoppingCart, Sparkles, Store, Trash2, UserRound, X, Users } from "lucide-react";
+import { BookOpen, Calculator, Check, ClipboardList, CloudLightning, Edit, Eye, EyeOff, Home, Package, Plus, RefreshCw, Save, Send, ShieldCheck, ShoppingCart, Sparkles, Store, Trash2, UserRound, X, Users } from "lucide-react";
 import "./styles.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -21,7 +23,7 @@ type CoreStats = {
   mana: number;
 };
 
-type Tab = "home" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "missions" | "companion" | "staff" | "beast_skills" | "combat" | "registry" | "register" | "manage_oc" | "qa" | "shop_owner" | "loadouts";
+type Tab = "home" | "getting_started" | "activity" | "planner" | "oc" | "inventory" | "shops" | "skills" | "rp" | "missions" | "companion" | "staff" | "beast_skills" | "combat" | "registry" | "register" | "manage_oc" | "qa" | "shop_owner" | "loadouts" | "weather";
 
 const STAT_LABELS: Record<keyof CoreStats, string> = {
   strength: "Strength",
@@ -155,6 +157,7 @@ function App() {
   const tabs = [
     ["home", Home, "Dashboard"],
 
+    ["getting_started", BookOpen, "Getting Started"],
     ["oc", UserRound, "OC"],
     ["register", UserRound, "Register OC"],
     ["registry", Users, "OC Registry"],
@@ -172,6 +175,7 @@ function App() {
     ["staff", ShieldCheck, "Staff"],
     ["beast_skills", Sparkles, "Beast Skills"],
     ["qa", ClipboardList, "QA Checklist"],
+    ["weather", CloudLightning, "Weather"],
     ["combat", ClipboardList, "Derived Stats"],
   ] as const;
 
@@ -274,8 +278,10 @@ return (
       {tab === "planner" && <Planner discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "oc" && <OCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} jump={setTab} />}
       {tab === "manage_oc" && <ManageOCDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "getting_started" && <GettingStartedDashboard discordId={discordId} jump={setTab} />}
       {tab === "inventory" && <InventoryDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
       {tab === "loadouts" && <LoadoutsDashboard discordId={discordId} selectedCharacterId={selectedCharacterId} setSelectedCharacterId={setSelectedCharacterId} />}
+      {tab === "weather" && <StaffOnly discordId={discordId}><WeatherDashboard staffName={authUser?.global_name || authUser?.username || discordId} /></StaffOnly>}
       {(tab === "shops" || tab === "shop_owner") && (
         <ShopHubDashboard
           discordId={discordId}
@@ -345,7 +351,7 @@ function canUseTab(permissions: any, tab: Tab) {
 
   if (!allowedTabs.length) {
     // Not yet loaded — hide staff/restricted tabs, show everything else except shop_owner nav
-    return !["staff", "qa", "activity", "shop_owner"].includes(String(tab));
+    return !["staff", "qa", "activity", "shop_owner", "weather"].includes(String(tab));
   }
 
   return allowedTabs.includes(tab);

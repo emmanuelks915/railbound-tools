@@ -8,11 +8,10 @@ from app.security import actor_from_header
 router = APIRouter(prefix="/api/auth", tags=["permissions"])
 
 
-STAFF_TABS = {"staff", "qa", "beast_skills", "weather"}
+STAFF_TABS = {"staff", "qa", "beast_skills"}
 STAFF_RECOMMENDED_TABS = {"activity"}
 
 PLAYER_TABS = [
-    "getting_started",
     "dashboard",
     "planner",
     "oc",
@@ -26,7 +25,7 @@ PLAYER_TABS = [
     "missions",
     "companion",
     "loadouts",
-    "combat",
+    "getting_started",
 ]
 
 
