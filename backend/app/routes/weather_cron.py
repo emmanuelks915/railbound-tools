@@ -47,7 +47,7 @@ async def weekly_auto_post(x_cron_secret: str = Header(default="")):
     today = date.today()
     week_start = (today - timedelta(days=today.weekday())).isoformat()
 
-    backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+    backend_url = os.getenv("BACKEND_URL", "http://railbound-tools.railway.internal:8080")
     season = get_current_season()
 
     async with httpx.AsyncClient(timeout=30) as client:
