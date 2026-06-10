@@ -326,13 +326,18 @@ async def roll_forecast(season: str = "spring", week_start: str = None):
         }
         rows.append(row)
 
+    inserted = []
     for row in rows:
+        try:
+            sb.table("weather_conditions").insert(row).execute()
+        except Exception:
             try:
-                sb.table("weather_conditions").insert(row).execute()
-            except Exception:
                 sb.table("weather_conditions").update(row).eq("region", row["region"]).eq("week_start", ws).eq("is_active", True).execute()
-        result = type("R", (), {"data": rows})()
-    return {"ok": True, "rows": result.data, "note": "Seeded blank rows — run SQL migration to enable dice-table rolling"}
+            except Exception:
+                pass
+        inserted.append(row["region"])
+
+    return {"ok": True, "regions": inserted, "note": "Seeded blank rows — run SQL migration to enable dice-table rolling"}
 
 
 @router.get("/current")
