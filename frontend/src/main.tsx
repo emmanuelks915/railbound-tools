@@ -208,7 +208,7 @@ function App() {
     <main className="app-shell">
       <section className="hero">
         <div>
-          <p className="eyebrow">Railbound Systems</p>
+          <p className="eyebrow">Railbound Systems · Keystone Tools</p>
           <h1>Railbound Tools</h1>
           <p className="subtitle">
             OC dashboard, XP planning, inventory, loadouts, player shops, skills, staff approvals, and combat math.
