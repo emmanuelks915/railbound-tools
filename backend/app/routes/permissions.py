@@ -12,6 +12,7 @@ STAFF_TABS = {"staff", "qa", "beast_skills", "weather"}
 STAFF_RECOMMENDED_TABS = {"activity"}
 
 PLAYER_TABS = [
+    "getting_started",
     "dashboard",
     "planner",
     "oc",
