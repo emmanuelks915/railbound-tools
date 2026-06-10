@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import LandingPage from "./components/LandingPage";
+import "./landing.css";
 import WeatherDashboard from "./components/WeatherDashboard";
 import GettingStartedDashboard from "./components/GettingStartedDashboard";
 import { createRoot } from "react-dom/client";
@@ -197,7 +199,12 @@ function App() {
 
   const isLoggedInForDashboard = Boolean(discordId);
 
-return (
+  // Show landing page for unauthenticated users
+  if (!authUser && !discordId) {
+    return <LandingPage onLogin={loginWithDiscord} />;
+  }
+
+  return (
     <main className="app-shell">
       <section className="hero">
         <div>
