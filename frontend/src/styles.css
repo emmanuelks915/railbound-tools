@@ -150,7 +150,7 @@ input:focus, select:focus, textarea:focus {
 
   background: #130c05;
 
-  color: #f0e4c8;
+  color: #2c1f0e;
 
 }
 
@@ -224,9 +224,9 @@ button:disabled {
 
 button.ghost {
 
-  background: #1f1609;
+  background: #f0e6d0;
 
-  color: #f0e4c8;
+  color: #2c1f0e;
 
 }
 
@@ -256,7 +256,7 @@ button.danger {
 
   border-radius: 32px;
 
-  background: linear-gradient(135deg, #160e06, #2a1d0e);
+  background: linear-gradient(135deg, #f0e6d0, #2a1d0e);
 
   padding: 2rem;
 
@@ -350,9 +350,9 @@ p {
 
 .tabs button {
 
-  background: #160e06;
+  background: #f0e6d0;
 
-  color: #e8d5aa;
+  color: #2c1f0e;
 
   box-shadow: 0 8px 24px rgba(200, 146, 42, 0.1);
 
@@ -384,7 +384,7 @@ p {
 
 .card {
 
-  background: #160e06;
+  background: #f0e6d0;
 
   border: 1px solid rgba(61, 51, 43, 0.1);
 
@@ -462,9 +462,9 @@ textarea {
 
   padding: 0.85rem 1rem;
 
-  background: #1d1309;
+  background: #f0e6d0;
 
-  color: #f0e4c8;
+  color: #2c1f0e;
 
 }
 
@@ -500,7 +500,7 @@ textarea {
 
   padding: 1rem;
 
-  background: #1d1309;
+  background: #f0e6d0;
 
   display: flex;
 
@@ -598,7 +598,7 @@ textarea {
 
 .request-card {
 
-  background: #1d1309;
+  background: #f0e6d0;
 
   border: 1px solid rgba(61, 51, 43, 0.1);
 
@@ -708,9 +708,9 @@ a {
 
   justify-content: flex-start;
 
-  background: #1d1309;
+  background: #f0e6d0;
 
-  color: #f0e4c8;
+  color: #2c1f0e;
 
   border: 1px solid rgba(61, 51, 43, 0.1);
 
@@ -826,7 +826,7 @@ a {
 
   padding: 0.35rem 0.7rem;
 
-  background: #1d1309;
+  background: #f0e6d0;
 
   color: #c8922a;
 
@@ -1186,7 +1186,7 @@ label textarea {
 
   border: 1px solid rgba(61, 51, 43, 0.1);
 
-  background: #1d1309;
+  background: #f0e6d0;
 
   border-radius: 22px;
 
@@ -1250,7 +1250,7 @@ label textarea {
 
   object-fit: cover;
 
-  background: #1f1609;
+  background: #f0e6d0;
 
 }
 
@@ -2264,7 +2264,7 @@ label textarea {
 
   background: rgba(255, 255, 255, 0.62);
 
-  color: #f0e4c8;
+  color: #2c1f0e;
 
   cursor: pointer;
 
@@ -2546,7 +2546,7 @@ label textarea {
 
   background: rgba(255, 255, 255, 0.62);
 
-  color: #f0e4c8;
+  color: #2c1f0e;
 
   cursor: pointer;
 
@@ -2622,7 +2622,7 @@ label textarea {
 
   border-radius: 999px;
 
-  background: #160e06;
+  background: #f0e6d0;
 
   border: 1px solid rgba(61, 51, 43, 0.1);
 
@@ -8958,7 +8958,7 @@ button:active:not(:disabled) {
 }
 
 button.ghost:hover:not(:disabled) {
-  background: #e3d5c5 !important;
+  background: #f0e6d0 !important;
   transform: translateY(-1px);
 }
 
@@ -9084,7 +9084,7 @@ select:focus {
 /* ── Skeleton shimmer (for loading states) ─────────────────── */
 .skeleton {
   background: linear-gradient(90deg,
-    #1f1609 25%, #fdf6ee 50%, #1f1609 75%);
+    #f0e6d0 25%, #fdf6ee 50%, #f0e6d0 75%);
   background-size: 600px 100%;
   animation: shimmer 1.4s ease-in-out infinite;
   border-radius: 8px;
@@ -9129,8 +9129,8 @@ button .spin {
 /* ── Smooth scrollbar ──────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #130c05; }
-::-webkit-scrollbar-thumb { background: #d4c4b0; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #b8a898; }
+::-webkit-scrollbar-thumb { background: #f0e6d0; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9a8070; }
 
 /* ── Page section entrance ─────────────────────────────────── */
 section,
@@ -9226,7 +9226,7 @@ button:not(.ghost):not(.danger):not(.list-button):active:not(:disabled) {
   box-shadow: none !important;
 }
 button.ghost:hover:not(:disabled) {
-  background: #e3d5c5 !important;
+  background: #f0e6d0 !important;
   transform: translateY(-1px);
 }
 button.danger:hover:not(:disabled) {
@@ -9309,7 +9309,7 @@ button.danger:hover:not(:disabled) {
               border-color 0.15s ease, box-shadow 0.15s ease !important;
 }
 .list-button:hover:not(:disabled):not(.selected) {
-  background: #f0e4d4 !important;
+  background: #f0e6d0 !important;
   transform: translateX(3px);
   border-color: rgba(47, 111, 115, 0.2) !important;
 }
@@ -9339,7 +9339,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #1f1609 25%, #fdf6ee 50%, #1f1609 75%);
+  background: linear-gradient(90deg, #f0e6d0 25%, #fdf6ee 50%, #f0e6d0 75%);
   background-size: 600px 100%;
   animation: rb-shimmer 1.4s ease-in-out infinite;
   border-radius: 8px;
@@ -9349,12 +9349,83 @@ input:focus, select:focus, textarea:focus {
 
 ::-webkit-scrollbar       { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #130c05; }
-::-webkit-scrollbar-thumb { background: #d4c4b0; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #b8a898; }
+::-webkit-scrollbar-thumb { background: #f0e6d0; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9a8070; }
 
 @media (hover: none) {
   .card:hover, .item-card:hover, .request-card:hover, button:hover {
     transform: none !important;
     box-shadow: inherit !important;
   }
+}
+
+
+/* ── Stat/metric boxes (dark boxes inside tan cards) ── */
+[class*="stat-box"], [class*="-stat"], [class*="metric"],
+[class*="-count"], [class*="summary-card"], [class*="-summary"] {
+  background: var(--rb-card) !important;
+  border: 1px solid rgba(90, 60, 30, 0.2) !important;
+  color: var(--rb-card-text) !important;
+}
+
+[class*="stat-box"] *, [class*="summary-card"] * {
+  color: var(--rb-card-text) !important;
+}
+
+/* ── Activity log / tag pills ── */
+[class*="activity"] [class*="tag"],
+[class*="activity"] [class*="badge"],
+[class*="activity"] [class*="pill"],
+[class*="-log"] [class*="tag"],
+[class*="-log"] [class*="pill"] {
+  background: #e8d4b0 !important;
+  color: #2c1f0e !important;
+  border: 1px solid rgba(90, 60, 30, 0.2) !important;
+}
+
+/* Dark pill/tag override — the ones that are near-black */
+[style*="background: #1"],
+[style*="background:#1"] {
+  background: #e8d4b0 !important;
+  color: #2c1f0e !important;
+}
+
+/* ── Trait buttons ── */
+/* Unselected traits — tan */
+[class*="trait"]:not(.selected):not([class*="active"]):not([class*="chosen"]) {
+  background: #e8d4b0 !important;
+  color: #2c1f0e !important;
+  border: 1px solid rgba(90, 60, 30, 0.25) !important;
+}
+
+/* Selected traits — gold */
+[class*="trait"].selected,
+[class*="trait"][class*="active"],
+[class*="trait"][class*="chosen"],
+[class*="trait"][class*="owned"] {
+  background: var(--rb-gold) !important;
+  color: #0f0b07 !important;
+  border: 1px solid var(--rb-gold) !important;
+}
+
+/* ── Weather page — floating text fix ── */
+[class*="weather"] {
+  background: var(--rb-card) !important;
+  border-radius: 16px;
+  padding: 1.5rem;
+  color: var(--rb-card-text) !important;
+}
+
+[class*="weather"] * {
+  color: var(--rb-card-text) !important;
+}
+
+/* ── Any element with very dark inline background ── */
+/* Catch remaining dark boxes inside tan cards */
+.card [style*="background: #0"],
+.card [style*="background:#0"],
+.card [style*="background: #1"],
+.card [style*="background:#1"] {
+  background: #ddd0b8 !important;
+  color: #2c1f0e !important;
 }
