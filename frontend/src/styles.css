@@ -536,11 +536,13 @@ textarea {
 
 .summary div {
 
-  background: #130c05;
+  background: #e8d4b0;
 
   padding: 1rem;
 
   border-radius: 18px;
+
+  border: 1px solid rgba(90, 60, 30, 0.2);
 
 }
 
@@ -550,7 +552,7 @@ textarea {
 
   display: block;
 
-  color: #9a8573;
+  color: #6b5540;
 
   text-transform: capitalize;
 
@@ -561,6 +563,8 @@ textarea {
 .summary strong {
 
   font-size: 1.25rem;
+
+  color: #2c1f0e;
 
 }
 
