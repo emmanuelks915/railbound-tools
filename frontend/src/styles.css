@@ -4,132 +4,144 @@
    RAILBOUND DARK THEME — global overrides
    ================================================================ */
 :root {
-  --rb-bg: #130c05;
-  --rb-bg2: #1d1309;
-  --rb-bg3: #261a0b;
-  --rb-surface: #1f1509;
-  --rb-text: #f0e4c8;
-  --rb-text2: #e8d5aa;
-  --rb-muted: #9a8573;
-  --rb-hint: #6a5a4a;
-  --rb-gold: #c8922a;
-  --rb-gold-light: #e8b84b;
-  --rb-gold-dim: rgba(200, 146, 42, 0.15);
-  --rb-danger: #c04838;
-  --rb-success: #5a9a4f;
-  --rb-border: rgba(200, 146, 42, 0.18);
-  --rb-border-strong: rgba(200, 146, 42, 0.35);
+  --rb-bg: #0f0b07;
+  --rb-card: #f0e6d0;
+  --rb-card-text: #2c1f0e;
+  --rb-card-muted: #6b5540;
+  --rb-card-border: rgba(90, 60, 30, 0.25);
+  --rb-gold: #c8881e;
+  --rb-gold-light: #e8a030;
+  --rb-text: #f2e6cc;
+  --rb-muted: #a08060;
+  --rb-danger: #c84040;
+  --rb-success: #4a8a40;
 }
 
 body {
-  background: var(--rb-bg);
-  color: var(--rb-text);
+  background: var(--rb-bg) !important;
+  color: var(--rb-text) !important;
 }
 
-/* Inputs, selects, textareas */
-input, select, textarea {
-  background: var(--rb-bg2) !important;
+/* ── Page shell ── */
+.app-shell {
+  background: var(--rb-bg) !important;
+}
+
+/* ── Hero header ── */
+.hero {
+  background: var(--rb-card) !important;
+  color: var(--rb-card-text) !important;
+}
+
+.hero h1, .hero p, .hero .eyebrow, .hero .subtitle {
+  color: var(--rb-card-text) !important;
+}
+
+/* ── Auth box ── */
+.auth-box {
+  background: var(--rb-card) !important;
+  border: 1px solid var(--rb-card-border) !important;
+  color: var(--rb-card-text) !important;
+}
+
+.auth-box strong, .auth-box small, .auth-box span, .auth-box p {
+  color: var(--rb-card-text) !important;
+}
+
+/* ── All cards and surfaces ── */
+.card,
+[class*="-card"],
+[class*="card-"],
+[class*="-panel"],
+[class*="-box"],
+[class*="-hero"],
+[class*="-section"] {
+  background: var(--rb-card) !important;
+  border-color: var(--rb-card-border) !important;
+  color: var(--rb-card-text) !important;
+}
+
+/* Text inside cards */
+.card *, [class*="-card"] *, [class*="-hero"] * {
+  color: var(--rb-card-text);
+}
+
+/* Muted text inside cards */
+.card small, .card [class*="muted"], .card [class*="subtitle"],
+.card [class*="-sub"], .card label, .card .eyebrow {
+  color: var(--rb-card-muted) !important;
+}
+
+/* ── Nav tabs ── */
+.tabs, nav.tabs {
+  background: var(--rb-bg) !important;
+}
+
+.tabs button, nav button {
+  background: transparent !important;
+  color: rgba(242, 230, 204, 0.7) !important;
+}
+
+.tabs button:hover, nav button:hover {
   color: var(--rb-text) !important;
-  border-color: var(--rb-border) !important;
+  background: rgba(242, 230, 204, 0.08) !important;
+}
+
+.tabs button.active, nav button.active {
+  background: var(--rb-gold) !important;
+  color: #0f0b07 !important;
+  font-weight: 700 !important;
+}
+
+/* ── Primary buttons ── */
+button:not(.ghost):not(.danger):not(.discord-login-button) {
+  background: var(--rb-gold) !important;
+  color: #0f0b07 !important;
+}
+
+button:not(.ghost):not(.danger):not(.discord-login-button):hover {
+  background: var(--rb-gold-light) !important;
+}
+
+/* ── Ghost buttons ── */
+button.ghost {
+  background: rgba(242, 230, 204, 0.08) !important;
+  color: var(--rb-text) !important;
+  border: 1px solid rgba(242, 230, 204, 0.2) !important;
+}
+
+/* ── Discord login ── */
+.discord-login-button {
+  background: #5865f2 !important;
+  color: white !important;
+}
+
+/* ── Danger ── */
+button.danger {
+  background: var(--rb-danger) !important;
+  color: white !important;
+}
+
+/* ── Inputs inside cards ── */
+input, select, textarea {
+  background: #e8d8be !important;
+  color: var(--rb-card-text) !important;
+  border: 1px solid var(--rb-card-border) !important;
 }
 
 input::placeholder, textarea::placeholder {
-  color: var(--rb-hint) !important;
+  color: var(--rb-card-muted) !important;
 }
 
-/* Cards and surfaces */
-.card, [class*="-card"], [class*="card-"] {
-  background: var(--rb-bg2);
-  border-color: var(--rb-border);
-  color: var(--rb-text);
+input:focus, select:focus, textarea:focus {
+  outline: none !important;
+  border-color: var(--rb-gold) !important;
 }
 
-/* ── Text contrast fixes ── */
-.card, [class*="-card"], [class*="card-"] {
-  background: #1d1309 !important;
-  border: 1px solid rgba(200, 146, 42, 0.2) !important;
-  color: #f0e4c8 !important;
-}
-
-.card *, [class*="-card"] * {
-  color: inherit;
-}
-
-/* Auth box */
-.auth-box {
-  background: rgba(25, 15, 5, 0.92) !important;
-  border: 1px solid rgba(200, 146, 42, 0.25) !important;
-}
-
-.auth-box strong,
-.auth-box p,
-.auth-box small {
-  color: #f0e4c8 !important;
-}
-
-/* Muted text helpers */
-.muted-text, [class*="muted"], [class*="-sub"], [class*="-meta"],
-[class*="label"], .eyebrow {
-  color: #9a8573 !important;
-}
-
-/* Labels above inputs */
-label, .field-label, [class*="-label"]:not(button) {
-  color: #c8a870 !important;
-}
-
-/* Section headers */
-h1, h2, h3, h4 {
-  color: #f5e8c8;
-}
-
-/* Active tab */
-nav button.active, .tabs button.active {
-  background: #c8922a !important;
-  color: #0f0a05 !important;
-  font-weight: 700;
-}
-
-/* Ghost buttons */  
-button.ghost {
-  background: rgba(200, 146, 42, 0.1) !important;
-  color: #e8d5aa !important;
-  border: 1px solid rgba(200, 146, 42, 0.25) !important;
-}
-
-button.ghost:hover {
-  background: rgba(200, 146, 42, 0.2) !important;
-}
-
-/* Trait/filter pill buttons */
-button[class*="filter"], button[class*="pill"], button[class*="tag"],
-button[class*="trait"], .trait-filter-btn {
-  background: rgba(200, 146, 42, 0.12) !important;
-  color: #e8d5aa !important;
-  border: 1px solid rgba(200, 146, 42, 0.2) !important;
-}
-
-button[class*="filter"].active, button[class*="pill"].active,
-button[class*="active"] {
-  background: #c8922a !important;
-  color: #0f0a05 !important;
-}
-
-/* Table rows */
-table { color: #f0e4c8; }
-th { color: #9a8573; border-bottom-color: rgba(200, 146, 42, 0.2) !important; }
-td { border-bottom-color: rgba(200, 146, 42, 0.1) !important; }
-tr:hover td { background: rgba(200, 146, 42, 0.05) !important; }
-
-/* Dividers */
-hr, [class*="divider"] {
-  border-color: rgba(200, 146, 42, 0.15) !important;
-}
-
-/* Scrollbars */
+/* ── Scrollbars ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--rb-bg); }
-::-webkit-scrollbar-thumb { background: var(--rb-border-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: rgba(200, 136, 30, 0.5); border-radius: 3px; }
 
 /* railbound_theme - loaded */
 :root {
