@@ -3062,15 +3062,15 @@ label textarea {
 
   text-align: left;
 
-  border: 1px solid rgba(61, 51, 43, 0.1);
+  border: 1px solid rgba(90, 60, 30, 0.15) !important;
 
   border-radius: 20px;
 
   padding: 1rem;
 
-  background: rgba(255, 255, 255, 0.62);
+  background: rgba(44, 31, 14, 0.04) !important;
 
-  color: inherit;
+  color: #2c1f0e !important;
 
   cursor: pointer;
 
@@ -3078,11 +3078,32 @@ label textarea {
 
 
 
+.citizen-registry-card *:not(.citizen-status) {
+
+  color: #2c1f0e !important;
+
+}
+
+.citizen-registry-card .citizen-status {
+
+  color: rgba(44, 31, 22, 0.62) !important;
+
+}
+
+.citizen-registry-card .citizen-status.active,
+.citizen-registry-card .citizen-status.quiet {
+
+  color: #c8922a !important;
+
+}
+
+
+
 .citizen-registry-card.active {
 
-  border-color: rgba(47, 111, 115, 0.45);
+  border-color: var(--rb-gold) !important;
 
-  background: rgba(47, 111, 115, 0.1);
+  background: rgba(212, 152, 46, 0.12) !important;
 
 }
 
