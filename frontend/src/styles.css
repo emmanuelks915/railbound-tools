@@ -4494,17 +4494,19 @@ label textarea {
 
 .registry-profile-tabs button {
 
-  border-radius: 999px;
+  border-radius: 999px !important;
 
   padding: 0.52rem 0.78rem;
 
-  background: rgba(255, 255, 255, 0.55);
+  background: rgba(44, 31, 14, 0.06) !important;
 
-  color: rgba(44, 31, 22, 0.72);
+  color: #6b5540 !important;
 
-  border: 1px solid rgba(61, 51, 43, 0.1);
+  border: 1px solid rgba(90, 60, 30, 0.15) !important;
 
   box-shadow: none;
+
+  font-weight: 500;
 
 }
 
@@ -4512,11 +4514,13 @@ label textarea {
 
 .registry-profile-tabs button.active {
 
-  background: rgba(47, 111, 115, 0.16);
+  background: var(--rb-gold) !important;
 
-  border-color: rgba(47, 111, 115, 0.35);
+  border-color: var(--rb-gold) !important;
 
-  color: #c8922a;
+  color: #fff !important;
+
+  font-weight: 700;
 
 }
 
