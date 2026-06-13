@@ -268,7 +268,7 @@ button.danger {
 
   gap: 1.5rem;
 
-  box-shadow: 0 20px 60px rgba(200, 146, 42, 0.15);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
 
 }
 
@@ -354,7 +354,7 @@ p {
 
   color: #2c1f0e;
 
-  box-shadow: 0 8px 24px rgba(200, 146, 42, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
 
 }
 
@@ -392,7 +392,7 @@ p {
 
   padding: 1.5rem;
 
-  box-shadow: 0 16px 48px rgba(200, 146, 42, 0.1);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.1);
 
 }
 
@@ -8937,7 +8937,7 @@ button:disabled {
   transition: box-shadow 0.3s ease;
 }
 .hero:hover {
-  box-shadow: 0 28px 70px rgba(200, 146, 42, 0.16) !important;
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.16) !important;
 }
 
 /* ── Nav tabs ──────────────────────────────────────────────── */
@@ -9000,7 +9000,7 @@ button.ghost:hover:not(:disabled) {
 
 .card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 12px 32px rgba(200, 146, 42, 0.15) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15) !important;
 }
 
 /* Stagger cards in a grid */
@@ -9024,7 +9024,7 @@ button.ghost:hover:not(:disabled) {
 .request-card:hover,
 .skill-card-v2:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(200, 146, 42, 0.10) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10) !important;
 }
 
 /* Stagger list items */
@@ -9227,7 +9227,7 @@ h1 {
   transition: box-shadow 0.3s ease !important;
 }
 .hero:hover {
-  box-shadow: 0 30px 80px rgba(200, 146, 42, 0.18) !important;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.18) !important;
 }
 
 .tabs button {
@@ -9236,7 +9236,7 @@ h1 {
 }
 .tabs button:hover:not(:disabled):not(.active) {
   transform: translateY(-2px);
-  box-shadow: 0 4px 14px rgba(200, 146, 42, 0.1) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1) !important;
 }
 .tabs button.active {
   box-shadow: 0 4px 16px rgba(47, 111, 115, 0.35) !important;
@@ -9269,7 +9269,7 @@ button.danger:hover:not(:disabled) {
 }
 .card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 24px 64px rgba(200, 146, 42, 0.16) !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.16) !important;
 }
 
 .item-card,
@@ -9282,7 +9282,7 @@ button.danger:hover:not(:disabled) {
 .item-card:hover,
 .request-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 10px 30px rgba(200, 146, 42, 0.13) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.13) !important;
   border-color: rgba(47, 111, 115, 0.25) !important;
 }
 
@@ -9321,7 +9321,7 @@ button.danger:hover:not(:disabled) {
   opacity: 0;
   transition: opacity 0.2s ease;
 }
-.summary div:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(200, 146, 42, 0.11); }
+.summary div:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.11); }
 .summary div:hover::before { opacity: 1; }
 
 .stat-strip {
