@@ -5082,7 +5082,7 @@ function CompanionDashboard({
                 <div style={{ marginTop: "1rem" }}>
                   {statMessage ? <p className="message">{statMessage}</p> : null}
                   {!showStatRequest ? (
-                    <button className="ghost" onClick={() => { setShowStatRequest(true); setStatMessage(""); }}>
+                    <button onClick={() => { setShowStatRequest(true); setStatMessage(""); }}>
                       <Plus size={16} /> Invest XP in beast stat
                     </button>
                   ) : (
