@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap');
+﻿@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap');
 
 /* ================================================================
    RAILBOUND DARK THEME — global overrides
@@ -788,7 +788,7 @@ a {
 
 .mini-stat {
 
-  background: #130c05;
+  background: #f6efe4;
 
   border-radius: 18px;
 
