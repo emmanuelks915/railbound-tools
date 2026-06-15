@@ -4874,7 +4874,7 @@ function CompanionDashboard({
 
   async function loadCatalogSkills() {
     try {
-      const result = await apiFetch("/api/staff/source-beast-skills", {}, discordId);
+      const result = await apiFetch("/api/companions/beast-skills/catalog", {}, discordId);
       setCatalogSkills((result.skills || []).filter((s: any) => s.is_active && s.is_purchasable));
     } catch (_) {
       setCatalogSkills([]);
