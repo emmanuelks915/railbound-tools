@@ -5631,7 +5631,7 @@ function BeastSkillCatalogDashboard({ discordId }: { discordId: string }) {
   const [form, setForm] = useState<any>(blankSkill);
   const [editingKey, setEditingKey] = useState("");
   const [message, setMessage] = useState("");
-  async function loadSkills() { setMessage(""); const data = await apiFetch("/api/companions/beast-skills/catalog", {}, discordId); setSkills(data.skills || []); }
+  async function loadSkills() { setMessage(""); const data = await apiFetch("/api/staff/source-beast-skills", {}, discordId); setSkills(data.skills || []); }
   useEffect(() => { if (discordId) loadSkills().catch((error) => setMessage(error.message)); }, [discordId]);
   function editSkill(skill: any) { setEditingKey(skill.skill_key); setForm({ ...blankSkill, ...skill, prerequisites: Array.isArray(skill.prerequisites) ? skill.prerequisites.join(", ") : String(skill.prerequisites || "") }); window.scrollTo({ top: 0, behavior: "smooth" }); }
   function resetForm() { setEditingKey(""); setForm(blankSkill); }
