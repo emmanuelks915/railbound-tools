@@ -1,7 +1,7 @@
-﻿@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap');
 
 /* ================================================================
-   RAILBOUND DARK THEME — global overrides
+   RAILBOUND DARK THEME � global overrides
    ================================================================ */
 :root {
   --rb-bg: #0f0b07;
@@ -22,12 +22,12 @@ body {
   color: var(--rb-text) !important;
 }
 
-/* ── Page shell ── */
+/* -- Page shell -- */
 .app-shell {
   background: var(--rb-bg) !important;
 }
 
-/* ── Hero header ── */
+/* -- Hero header -- */
 .hero {
   background: var(--rb-card) !important;
   color: var(--rb-card-text) !important;
@@ -37,7 +37,7 @@ body {
   color: var(--rb-card-text) !important;
 }
 
-/* ── Auth box ── */
+/* -- Auth box -- */
 .auth-box {
   background: var(--rb-card) !important;
   border: 1px solid var(--rb-card-border) !important;
@@ -48,7 +48,7 @@ body {
   color: var(--rb-card-text) !important;
 }
 
-/* ── All cards and surfaces ── */
+/* -- All cards and surfaces -- */
 .card,
 [class*="-card"],
 [class*="card-"],
@@ -72,7 +72,7 @@ body {
   color: var(--rb-card-muted) !important;
 }
 
-/* ── Nav tabs ── */
+/* -- Nav tabs -- */
 .tabs, nav.tabs {
   background: var(--rb-bg) !important;
 }
@@ -93,7 +93,7 @@ body {
   font-weight: 700 !important;
 }
 
-/* ── Primary buttons ── */
+/* -- Primary buttons -- */
 button:not(.ghost):not(.danger):not(.discord-login-button) {
   background: var(--rb-gold) !important;
   color: #0f0b07 !important;
@@ -103,26 +103,26 @@ button:not(.ghost):not(.danger):not(.discord-login-button):hover {
   background: var(--rb-gold-light) !important;
 }
 
-/* ── Ghost buttons ── */
+/* -- Ghost buttons -- */
 button.ghost {
   background: rgba(242, 230, 204, 0.08) !important;
   color: var(--rb-text) !important;
   border: 1px solid rgba(242, 230, 204, 0.2) !important;
 }
 
-/* ── Discord login ── */
+/* -- Discord login -- */
 .discord-login-button {
   background: #5865f2 !important;
   color: white !important;
 }
 
-/* ── Danger ── */
+/* -- Danger -- */
 button.danger {
   background: var(--rb-danger) !important;
   color: white !important;
 }
 
-/* ── Inputs inside cards ── */
+/* -- Inputs inside cards -- */
 input, select, textarea {
   background: #e8d8be !important;
   color: var(--rb-card-text) !important;
@@ -138,7 +138,7 @@ input:focus, select:focus, textarea:focus {
   border-color: var(--rb-gold) !important;
 }
 
-/* ── Scrollbars ── */
+/* -- Scrollbars -- */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--rb-bg); }
 ::-webkit-scrollbar-thumb { background: rgba(200, 136, 30, 0.5); border-radius: 3px; }
@@ -6383,7 +6383,7 @@ table {
 
   padding: 0.28rem 0.55rem;
 
-  background: rgba(30, 18, 6, 0.85);
+  background: rgba(90, 60, 20, 0.18);
 
   border: 1px solid rgba(61, 51, 43, 0.08);
 
@@ -6715,7 +6715,7 @@ table {
 
   padding: 0.28rem 0.55rem;
 
-  background: rgba(30, 18, 6, 0.85);
+  background: rgba(90, 60, 20, 0.18);
 
   border: 1px solid rgba(61, 51, 43, 0.08);
 
@@ -7441,7 +7441,7 @@ table {
 
   padding: 0.3rem 0.58rem;
 
-  background: rgba(30, 18, 6, 0.85);
+  background: rgba(90, 60, 20, 0.18);
 
   border: 1px solid rgba(61, 51, 43, 0.08);
 
@@ -8892,16 +8892,16 @@ button:disabled {
   margin-top: 1rem;
 }
 
-/* railbound_enhance — loaded */
+/* railbound_enhance � loaded */
 /* ============================================================
    railbound_enhance.css
    Adds animations, polish, and visual upgrades to the
    existing light beige/teal Railbound Tools design.
-   Does NOT change colors, layout, or fonts — only enhances.
+   Does NOT change colors, layout, or fonts � only enhances.
    Append to the END of styles.css.
    ============================================================ */
 
-/* ── Smooth page load ──────────────────────────────────────── */
+/* -- Smooth page load ---------------------------------------- */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -8931,7 +8931,7 @@ button:disabled {
   to   { width: var(--fill-width, 60%); }
 }
 
-/* ── Hero section ──────────────────────────────────────────── */
+/* -- Hero section -------------------------------------------- */
 .hero {
   animation: scaleIn 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) both;
   transition: box-shadow 0.3s ease;
@@ -8940,7 +8940,7 @@ button:disabled {
   box-shadow: 0 28px 70px rgba(0, 0, 0, 0.16) !important;
 }
 
-/* ── Nav tabs ──────────────────────────────────────────────── */
+/* -- Nav tabs ------------------------------------------------ */
 .tab-bar button,
 .nav-tabs button,
 .tabs button {
@@ -8969,7 +8969,7 @@ button:disabled {
   animation: fadeIn 0.2s ease both;
 }
 
-/* ── All buttons ───────────────────────────────────────────── */
+/* -- All buttons --------------------------------------------- */
 button:not(:disabled) {
   transition: background 0.18s ease, color 0.18s ease,
               transform 0.15s ease, box-shadow 0.18s ease,
@@ -8991,7 +8991,7 @@ button.ghost:hover:not(:disabled) {
   transform: translateY(-1px);
 }
 
-/* ── Cards ─────────────────────────────────────────────────── */
+/* -- Cards --------------------------------------------------- */
 .card {
   animation: fadeUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) both;
   transition: box-shadow 0.25s ease, transform 0.25s ease,
@@ -9011,7 +9011,7 @@ button.ghost:hover:not(:disabled) {
 .grid .card:nth-child(5) { animation-delay: 0.25s; }
 .grid .card:nth-child(6) { animation-delay: 0.30s; }
 
-/* ── Item / request cards ──────────────────────────────────── */
+/* -- Item / request cards ------------------------------------ */
 .item-card,
 .request-card,
 .skill-card-v2 {
@@ -9037,7 +9037,7 @@ button.ghost:hover:not(:disabled) {
 .item-list > *:nth-child(7)  { animation-delay: 0.28s; }
 .item-list > *:nth-child(8)  { animation-delay: 0.32s; }
 
-/* ── Pills / badges ────────────────────────────────────────── */
+/* -- Pills / badges ------------------------------------------ */
 .pill {
   transition: transform 0.15s ease, box-shadow 0.15s ease !important;
 }
@@ -9046,7 +9046,7 @@ button.ghost:hover:not(:disabled) {
   transform: scale(1.05);
 }
 
-/* Good / approved pills — subtle green glow */
+/* Good / approved pills � subtle green glow */
 .pill.good,
 .pill.approved,
 .pill.active,
@@ -9061,7 +9061,7 @@ button.ghost:hover:not(:disabled) {
   box-shadow: 0 0 0 1px rgba(156, 61, 61, 0.25);
 }
 
-/* ── Activity timeline ─────────────────────────────────────── */
+/* -- Activity timeline --------------------------------------- */
 .activity-card {
   animation: fadeUp 0.3s cubic-bezier(0.22, 0.61, 0.36, 1) both;
   transition: background 0.15s ease, padding-left 0.2s ease !important;
@@ -9079,14 +9079,14 @@ button.ghost:hover:not(:disabled) {
 .activity-card[data-kind="skill_request"] { border-left-color: #a07830; }
 .activity-card[data-kind="shop_listing"]  { border-left-color: #9c8070; }
 
-/* ── Skill cards ───────────────────────────────────────────── */
+/* -- Skill cards --------------------------------------------- */
 .skill-card-v2.owned     { border-left: 3px solid #2f8f5b !important; }
 .skill-card-v2.requestable { border-left: 3px solid #c8922a !important; }
 .skill-card-v2.locked    { border-left: 3px solid #c4b8a8 !important; opacity: 0.75; }
 .skill-card-v2.pending   { border-left: 3px solid #a07830 !important; }
 .skill-card-v2.need-xp   { border-left: 3px solid #a04030 !important; }
 
-/* ── Inputs / selects ──────────────────────────────────────── */
+/* -- Inputs / selects ---------------------------------------- */
 input[type="text"],
 input[type="search"],
 input[type="number"],
@@ -9104,13 +9104,13 @@ select:focus {
   outline: none !important;
 }
 
-/* ── Loading / spinner ─────────────────────────────────────── */
+/* -- Loading / spinner --------------------------------------- */
 .spin {
   animation: spin 0.75s linear infinite;
   display: inline-block;
 }
 
-/* ── Skeleton shimmer (for loading states) ─────────────────── */
+/* -- Skeleton shimmer (for loading states) ------------------- */
 .skeleton {
   background: linear-gradient(90deg,
     #f0e6d0 25%, #fdf6ee 50%, #f0e6d0 75%);
@@ -9122,7 +9122,7 @@ select:focus {
   user-select: none;
 }
 
-/* ── Stat / summary numbers ────────────────────────────────── */
+/* -- Stat / summary numbers ---------------------------------- */
 .stat-value,
 .summary strong,
 strong[class*="count"],
@@ -9130,7 +9130,7 @@ strong[class*="total"] {
   transition: color 0.3s ease;
 }
 
-/* ── Live indicator dot ────────────────────────────────────── */
+/* -- Live indicator dot -------------------------------------- */
 .live-dot {
   display: inline-block;
   width: 7px;
@@ -9142,43 +9142,43 @@ strong[class*="total"] {
   margin-right: 5px;
 }
 
-/* ── Section headings with animated underline ──────────────── */
+/* -- Section headings with animated underline ---------------- */
 .card h2,
 .card-title-row h2 {
   position: relative;
   display: inline-block;
 }
 
-/* ── Refresh button spin on load ───────────────────────────── */
+/* -- Refresh button spin on load ----------------------------- */
 button[disabled] .spin,
 button .spin {
   animation: spin 0.75s linear infinite;
 }
 
-/* ── Smooth scrollbar ──────────────────────────────────────── */
+/* -- Smooth scrollbar ---------------------------------------- */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #130c05; }
 ::-webkit-scrollbar-thumb { background: #f0e6d0; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #9a8070; }
 
-/* ── Page section entrance ─────────────────────────────────── */
+/* -- Page section entrance ----------------------------------- */
 section,
 .page-section {
   animation: fadeIn 0.4s ease both;
 }
 
-/* ── Teal glow on primary action buttons ───────────────────── */
+/* -- Teal glow on primary action buttons --------------------- */
 button:not(.ghost):not(.danger):not([disabled]):hover {
   box-shadow: 0 6px 20px rgba(47, 111, 115, 0.3) !important;
 }
 
-/* ── Danger button hover ───────────────────────────────────── */
+/* -- Danger button hover ------------------------------------- */
 button.danger:hover:not(:disabled) {
   box-shadow: 0 6px 20px rgba(156, 61, 61, 0.3) !important;
   transform: translateY(-2px);
 }
 
-/* ── Responsive touch — reduce hover lifts on mobile ───────── */
+/* -- Responsive touch � reduce hover lifts on mobile --------- */
 @media (hover: none) {
   .card:hover,
   .item-card:hover,
@@ -9186,9 +9186,9 @@ button.danger:hover:not(:disabled) {
   button:hover { transform: none !important; }
 }
 
-/* railbound_enhance2 — loaded */
+/* railbound_enhance2 � loaded */
 /* ============================================================
-   railbound_enhance2.css — Visual Polish v2
+   railbound_enhance2.css � Visual Polish v2
    Uses your actual class names: .item-card, .request-card,
    .stat-strip, .summary, .list-button, .tabs, .item-list
    Append to the END of styles.css
@@ -9389,7 +9389,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 
-/* ── Stat/metric boxes (dark boxes inside tan cards) ── */
+/* -- Stat/metric boxes (dark boxes inside tan cards) -- */
 [class*="stat-box"], [class*="-stat"], [class*="metric"],
 [class*="-count"], [class*="summary-card"], [class*="-summary"] {
   background: var(--rb-card) !important;
@@ -9401,7 +9401,7 @@ input:focus, select:focus, textarea:focus {
   color: var(--rb-card-text) !important;
 }
 
-/* ── Activity log / tag pills ── */
+/* -- Activity log / tag pills -- */
 [class*="activity"] [class*="tag"],
 [class*="activity"] [class*="badge"],
 [class*="activity"] [class*="pill"],
@@ -9412,22 +9412,22 @@ input:focus, select:focus, textarea:focus {
   border: 1px solid rgba(90, 60, 30, 0.2) !important;
 }
 
-/* Dark pill/tag override — the ones that are near-black */
+/* Dark pill/tag override � the ones that are near-black */
 [style*="background: #1"],
 [style*="background:#1"] {
   background: #e8d4b0 !important;
   color: #2c1f0e !important;
 }
 
-/* ── Trait buttons ── */
-/* Unselected traits — tan */
+/* -- Trait buttons -- */
+/* Unselected traits � tan */
 [class*="trait"]:not(.selected):not([class*="active"]):not([class*="chosen"]) {
   background: #e8d4b0 !important;
   color: #2c1f0e !important;
   border: 1px solid rgba(90, 60, 30, 0.25) !important;
 }
 
-/* Selected traits — gold */
+/* Selected traits � gold */
 [class*="trait"].selected,
 [class*="trait"][class*="active"],
 [class*="trait"][class*="chosen"],
@@ -9437,7 +9437,7 @@ input:focus, select:focus, textarea:focus {
   border: 1px solid var(--rb-gold) !important;
 }
 
-/* ── Weather page — floating text fix ── */
+/* -- Weather page � floating text fix -- */
 [class*="weather"] {
   background: var(--rb-card) !important;
   border-radius: 16px;
@@ -9449,7 +9449,7 @@ input:focus, select:focus, textarea:focus {
   color: var(--rb-card-text) !important;
 }
 
-/* ── Any element with very dark inline background ── */
+/* -- Any element with very dark inline background -- */
 /* Catch remaining dark boxes inside tan cards */
 .card [style*="background: #0"],
 .card [style*="background:#0"],
