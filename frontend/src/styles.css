@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap');
 
 /* ================================================================
-   RAILBOUND DARK THEME — global overrides
+   RAILBOUND DARK THEME Â— global overrides
    ================================================================ */
 :root {
   --rb-bg: #0f0b07;
@@ -8892,12 +8892,12 @@ button:disabled {
   margin-top: 1rem;
 }
 
-/* railbound_enhance — loaded */
+/* railbound_enhance Â— loaded */
 /* ============================================================
    railbound_enhance.css
    Adds animations, polish, and visual upgrades to the
    existing light beige/teal Railbound Tools design.
-   Does NOT change colors, layout, or fonts — only enhances.
+   Does NOT change colors, layout, or fonts Â— only enhances.
    Append to the END of styles.css.
    ============================================================ */
 
@@ -9046,7 +9046,7 @@ button.ghost:hover:not(:disabled) {
   transform: scale(1.05);
 }
 
-/* Good / approved pills — subtle green glow */
+/* Good / approved pills Â— subtle green glow */
 .pill.good,
 .pill.approved,
 .pill.active,
@@ -9178,7 +9178,7 @@ button.danger:hover:not(:disabled) {
   transform: translateY(-2px);
 }
 
-/* -- Responsive touch — reduce hover lifts on mobile --------- */
+/* -- Responsive touch Â— reduce hover lifts on mobile --------- */
 @media (hover: none) {
   .card:hover,
   .item-card:hover,
@@ -9186,9 +9186,9 @@ button.danger:hover:not(:disabled) {
   button:hover { transform: none !important; }
 }
 
-/* railbound_enhance2 — loaded */
+/* railbound_enhance2 Â— loaded */
 /* ============================================================
-   railbound_enhance2.css — Visual Polish v2
+   railbound_enhance2.css Â— Visual Polish v2
    Uses your actual class names: .item-card, .request-card,
    .stat-strip, .summary, .list-button, .tabs, .item-list
    Append to the END of styles.css
@@ -9412,7 +9412,7 @@ input:focus, select:focus, textarea:focus {
   border: 1px solid rgba(90, 60, 30, 0.2) !important;
 }
 
-/* Dark pill/tag override — the ones that are near-black */
+/* Dark pill/tag override Â— the ones that are near-black */
 [style*="background: #1"],
 [style*="background:#1"] {
   background: #e8d4b0 !important;
@@ -9420,14 +9420,14 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* -- Trait buttons -- */
-/* Unselected traits — tan */
+/* Unselected traits Â— tan */
 [class*="trait"]:not(.selected):not([class*="active"]):not([class*="chosen"]) {
   background: #e8d4b0 !important;
   color: #2c1f0e !important;
   border: 1px solid rgba(90, 60, 30, 0.25) !important;
 }
 
-/* Selected traits — gold */
+/* Selected traits Â— gold */
 [class*="trait"].selected,
 [class*="trait"][class*="active"],
 [class*="trait"][class*="chosen"],
@@ -9437,7 +9437,7 @@ input:focus, select:focus, textarea:focus {
   border: 1px solid var(--rb-gold) !important;
 }
 
-/* -- Weather page — floating text fix -- */
+/* -- Weather page Â— floating text fix -- */
 [class*="weather"] {
   background: var(--rb-card) !important;
   border-radius: 16px;
