@@ -335,3 +335,45 @@ def grant_custom_trait(payload: dict[str, Any] = Body(default={}), actor_discord
     if not attached: raise HTTPException(status_code=500, detail="Could not attach trait to known trait tables.")
     _log(sb, "custom_trait_granted", "Custom trait granted", staff_id, character, reason, {"trait_id": trait_id, "slug": slug, "name": name, "hidden_from_portal": True})
     return {"ok": True, "message": f"Granted custom trait {name} to {character.get('name') or 'OC'}.", "trait": trait}
+
+@router.post("/item/remove")
+def remove_item(payload: dict[str, Any] = Body(default={}), actor_discord_id: int | None = Depends(actor_from_header)):
+    staff_id = _staff(actor_discord_id); sb = get_supabase(); gid = get_guild_id()
+    character_id = str(payload.get("character_id") or "").strip()
+    inventory_id = str(payload.get("inventory_id") or "").strip()
+    item_id = str(payload.get("item_id") or "").strip()
+    reason = str(payload.get("reason") or payload.get("staff_note") or "").strip()
+    if not character_id: raise HTTPException(status_code=400, detail="Choose an OC.")
+    if not inventory_id and not item_id: raise HTTPException(status_code=400, detail="Item reference is required.")
+    if not reason: raise HTTPException(status_code=400, detail="A staff reason is required.")
+    character = _character(sb, character_id)
+    removed = False
+    removed_row: dict[str, Any] = {}
+    # Try inventory_id first (the inventory_entries row pk)
+    if inventory_id:
+        for id_col in ("inventory_id", "id"):
+            try:
+                existing = _as_list(sb.table("inventory_entries").select("*").eq("guild_id", gid).eq("character_id", character_id).eq(id_col, inventory_id).limit(1).execute())
+                if existing:
+                    removed_row = existing[0]
+                    sb.table("inventory_entries").delete().eq("guild_id", gid).eq("character_id", character_id).eq(id_col, inventory_id).execute()
+                    removed = True
+                    break
+            except Exception:
+                continue
+    # Fallback: remove by item_id (removes one matching row)
+    if not removed and item_id:
+        try:
+            existing = _as_list(sb.table("inventory_entries").select("*").eq("guild_id", gid).eq("character_id", character_id).eq("item_id", item_id).limit(1).execute())
+            if existing:
+                removed_row = existing[0]
+                row_pk = str(existing[0].get("inventory_id") or existing[0].get("id") or "")
+                if row_pk:
+                    sb.table("inventory_entries").delete().eq("guild_id", gid).eq("character_id", character_id).eq("inventory_id", row_pk).execute()
+                    removed = True
+        except Exception:
+            pass
+    if not removed:
+        raise HTTPException(status_code=404, detail="Item not found in this OC's inventory.")
+    _log(sb, "item_removed", "Item removed by staff", staff_id, character, reason, {"inventory_id": inventory_id, "item_id": item_id, "removed_row": removed_row})
+    return {"ok": True, "message": f"Removed item from {character.get('name') or 'OC'}."}

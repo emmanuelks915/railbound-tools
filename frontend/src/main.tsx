@@ -4,7 +4,7 @@ import GettingStartedDashboard from "./components/GettingStartedDashboard";
 import LandingPage from "./components/LandingPage";
 import "./landing.css";
 import { createRoot } from "react-dom/client";
-import { BookOpen, Calculator, Check, ClipboardList, CloudLightning, Edit, Eye, EyeOff, Home, Package, Plus, RefreshCw, Save, Send, ShieldCheck, ShoppingCart, Sparkles, Store, Trash2, UserRound, X, Users } from "lucide-react";
+import { BookOpen, Calculator, Check, ClipboardList, CloudLightning, Edit, Eye, EyeOff, Home, Package, Plus, RefreshCw, Save, Search, Send, ShieldCheck, ShoppingCart, Sparkles, Store, Trash2, UserRound, X, Users } from "lucide-react";
 import "./styles.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -6295,7 +6295,205 @@ function BeastSkillCatalogDashboard({ discordId }: { discordId: string }) {
   return <StaffOnly discordId={discordId}><section className="request-workflow-page"><div className="card request-workflow-hero"><div><span className="activity-type-label">Staff Catalog</span><h2>Source Beast Skill Builder</h2><p className="muted-text">Create and edit Beast Skill definitions without touching Supabase. Purchasing stays locked until staff marks a skill purchasable.</p></div><button className="ghost" onClick={loadSkills}><RefreshCw size={16} /> Refresh</button></div>{message ? <p className="message">{message}</p> : null}<div className="card"><h3>{editingKey ? "Edit Beast Skill" : "Create Beast Skill"}</h3><div className="request-actions-panel"><label><span>Skill Name</span><input value={form.name} onChange={(event) => setForm((current: any) => ({ ...current, name: event.target.value }))} placeholder="Ravaged Strike" /></label><label><span>Internal Key</span><input value={form.skill_key} onChange={(event) => setForm((current: any) => ({ ...current, skill_key: event.target.value }))} placeholder="Auto-generated from skill name" disabled={Boolean(editingKey)} /></label><label><span>Beast Skill Type</span><select value={form.beast_skill_type} onChange={(event) => setForm((current: any) => ({ ...current, beast_skill_type: event.target.value }))}><option value="combat">Combat</option><option value="mount">Mount</option><option value="utility">Utility</option></select></label><label><span>Tier</span><input type="number" min="0" max="3" value={form.tier} onChange={(event) => setForm((current: any) => ({ ...current, tier: Number(event.target.value) }))} /></label><label><span>XP Cost</span><input type="number" min="0" value={form.cost} onChange={(event) => setForm((current: any) => ({ ...current, cost: Number(event.target.value) }))} /></label><label><span>Action Type</span><input value={form.action_type || ""} onChange={(event) => setForm((current: any) => ({ ...current, action_type: event.target.value }))} placeholder="Passive, Action, Bonus Action, Reaction" /></label><label><span>Prerequisites</span><input value={form.prerequisites || ""} onChange={(event) => setForm((current: any) => ({ ...current, prerequisites: event.target.value }))} placeholder="Choose prerequisite skills below. Keystone stores the keys automatically." /></label><label><span>Upgrade Line</span><input value={form.chain || ""} onChange={(event) => setForm((current: any) => ({ ...current, chain: event.target.value }))} placeholder="Example: Magical Attack I → Magical Attack II → Magical Attack III. Leave blank if standalone." /></label><label><span>Source Label</span><input value={form.source_label || ""} onChange={(event) => setForm((current: any) => ({ ...current, source_label: event.target.value }))} /></label><label><span>Display Order</span><input type="number" value={form.sort_order || 0} onChange={(event) => setForm((current: any) => ({ ...current, sort_order: Number(event.target.value) }))} /></label><label><span>Status</span><select value={form.is_active ? "active" : "inactive"} onChange={(event) => setForm((current: any) => ({ ...current, is_active: event.target.value === "active" }))}><option value="active">Active</option><option value="inactive">Inactive / Hidden</option></select></label><label><span>Purchasing</span><select value={form.is_purchasable ? "yes" : "no"} onChange={(event) => setForm((current: any) => ({ ...current, is_purchasable: event.target.value === "yes" }))}><option value="no">Locked / Not Purchasable</option><option value="yes">Purchasable</option></select></label><label><span>Effects</span><textarea rows={4} value={form.effects || ""} onChange={(event) => setForm((current: any) => ({ ...current, effects: event.target.value }))} placeholder="Mechanical effects, bonuses, AP/action cost, restrictions..." /></label><label><span>Description</span><textarea rows={5} value={form.description || ""} onChange={(event) => setForm((current: any) => ({ ...current, description: event.target.value }))} placeholder="Player-facing description." /></label></div><div className="actions"><button onClick={saveSkill}><Save size={16} /> {editingKey ? "Update Beast Skill" : "Create Beast Skill"}</button>{editingKey ? <button className="ghost" onClick={resetForm}>Cancel Edit</button> : null}</div></div><div className="request-card-list">{skills.length === 0 ? <div className="card request-empty-state"><strong>No Beast Skills created yet.</strong><p className="muted-text">Create the first Source Beast Skill above.</p></div> : null}{skills.map((skill: any) => <div className="card request-review-card" key={skill.skill_key}><div className="request-review-top"><div><span className="activity-type-label">{skill.beast_skill_type} • Tier {skill.tier}</span><h3>{skill.name}</h3><p className="muted-text">{skill.skill_key} • {skill.cost} Beast XP • {skill.action_type || "Action type TBA"}</p></div><em className={`request-status-pill ${skill.is_purchasable ? "approved" : "pending"}`}>{skill.is_purchasable ? "Purchasable" : "Locked"}</em></div>{skill.description ? <p>{skill.description}</p> : null}{skill.effects ? <p><strong>Effects:</strong> {skill.effects}</p> : null}<div className="actions"><button className="ghost" onClick={() => editSkill(skill)}>Edit</button><button className="ghost" onClick={() => toggleSkill(skill, { is_purchasable: !skill.is_purchasable })}>{skill.is_purchasable ? "Lock Purchasing" : "Enable Purchasing"}</button><button className="ghost" onClick={() => toggleSkill(skill, { is_active: !skill.is_active })}>{skill.is_active ? "Hide" : "Unhide"}</button><button className="danger-button" onClick={() => deleteSkill(skill)}>Delete</button></div></div>)}</div></section></StaffOnly>;
 }
 
+// ── Staff Player Lookup ──────────────────────────────────────────────────────
+
+function StaffPlayerLookup({ discordId }: { discordId: string }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [profile, setProfile] = useState<any>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [removingItem, setRemovingItem] = useState("");
+  const [removeReason, setRemoveReason] = useState("");
+  const [removeTarget, setRemoveTarget] = useState<any>(null);
+
+  async function searchOCs() {
+    if (!query.trim()) return;
+    setSearching(true); setMessage("");
+    try {
+      const params = new URLSearchParams({ search: query.trim(), limit: "20" });
+      const data = await apiFetch(`/api/registry/characters?${params}`, {}, discordId);
+      setResults(data.characters || data.results || data || []);
+    } catch (err: any) { setMessage(err.message || "Could not search OCs."); }
+    finally { setSearching(false); }
+  }
+
+  async function loadProfile(characterId: string) {
+    setProfileLoading(true); setProfile(null); setMessage("");
+    try {
+      const [inv, skills, stats] = await Promise.all([
+        apiFetch(`/api/inventory/characters/${characterId}`, {}, discordId).catch(() => ({})),
+        apiFetch(`/api/characters/${characterId}/skills`, {}, discordId).catch(() => ({})),
+        apiFetch(`/api/characters/${characterId}`, {}, discordId).catch(() => ({})),
+      ]);
+      setProfile({ inv, skills, stats, characterId });
+    } catch (err: any) { setMessage(err.message || "Could not load player profile."); }
+    finally { setProfileLoading(false); }
+  }
+
+  async function removeItem() {
+    if (!removeTarget || !removeReason.trim()) { setMessage("Add a reason before removing this item."); return; }
+    setRemovingItem(removeTarget.inventory_id || removeTarget.item_id); setMessage("");
+    try {
+      const data = await apiFetch("/api/staff/maintenance/item/remove", {
+        method: "POST",
+        body: JSON.stringify({ character_id: profile.characterId, inventory_id: removeTarget.inventory_id, item_id: removeTarget.item_id, reason: removeReason }),
+      }, discordId);
+      setMessage(data.message || "Item removed.");
+      setRemoveTarget(null); setRemoveReason("");
+      await loadProfile(profile.characterId);
+    } catch (err: any) { setMessage(err.message || "Could not remove item."); }
+    finally { setRemovingItem(""); }
+  }
+
+  const char = profile?.inv?.character;
+  const items: any[] = profile?.inv?.items || [];
+  const currencies: any[] = profile?.inv?.currencies || [];
+  // skills endpoint returns { owned: [...oc_skills rows with skill_key...] }
+  const ownedSkills: any[] = profile?.skills?.owned || profile?.skills?.owned_skills || [];
+  // characters endpoint returns { character: {...raw character row...} }
+  const charRow: any = profile?.stats?.character || {};
+  const ownedTraits: any[] = profile?.stats?.traits || charRow?.traits || [];
+  // core stats live on the raw character row or a nested stats object
+  const ocStats: any = profile?.stats?.stats || profile?.stats?.core_stats || {};
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:"16px" }}>
+      <div className="card" style={{ display:"flex", gap:"10px", alignItems:"flex-end", flexWrap:"wrap" }}>
+        <label style={{ flex:1, minWidth:"200px" }}>
+          <span>Search OC or Player</span>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && searchOCs()} placeholder="OC name, player username..." />
+        </label>
+        <button onClick={searchOCs} disabled={searching} style={{ flexShrink:0 }}>
+          <Search size={15} /> {searching ? "Searching..." : "Search"}
+        </button>
+      </div>
+
+      {results.length > 0 && !profile && (
+        <div className="card">
+          <span className="activity-type-label">Results</span>
+          <div style={{ display:"flex", flexDirection:"column", gap:"8px", marginTop:"10px" }}>
+            {results.map((c: any) => (
+              <button key={c.character_id || c.id} className="ghost" onClick={() => { setResults([]); loadProfile(c.character_id || c.id); }} style={{ textAlign:"left", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <span><strong>{c.name}</strong>{(c.owner_name || c.username) ? ` — ${c.owner_name || c.username}` : ""}</span>
+                <Eye size={14} />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {profileLoading && <div className="card" style={{ textAlign:"center", color:"var(--muted)" }}>Loading profile...</div>}
+      {message && <p className="message">{message}</p>}
+
+      {removeTarget && (
+        <div className="card" style={{ border:"1px solid rgba(180,68,68,0.5)", background:"rgba(180,68,68,0.07)" }}>
+          <span className="activity-type-label" style={{ color:"#c55" }}>Confirm Removal</span>
+          <h4 style={{ margin:"6px 0 4px" }}>Remove: {removeTarget.name}</h4>
+          <p className="muted-text">This permanently removes the item from the player's inventory.</p>
+          <label>
+            <span>Staff Reason (required)</span>
+            <textarea rows={2} value={removeReason} onChange={(e) => setRemoveReason(e.target.value)} placeholder="Why is this item being removed?" />
+          </label>
+          <div className="actions" style={{ marginTop:"10px" }}>
+            <button className="danger-button" onClick={removeItem} disabled={!!removingItem}><Trash2 size={14} /> {removingItem ? "Removing..." : "Confirm Remove"}</button>
+            <button className="ghost" onClick={() => { setRemoveTarget(null); setRemoveReason(""); }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {profile && char && !profileLoading && (
+        <div style={{ display:"flex", flexDirection:"column", gap:"14px" }}>
+          <div className="card request-workflow-hero">
+            <div>
+              <span className="activity-type-label">Player Profile</span>
+              <h2>{char.name}</h2>
+              <p className="muted-text">Discord: {char.owner_discord_id || "—"}</p>
+            </div>
+            <button className="ghost" onClick={() => loadProfile(profile.characterId)}><RefreshCw size={15} /> Refresh</button>
+          </div>
+
+          {Object.keys(ocStats).length > 0 && (
+            <div className="card">
+              <span className="activity-type-label">Core Stats</span>
+              <div className="request-meta-grid" style={{ marginTop:"10px" }}>
+                {Object.entries(ocStats).map(([k, v]: any) => (
+                  <div key={k}><span>{k.replace(/_/g," ").replace(/\b\w/g,(l:string) => l.toUpperCase())}</span><strong>{v}</strong></div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {currencies.length > 0 && (
+            <div className="card">
+              <span className="activity-type-label">Wallet</span>
+              <div className="request-meta-grid" style={{ marginTop:"10px" }}>
+                {currencies.map((c: any, i: number) => (
+                  <div key={i}><span>{c.emoji ? `${c.emoji} ` : ""}{c.name}{c.ticker ? ` (${c.ticker})` : ""}</span><strong>{c.balance ?? "—"}</strong></div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="card">
+            <span className="activity-type-label">Inventory ({items.length} item{items.length !== 1 ? "s" : ""})</span>
+            {items.length === 0 ? (
+              <p className="muted-text" style={{ marginTop:"8px" }}>No items in inventory.</p>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:"8px", marginTop:"10px" }}>
+                {items.map((item: any, i: number) => (
+                  <div key={item.inventory_id || i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 10px", background:"rgba(255,255,255,0.03)", borderRadius:"6px", gap:"10px" }}>
+                    <div style={{ flex:1 }}>
+                      <strong style={{ fontSize:"14px" }}>{item.name}</strong>
+                      <span style={{ marginLeft:"8px", fontSize:"12px", color:"var(--muted)" }}>{item.type}{item.quantity !== 1 ? ` × ${item.quantity}` : ""}</span>
+                      {item.description && <p className="muted-text" style={{ fontSize:"12px", margin:"2px 0 0" }}>{item.description}</p>}
+                    </div>
+                    <button className="danger-button" style={{ fontSize:"12px", padding:"4px 10px", flexShrink:0 }} onClick={() => setRemoveTarget(item)} title="GM remove item">
+                      <Trash2 size={12} /> Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {ownedSkills.length > 0 && (
+            <div className="card">
+              <span className="activity-type-label">Owned Skills ({ownedSkills.length})</span>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:"6px", marginTop:"10px" }}>
+                {ownedSkills.map((s: any, i: number) => (
+                  <span key={i} style={{ fontSize:"12px", padding:"3px 9px", borderRadius:"99px", background:"rgba(47,111,115,0.18)", border:"1px solid rgba(47,111,115,0.35)" }}>
+                    {s.name || s.skill_name || (s.skill_key ? s.skill_key.replace(/_/g," ").replace(/\b\w/g,(l:string)=>l.toUpperCase()) : "?")}
+                    {s.tree ? <span style={{ opacity:0.6 }}> / {s.tree}</span> : null}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {ownedTraits.length > 0 && (
+            <div className="card">
+              <span className="activity-type-label">Traits ({ownedTraits.length})</span>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:"6px", marginTop:"10px" }}>
+                {ownedTraits.map((t: any, i: number) => (
+                  <span key={i} style={{ fontSize:"12px", padding:"3px 9px", borderRadius:"99px", background:"rgba(180,140,50,0.15)", border:"1px solid rgba(180,140,50,0.35)" }}>
+                    {t.name || t.trait_name || t.slug}{t.tier ? <span style={{ opacity:0.6 }}> / {t.tier}</span> : null}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <button className="ghost" style={{ alignSelf:"flex-start" }} onClick={() => { setProfile(null); setResults([]); setQuery(""); }}>← Back to Search</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StaffQueue({ discordId }: { discordId: string }) {
+  const [staffTab, setStaffTab] = useState<"queue" | "lookup" | "actions">("queue");
   const [requests, setRequests] = useState<any[]>([]);
   const [message, setMessage] = useState("");
   const [staffConfirmation, setStaffConfirmation] = useState("");
@@ -6932,13 +7130,40 @@ function StaffQueue({ discordId }: { discordId: string }) {
         <div className="card request-workflow-hero">
           <div>
             <span className="activity-type-label">Staff Operations</span>
-            <h2>Request Queue</h2>
+            <h2>Staff Center</h2>
             <p className="muted-text">
-              Review stat and skill requests, leave staff notes, approve valid requests, or deny with a clear reason.
+              Approve requests, look up any player's full profile, or run staff actions like grants, overrides, and corrections.
             </p>
           </div>
+        </div>
+
+        {/* Inner tab bar — mirrors GettingStarted style */}
+        <div style={{ display:"flex", gap:"6px", borderBottom:"1px solid rgba(255,255,255,0.08)", paddingBottom:"2px", marginBottom:"4px", flexWrap:"wrap" }}>
+          {([
+            { id: "queue", label: "📋 Request Queue", badge: counts.pending > 0 ? counts.pending : null },
+            { id: "lookup", label: "🔍 Player Lookup" },
+            { id: "actions", label: "⚙️ Action Center" },
+          ] as const).map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setStaffTab(t.id)}
+              className={staffTab === t.id ? "" : "ghost"}
+              style={{ fontSize:"13px", padding:"5px 14px", display:"flex", alignItems:"center", gap:"6px", borderBottom: staffTab === t.id ? "2px solid #2f6f73" : "2px solid transparent", borderRadius:"4px 4px 0 0" }}
+            >
+              {t.label}
+              {"badge" in t && t.badge ? (
+                <span style={{ background:"#c05", color:"#fff", borderRadius:"99px", fontSize:"11px", padding:"1px 7px", fontWeight:700 }}>{t.badge}</span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Request Queue tab ── */}
+        {staffTab === "queue" && (<>
+
+        <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:"4px" }}>
           <button className="ghost" onClick={loadQueue} disabled={loading}>
-            <RefreshCw size={16} /> {loading ? "Loading..." : "Refresh"}
+            <RefreshCw size={15} /> {loading ? "Loading..." : "Refresh Queue"}
           </button>
         </div>
 
@@ -7133,6 +7358,16 @@ function StaffQueue({ discordId }: { discordId: string }) {
             );
           })}
         </div>
+
+        </>)} {/* end queue tab */}
+
+        {/* ── Player Lookup tab ── */}
+        {staffTab === "lookup" && (
+          <StaffPlayerLookup discordId={discordId} />
+        )}
+
+        {/* ── Action Center tab ── */}
+        {staffTab === "actions" && (<>
 
 <div className="card staff-resource-grant-card" style={{ display: "none" }}>
           <div className="card-title-row">
@@ -7677,6 +7912,8 @@ function StaffQueue({ discordId }: { discordId: string }) {
           </div>
         </div>
         
+        </>)} {/* end actions tab */}
+
       </section>
     </RequireDiscord>
   );
