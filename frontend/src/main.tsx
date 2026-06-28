@@ -2013,9 +2013,19 @@ function InventoryDashboard({
           {items.map((item: any, index: number) => (
             <div className="card inventory-item-card" key={`${item.inventory_id || item.name}-${index}`}>
               <div className="inventory-item-top">
-                <div>
-                  <span className="activity-type-label">{itemBadge(item)}</span>
-                  <h3>{item.name || "Unnamed Item"}</h3>
+                <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+                  {item.image_url && (
+                    <img
+                      src={item.image_url}
+                      alt={item.name}
+                      style={{ width: "52px", height: "52px", borderRadius: "8px", objectFit: "cover", flexShrink: 0, border: "1px solid rgba(255,255,255,0.1)" }}
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    />
+                  )}
+                  <div>
+                    <span className="activity-type-label">{itemBadge(item)}</span>
+                    <h3>{item.name || "Unnamed Item"}</h3>
+                  </div>
                 </div>
                 <strong className="inventory-quantity">×{item.quantity ?? 1}</strong>
               </div>
@@ -6553,12 +6563,20 @@ function StaffPlayerLookup({ discordId }: { discordId: string }) {
               ) : (
                 <div className="owned-skill-list" style={{ marginTop:"10px" }}>
                   {items.map((item: any, i: number) => (
-                    <div className="owned-skill-row" key={item.inventory_id || i}>
-                      <div>
+                    <div className="owned-skill-row" key={item.inventory_id || i} style={{ alignItems: "flex-start", gap: "12px" }}>
+                      {item.image_url && (
+                        <img
+                          src={item.image_url}
+                          alt={item.name}
+                          style={{ width:"44px", height:"44px", borderRadius:"7px", objectFit:"cover", flexShrink:0, border:"1px solid rgba(255,255,255,0.1)", marginTop:"2px" }}
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                        />
+                      )}
+                      <div style={{ flex: 1 }}>
                         <strong>{item.name}</strong>
-                        {item.description ? <small>{item.description}</small> : null}
+                        {item.description && <small style={{ display:"block", marginTop:"3px", opacity:0.75 }}>{item.description}</small>}
                       </div>
-                      <div className="owned-skill-meta" style={{ alignItems:"center" }}>
+                      <div className="owned-skill-meta" style={{ alignItems:"center", flexShrink: 0 }}>
                         <span>{item.type}</span>
                         {item.quantity !== 1 ? <span>× {item.quantity}</span> : null}
                         <button className="danger-button" style={{ fontSize:"12px", padding:"3px 10px", marginLeft:"6px" }}

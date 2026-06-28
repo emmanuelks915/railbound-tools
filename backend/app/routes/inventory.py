@@ -109,6 +109,7 @@ def _normalize_item(row: dict[str, Any], source: str) -> dict[str, Any]:
         "type": _item_type(row),
         "quantity": _quantity(row),
         "description": row.get("description") or row.get("details") or row.get("notes") or row.get("note"),
+        "image_url": row.get("image_url") or row.get("thumbnail_url"),
         "source": row.get("source") or row.get("origin") or source,
         "is_locked": bool(row.get("is_locked") or row.get("locked") or row.get("bound")),
         "is_equipped": bool(row.get("is_equipped") or row.get("equipped")),
@@ -177,16 +178,18 @@ def _inventory_rows(sb, character_id: str) -> list[dict[str, Any]]:
             .limit(500)
         )
 
-    # Step 2: for each row, fetch the item name separately
+    # Step 2: for each row, fetch name/description/image — items table first, shop_items as fallback
     for row in inv_rows:
         iid = str(row.get("item_id") or "")
         name = "Unnamed Item"
         item_class = "Item"
         description = None
+        image_url = None
 
         if iid:
+            # Primary: items table
             try:
-                meta_resp = sb.table("items").select("name,item_class").eq("item_id", iid).limit(1).execute()
+                meta_resp = sb.table("items").select("name,item_class,description,image_url").eq("item_id", iid).limit(1).execute()
                 meta_rows = getattr(meta_resp, "data", None) or []
                 if not isinstance(meta_rows, list):
                     meta_rows = []
@@ -196,12 +199,26 @@ def _inventory_rows(sb, character_id: str) -> list[dict[str, Any]]:
                 name = meta_rows[0].get("name") or name
                 item_class = meta_rows[0].get("item_class") or item_class
                 description = meta_rows[0].get("description")
+                image_url = meta_rows[0].get("image_url")
+
+            # Fallback: shop_items table (has description + image_url from shop listings)
+            if not description and not image_url:
+                try:
+                    shop_meta = _safe_rows(
+                        sb.table("shop_items").select("description,image_url,thumbnail_url").eq("item_id", iid).limit(1)
+                    )
+                    if shop_meta:
+                        description = description or shop_meta[0].get("description") or shop_meta[0].get("details")
+                        image_url = image_url or shop_meta[0].get("image_url") or shop_meta[0].get("thumbnail_url")
+                except Exception:
+                    pass
 
         flat = {
             **row,
             "name": name,
             "item_type": item_class,
             "description": description,
+            "image_url": image_url,
             "quantity": row.get("qty") or row.get("quantity") or 1,
         }
         item = _normalize_item(flat, "inventory_entries")
