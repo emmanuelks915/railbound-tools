@@ -6301,12 +6301,19 @@ function StaffPlayerLookup({ discordId }: { discordId: string }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
-  const [profile, setProfile] = useState<any>(null);
-  const [profileLoading, setProfileLoading] = useState(false);
+  const [characterId, setCharacterId] = useState("");
+
+  // Same data as OCDashboard
+  const [summary, setSummary] = useState<any>(null);
+  const [ownedSkills, setOwnedSkills] = useState<any[]>([]);
+  const [invData, setInvData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [removingItem, setRemovingItem] = useState("");
-  const [removeReason, setRemoveReason] = useState("");
+
+  // Item removal
   const [removeTarget, setRemoveTarget] = useState<any>(null);
+  const [removeReason, setRemoveReason] = useState("");
+  const [removing, setRemoving] = useState(false);
 
   async function searchOCs() {
     if (!query.trim()) return;
@@ -6314,52 +6321,73 @@ function StaffPlayerLookup({ discordId }: { discordId: string }) {
     try {
       const params = new URLSearchParams({ search: query.trim(), limit: "20" });
       const data = await apiFetch(`/api/registry/characters?${params}`, {}, discordId);
-      setResults(data.characters || data.results || data || []);
+      setResults(data.characters || []);
     } catch (err: any) { setMessage(err.message || "Could not search OCs."); }
     finally { setSearching(false); }
   }
 
-  async function loadProfile(characterId: string) {
-    setProfileLoading(true); setProfile(null); setMessage("");
+  async function loadProfile(cid: string) {
+    setCharacterId(cid); setResults([]); setSummary(null); setInvData(null); setOwnedSkills([]); setMessage(""); setLoading(true);
     try {
-      const [inv, skills, stats] = await Promise.all([
-        apiFetch(`/api/inventory/characters/${characterId}`, {}, discordId).catch(() => ({})),
-        apiFetch(`/api/characters/${characterId}/skills`, {}, discordId).catch(() => ({})),
-        apiFetch(`/api/characters/${characterId}`, {}, discordId).catch(() => ({})),
+      const [summaryData, catalogData, skillData, inv] = await Promise.all([
+        apiFetch(`/api/characters/${cid}/summary`, {}, discordId).catch(() => ({})),
+        apiFetch("/api/skills", {}, discordId).catch(() => ({ skills: [] })),
+        apiFetch(`/api/characters/${cid}/skills`, {}, discordId).catch(() => ({ owned_keys: [] })),
+        apiFetch(`/api/inventory/characters/${cid}`, {}, discordId).catch(() => ({ items: [], currencies: [] })),
       ]);
-      setProfile({ inv, skills, stats, characterId });
-    } catch (err: any) { setMessage(err.message || "Could not load player profile."); }
-    finally { setProfileLoading(false); }
+      setSummary(summaryData);
+      setInvData(inv);
+      // Enrich skills exactly like OCDashboard does
+      const catalog = catalogData.skills || [];
+      const ownedKeys: string[] = skillData.owned_keys || [];
+      const enriched = ownedKeys
+        .map((key: string) => {
+          const def = catalog.find((s: any) => s.skill_key === key);
+          return { skill_key: key, ...(def || {}) };
+        })
+        .sort((a: any, b: any) => {
+          const t = String(a.tree || "").localeCompare(String(b.tree || ""));
+          if (t !== 0) return t;
+          const tier = Number(a.tier ?? 0) - Number(b.tier ?? 0);
+          if (tier !== 0) return tier;
+          return String(a.name || a.skill_key).localeCompare(String(b.name || b.skill_key));
+        });
+      setOwnedSkills(enriched);
+    } catch (err: any) { setMessage(err.message || "Could not load profile."); }
+    finally { setLoading(false); }
   }
 
   async function removeItem() {
-    if (!removeTarget || !removeReason.trim()) { setMessage("Add a reason before removing this item."); return; }
-    setRemovingItem(removeTarget.inventory_id || removeTarget.item_id); setMessage("");
+    if (!removeTarget || !removeReason.trim()) { setMessage("A staff reason is required."); return; }
+    setRemoving(true); setMessage("");
     try {
       const data = await apiFetch("/api/staff/maintenance/item/remove", {
         method: "POST",
-        body: JSON.stringify({ character_id: profile.characterId, inventory_id: removeTarget.inventory_id, item_id: removeTarget.item_id, reason: removeReason }),
+        body: JSON.stringify({ character_id: characterId, inventory_id: removeTarget.inventory_id, item_id: removeTarget.item_id, reason: removeReason }),
       }, discordId);
       setMessage(data.message || "Item removed.");
       setRemoveTarget(null); setRemoveReason("");
-      await loadProfile(profile.characterId);
+      // Refresh just the inventory
+      const inv = await apiFetch(`/api/inventory/characters/${characterId}`, {}, discordId).catch(() => ({ items: [], currencies: [] }));
+      setInvData(inv);
     } catch (err: any) { setMessage(err.message || "Could not remove item."); }
-    finally { setRemovingItem(""); }
+    finally { setRemoving(false); }
   }
 
-  const char = profile?.inv?.character;
-  const items: any[] = profile?.inv?.items || [];
-  const currencies: any[] = profile?.inv?.currencies || [];
-  // skills endpoint returns { owned: [...oc_skills rows with skill_key...] }
-  const ownedSkills: any[] = profile?.skills?.owned || profile?.skills?.owned_skills || [];
-  // characters endpoint returns { character: {...raw character row...} }
-  const charRow: any = profile?.stats?.character || {};
-  const ownedTraits: any[] = profile?.stats?.traits || charRow?.traits || [];
-  // core stats live on the raw character row or a nested stats object
-  const ocStats: any = profile?.stats?.stats || profile?.stats?.core_stats || {};
+  const groupedSkills = ownedSkills.reduce<Record<string, any[]>>((acc, skill) => {
+    const tree = String(skill.tree || "Other");
+    if (!acc[tree]) acc[tree] = [];
+    acc[tree].push(skill);
+    return acc;
+  }, {});
+
+  const items: any[] = invData?.items || [];
+  const currencies: any[] = invData?.currencies || [];
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:"16px" }}>
+
+      {/* Search bar */}
       <div className="card" style={{ display:"flex", gap:"10px", alignItems:"flex-end", flexWrap:"wrap" }}>
         <label style={{ flex:1, minWidth:"200px" }}>
           <span>Search OC or Player</span>
@@ -6370,12 +6398,14 @@ function StaffPlayerLookup({ discordId }: { discordId: string }) {
         </button>
       </div>
 
-      {results.length > 0 && !profile && (
+      {/* Search results */}
+      {results.length > 0 && (
         <div className="card">
           <span className="activity-type-label">Results</span>
           <div style={{ display:"flex", flexDirection:"column", gap:"8px", marginTop:"10px" }}>
             {results.map((c: any) => (
-              <button key={c.character_id || c.id} className="ghost" onClick={() => { setResults([]); loadProfile(c.character_id || c.id); }} style={{ textAlign:"left", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <button key={c.character_id || c.id} className="ghost" onClick={() => loadProfile(c.character_id || c.id)}
+                style={{ textAlign:"left", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <span><strong>{c.name}</strong>{(c.owner_name || c.username) ? ` — ${c.owner_name || c.username}` : ""}</span>
                 <Eye size={14} />
               </button>
@@ -6384,109 +6414,170 @@ function StaffPlayerLookup({ discordId }: { discordId: string }) {
         </div>
       )}
 
-      {profileLoading && <div className="card" style={{ textAlign:"center", color:"var(--muted)" }}>Loading profile...</div>}
+      {loading && <div className="card" style={{ textAlign:"center", padding:"24px", color:"var(--muted)" }}>Loading profile...</div>}
       {message && <p className="message">{message}</p>}
 
+      {/* Remove confirm dialog */}
       {removeTarget && (
-        <div className="card" style={{ border:"1px solid rgba(180,68,68,0.5)", background:"rgba(180,68,68,0.07)" }}>
-          <span className="activity-type-label" style={{ color:"#c55" }}>Confirm Removal</span>
-          <h4 style={{ margin:"6px 0 4px" }}>Remove: {removeTarget.name}</h4>
-          <p className="muted-text">This permanently removes the item from the player's inventory.</p>
-          <label>
+        <div className="card" style={{ border:"1px solid rgba(180,68,68,0.45)", background:"rgba(180,68,68,0.06)" }}>
+          <span className="activity-type-label" style={{ color:"#c55" }}>Confirm Item Removal</span>
+          <h4 style={{ margin:"6px 0 4px" }}>{removeTarget.name}</h4>
+          <p className="muted-text">Permanently removes this item from the player's inventory. This cannot be undone.</p>
+          <label style={{ marginTop:"10px" }}>
             <span>Staff Reason (required)</span>
             <textarea rows={2} value={removeReason} onChange={(e) => setRemoveReason(e.target.value)} placeholder="Why is this item being removed?" />
           </label>
           <div className="actions" style={{ marginTop:"10px" }}>
-            <button className="danger-button" onClick={removeItem} disabled={!!removingItem}><Trash2 size={14} /> {removingItem ? "Removing..." : "Confirm Remove"}</button>
+            <button className="danger-button" onClick={removeItem} disabled={removing}><Trash2 size={14} /> {removing ? "Removing..." : "Confirm Remove"}</button>
             <button className="ghost" onClick={() => { setRemoveTarget(null); setRemoveReason(""); }}>Cancel</button>
           </div>
         </div>
       )}
 
-      {profile && char && !profileLoading && (
-        <div style={{ display:"flex", flexDirection:"column", gap:"14px" }}>
+      {/* Full profile — mirrors OCDashboard layout */}
+      {summary && !loading && (
+        <>
+          {/* Header hero */}
           <div className="card request-workflow-hero">
             <div>
-              <span className="activity-type-label">Player Profile</span>
-              <h2>{char.name}</h2>
-              <p className="muted-text">Discord: {char.owner_discord_id || "—"}</p>
+              <span className="activity-type-label">Staff — Player Profile</span>
+              <h2>{summary.character?.name || "OC"}</h2>
+              <p className="muted-text">
+                Discord: {summary.character?.user_id || summary.character?.discord_id || "—"}
+                {summary.wallet?.available_xp !== undefined ? ` · Available XP: ${summary.wallet.available_xp}` : ""}
+              </p>
             </div>
-            <button className="ghost" onClick={() => loadProfile(profile.characterId)}><RefreshCw size={15} /> Refresh</button>
+            <button className="ghost" onClick={() => loadProfile(characterId)}><RefreshCw size={15} /> Refresh</button>
           </div>
 
-          {Object.keys(ocStats).length > 0 && (
+          <OCMoneyCard discordId={discordId} characterId={characterId} />
+
+          <section className="grid oc-dashboard-grid">
+            {/* Core stats — same card as OCDashboard */}
             <div className="card">
-              <span className="activity-type-label">Core Stats</span>
-              <div className="request-meta-grid" style={{ marginTop:"10px" }}>
-                {Object.entries(ocStats).map(([k, v]: any) => (
-                  <div key={k}><span>{k.replace(/_/g," ").replace(/\b\w/g,(l:string) => l.toUpperCase())}</span><strong>{v}</strong></div>
+              <div className="card-title-row">
+                <h2>Core Stats</h2>
+              </div>
+              <div className="mini-stat-grid">
+                {(Object.keys(STAT_LABELS) as Array<keyof CoreStats>).map((key) => (
+                  <div key={key} className="mini-stat"><span>{STAT_LABELS[key]}</span><strong>{summary.stats?.[key] ?? 0}</strong></div>
                 ))}
               </div>
             </div>
-          )}
 
-          {currencies.length > 0 && (
-            <div className="card">
-              <span className="activity-type-label">Wallet</span>
-              <div className="request-meta-grid" style={{ marginTop:"10px" }}>
-                {currencies.map((c: any, i: number) => (
-                  <div key={i}><span>{c.emoji ? `${c.emoji} ` : ""}{c.name}{c.ticker ? ` (${c.ticker})` : ""}</span><strong>{c.balance ?? "—"}</strong></div>
-                ))}
+            {/* Traits — exact copy of OC traits card */}
+            <div className="card oc-traits-card">
+              <div className="card-title-row">
+                <div>
+                  <h2>Traits</h2>
+                  <p className="muted-text">Traits attached to this OC.</p>
+                </div>
+                <span className="pill">{(summary.traits || []).length} traits</span>
               </div>
-            </div>
-          )}
-
-          <div className="card">
-            <span className="activity-type-label">Inventory ({items.length} item{items.length !== 1 ? "s" : ""})</span>
-            {items.length === 0 ? (
-              <p className="muted-text" style={{ marginTop:"8px" }}>No items in inventory.</p>
-            ) : (
-              <div style={{ display:"flex", flexDirection:"column", gap:"8px", marginTop:"10px" }}>
-                {items.map((item: any, i: number) => (
-                  <div key={item.inventory_id || i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 10px", background:"rgba(255,255,255,0.03)", borderRadius:"6px", gap:"10px" }}>
-                    <div style={{ flex:1 }}>
-                      <strong style={{ fontSize:"14px" }}>{item.name}</strong>
-                      <span style={{ marginLeft:"8px", fontSize:"12px", color:"var(--muted)" }}>{item.type}{item.quantity !== 1 ? ` × ${item.quantity}` : ""}</span>
-                      {item.description && <p className="muted-text" style={{ fontSize:"12px", margin:"2px 0 0" }}>{item.description}</p>}
+              {(summary.traits || []).length === 0 ? <p>No traits found.</p> : (
+                <div className="owned-skill-list">
+                  {(summary.traits || []).map((trait: any, i: number) => (
+                    <div className="owned-skill-row" key={`${trait.slug || trait.trait_id}-${i}`}>
+                      <div>
+                        <strong>{trait.name || trait.slug || "Trait"}</strong>
+                        {trait.description ? <small>{trait.description}</small> : null}
+                      </div>
+                      <div className="owned-skill-meta">
+                        <span>{trait.tier || trait.category || "Trait"}</span>
+                        {trait.cost != null ? <span>{trait.cost} pts</span> : null}
+                      </div>
                     </div>
-                    <button className="danger-button" style={{ fontSize:"12px", padding:"4px 10px", flexShrink:0 }} onClick={() => setRemoveTarget(item)} title="GM remove item">
-                      <Trash2 size={12} /> Remove
-                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Skills — exact copy of OC skills card */}
+            <div className="card oc-skills-card">
+              <div className="card-title-row">
+                <div>
+                  <h2>Owned Skills</h2>
+                  <p className="muted-text">Skills this OC currently owns.</p>
+                </div>
+                <span className="pill good">{ownedSkills.length} owned</span>
+              </div>
+              {ownedSkills.length === 0 ? <p>No owned skills found.</p> : null}
+              {Object.entries(groupedSkills).map(([tree, skills]) => (
+                <div className="owned-skill-group" key={tree}>
+                  <div className="owned-skill-group-heading"><h3>{tree}</h3><span>{skills.length}</span></div>
+                  <div className="owned-skill-list">
+                    {skills.map((skill: any) => (
+                      <div className="owned-skill-row" key={skill.skill_key}>
+                        <div><strong>{skill.name || skill.skill_key}</strong></div>
+                        <div className="owned-skill-meta">
+                          <span>Tier {skill.tier ?? "—"}</span>
+                          <span>{skill.cost ?? 0} XP</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Derived stats — same card as OCDashboard */}
+            <div className="card">
+              <h2>Derived Stats</h2>
+              <div className="summary vertical">
+                {Object.entries(summary.derived || {}).map(([key, value]) => (
+                  <div key={key}>
+                    <span>{key.replaceAll("_", " ")}</span>
+                    <strong>{String(value)}</strong>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-
-          {ownedSkills.length > 0 && (
-            <div className="card">
-              <span className="activity-type-label">Owned Skills ({ownedSkills.length})</span>
-              <div style={{ display:"flex", flexWrap:"wrap", gap:"6px", marginTop:"10px" }}>
-                {ownedSkills.map((s: any, i: number) => (
-                  <span key={i} style={{ fontSize:"12px", padding:"3px 9px", borderRadius:"99px", background:"rgba(47,111,115,0.18)", border:"1px solid rgba(47,111,115,0.35)" }}>
-                    {s.name || s.skill_name || (s.skill_key ? s.skill_key.replace(/_/g," ").replace(/\b\w/g,(l:string)=>l.toUpperCase()) : "?")}
-                    {s.tree ? <span style={{ opacity:0.6 }}> / {s.tree}</span> : null}
-                  </span>
-                ))}
-              </div>
             </div>
-          )}
 
-          {ownedTraits.length > 0 && (
-            <div className="card">
-              <span className="activity-type-label">Traits ({ownedTraits.length})</span>
-              <div style={{ display:"flex", flexWrap:"wrap", gap:"6px", marginTop:"10px" }}>
-                {ownedTraits.map((t: any, i: number) => (
-                  <span key={i} style={{ fontSize:"12px", padding:"3px 9px", borderRadius:"99px", background:"rgba(180,140,50,0.15)", border:"1px solid rgba(180,140,50,0.35)" }}>
-                    {t.name || t.trait_name || t.slug}{t.tier ? <span style={{ opacity:0.6 }}> / {t.tier}</span> : null}
-                  </span>
-                ))}
+            {/* Inventory — staff-only card with GM remove buttons */}
+            <div className="card" style={{ gridColumn:"1 / -1" }}>
+              <div className="card-title-row">
+                <div>
+                  <h2>Inventory</h2>
+                  <p className="muted-text">{items.length} item{items.length !== 1 ? "s" : ""} · Staff can remove items below.</p>
+                </div>
+                {currencies.length > 0 && (
+                  <div style={{ display:"flex", gap:"12px", alignItems:"center", flexWrap:"wrap" }}>
+                    {currencies.map((c: any, i: number) => (
+                      <span key={i} style={{ fontSize:"13px" }}>{c.emoji ? `${c.emoji} ` : ""}<strong>{c.balance ?? 0}</strong> {c.name}{c.ticker ? ` (${c.ticker})` : ""}</span>
+                    ))}
+                  </div>
+                )}
               </div>
+              {items.length === 0 ? (
+                <p className="muted-text">No items in inventory.</p>
+              ) : (
+                <div className="owned-skill-list" style={{ marginTop:"10px" }}>
+                  {items.map((item: any, i: number) => (
+                    <div className="owned-skill-row" key={item.inventory_id || i}>
+                      <div>
+                        <strong>{item.name}</strong>
+                        {item.description ? <small>{item.description}</small> : null}
+                      </div>
+                      <div className="owned-skill-meta" style={{ alignItems:"center" }}>
+                        <span>{item.type}</span>
+                        {item.quantity !== 1 ? <span>× {item.quantity}</span> : null}
+                        <button className="danger-button" style={{ fontSize:"12px", padding:"3px 10px", marginLeft:"6px" }}
+                          onClick={() => setRemoveTarget(item)}>
+                          <Trash2 size={12} /> Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+          </section>
 
-          <button className="ghost" style={{ alignSelf:"flex-start" }} onClick={() => { setProfile(null); setResults([]); setQuery(""); }}>← Back to Search</button>
-        </div>
+          <button className="ghost" style={{ alignSelf:"flex-start", marginTop:"4px" }}
+            onClick={() => { setSummary(null); setCharacterId(""); setInvData(null); setOwnedSkills([]); setQuery(""); }}>
+            ← Back to Search
+          </button>
+        </>
       )}
     </div>
   );
