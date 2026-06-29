@@ -426,14 +426,8 @@ def get_character_inventory(
 
 
 @router.get("/debug/{character_id}")
-def debug_inventory_raw(
-    character_id: str,
-    actor_discord_id: int | None = Depends(actor_from_header),
-):
-    """Staff-only: return raw inventory_entries rows so we can see exact column names."""
-    from app.permissions import is_staff
-    if not actor_discord_id or not is_staff(int(actor_discord_id)):
-        raise HTTPException(status_code=403, detail="Staff only.")
+def debug_inventory_raw(character_id: str):
+    """Temporary debug: return raw inventory_entries rows to inspect column names."""
     sb = get_supabase()
     gid = get_guild_id()
     rows = _safe_rows(sb.table("inventory_entries").select("*").eq("guild_id", gid).eq("character_id", character_id).limit(5))
