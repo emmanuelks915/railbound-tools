@@ -6306,6 +6306,257 @@ function BeastSkillCatalogDashboard({ discordId }: { discordId: string }) {
   return <StaffOnly discordId={discordId}><section className="request-workflow-page"><div className="card request-workflow-hero"><div><span className="activity-type-label">Staff Catalog</span><h2>Source Beast Skill Builder</h2><p className="muted-text">Create and edit Beast Skill definitions without touching Supabase. Purchasing stays locked until staff marks a skill purchasable.</p></div><button className="ghost" onClick={loadSkills}><RefreshCw size={16} /> Refresh</button></div>{message ? <p className="message">{message}</p> : null}<div className="card"><h3>{editingKey ? "Edit Beast Skill" : "Create Beast Skill"}</h3><div className="request-actions-panel"><label><span>Skill Name</span><input value={form.name} onChange={(event) => setForm((current: any) => ({ ...current, name: event.target.value }))} placeholder="Ravaged Strike" /></label><label><span>Internal Key</span><input value={form.skill_key} onChange={(event) => setForm((current: any) => ({ ...current, skill_key: event.target.value }))} placeholder="Auto-generated from skill name" disabled={Boolean(editingKey)} /></label><label><span>Beast Skill Type</span><select value={form.beast_skill_type} onChange={(event) => setForm((current: any) => ({ ...current, beast_skill_type: event.target.value }))}><option value="combat">Combat</option><option value="mount">Mount</option><option value="utility">Utility</option></select></label><label><span>Tier</span><input type="number" min="0" max="3" value={form.tier} onChange={(event) => setForm((current: any) => ({ ...current, tier: Number(event.target.value) }))} /></label><label><span>XP Cost</span><input type="number" min="0" value={form.cost} onChange={(event) => setForm((current: any) => ({ ...current, cost: Number(event.target.value) }))} /></label><label><span>Action Type</span><input value={form.action_type || ""} onChange={(event) => setForm((current: any) => ({ ...current, action_type: event.target.value }))} placeholder="Passive, Action, Bonus Action, Reaction" /></label><label><span>Prerequisites</span><input value={form.prerequisites || ""} onChange={(event) => setForm((current: any) => ({ ...current, prerequisites: event.target.value }))} placeholder="Choose prerequisite skills below. Keystone stores the keys automatically." /></label><label><span>Upgrade Line</span><input value={form.chain || ""} onChange={(event) => setForm((current: any) => ({ ...current, chain: event.target.value }))} placeholder="Example: Magical Attack I → Magical Attack II → Magical Attack III. Leave blank if standalone." /></label><label><span>Source Label</span><input value={form.source_label || ""} onChange={(event) => setForm((current: any) => ({ ...current, source_label: event.target.value }))} /></label><label><span>Display Order</span><input type="number" value={form.sort_order || 0} onChange={(event) => setForm((current: any) => ({ ...current, sort_order: Number(event.target.value) }))} /></label><label><span>Status</span><select value={form.is_active ? "active" : "inactive"} onChange={(event) => setForm((current: any) => ({ ...current, is_active: event.target.value === "active" }))}><option value="active">Active</option><option value="inactive">Inactive / Hidden</option></select></label><label><span>Purchasing</span><select value={form.is_purchasable ? "yes" : "no"} onChange={(event) => setForm((current: any) => ({ ...current, is_purchasable: event.target.value === "yes" }))}><option value="no">Locked / Not Purchasable</option><option value="yes">Purchasable</option></select></label><label><span>Effects</span><textarea rows={4} value={form.effects || ""} onChange={(event) => setForm((current: any) => ({ ...current, effects: event.target.value }))} placeholder="Mechanical effects, bonuses, AP/action cost, restrictions..." /></label><label><span>Description</span><textarea rows={5} value={form.description || ""} onChange={(event) => setForm((current: any) => ({ ...current, description: event.target.value }))} placeholder="Player-facing description." /></label></div><div className="actions"><button onClick={saveSkill}><Save size={16} /> {editingKey ? "Update Beast Skill" : "Create Beast Skill"}</button>{editingKey ? <button className="ghost" onClick={resetForm}>Cancel Edit</button> : null}</div></div><div className="request-card-list">{skills.length === 0 ? <div className="card request-empty-state"><strong>No Beast Skills created yet.</strong><p className="muted-text">Create the first Source Beast Skill above.</p></div> : null}{skills.map((skill: any) => <div className="card request-review-card" key={skill.skill_key}><div className="request-review-top"><div><span className="activity-type-label">{skill.beast_skill_type} • Tier {skill.tier}</span><h3>{skill.name}</h3><p className="muted-text">{skill.skill_key} • {skill.cost} Beast XP • {skill.action_type || "Action type TBA"}</p></div><em className={`request-status-pill ${skill.is_purchasable ? "approved" : "pending"}`}>{skill.is_purchasable ? "Purchasable" : "Locked"}</em></div>{skill.description ? <p>{skill.description}</p> : null}{skill.effects ? <p><strong>Effects:</strong> {skill.effects}</p> : null}<div className="actions"><button className="ghost" onClick={() => editSkill(skill)}>Edit</button><button className="ghost" onClick={() => toggleSkill(skill, { is_purchasable: !skill.is_purchasable })}>{skill.is_purchasable ? "Lock Purchasing" : "Enable Purchasing"}</button><button className="ghost" onClick={() => toggleSkill(skill, { is_active: !skill.is_active })}>{skill.is_active ? "Hide" : "Unhide"}</button><button className="danger-button" onClick={() => deleteSkill(skill)}>Delete</button></div></div>)}</div></section></StaffOnly>;
 }
 
+// ── Staff Task Board ─────────────────────────────────────────────────────────
+
+const PRIORITY_COLORS: Record<string, string> = {
+  urgent: "#c05050",
+  high:   "#c07030",
+  medium: "#8a7a30",
+  low:    "#3a7a50",
+};
+const PRIORITY_EMOJI: Record<string, string> = {
+  urgent: "🔴", high: "🟠", medium: "🟡", low: "🟢",
+};
+const STATUS_COLS = [
+  { key: "todo",        label: "To Do",       color: "rgba(255,255,255,0.06)" },
+  { key: "in_progress", label: "In Progress",  color: "rgba(47,111,115,0.12)" },
+  { key: "done",        label: "Done",         color: "rgba(50,120,70,0.10)"  },
+];
+
+const STAFF_MEMBERS = [
+  { id: "165891203798138880", name: "Emmanuel" },
+  { id: "303551912425635851", name: "Glass" },
+  { id: "275057128429060096", name: "Kris" },
+  { id: "352204389898698752", name: "Lime" },
+  { id: "272842577767620608", name: "Goofy" },
+];
+
+const BLANK_TASK = { title: "", description: "", priority: "medium", status: "todo", assignee_discord_id: "", assignee_name: "", due_date: "" };
+
+function StaffTaskBoard({ discordId }: { discordId: string }) {
+  const [tasks, setTasks]           = useState<any[]>([]);
+  const [loading, setLoading]       = useState(false);
+  const [message, setMessage]       = useState("");
+  const [showForm, setShowForm]     = useState(false);
+  const [editTask, setEditTask]     = useState<any>(null);
+  const [form, setForm]             = useState<any>(BLANK_TASK);
+  const [saving, setSaving]         = useState(false);
+  const [deleting, setDeleting]     = useState("");
+
+  async function loadTasks() {
+    setLoading(true); setMessage("");
+    try {
+      const data = await apiFetch("/api/staff/tasks", {}, discordId);
+      setTasks(data.tasks || []);
+    } catch (e: any) { setMessage(e.message || "Could not load tasks."); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { loadTasks(); }, []); // eslint-disable-line
+
+  function openNew() {
+    setEditTask(null);
+    setForm(BLANK_TASK);
+    setShowForm(true);
+    setMessage("");
+  }
+
+  function openEdit(task: any) {
+    setEditTask(task);
+    setForm({
+      title:               task.title || "",
+      description:         task.description || "",
+      priority:            task.priority || "medium",
+      status:              task.status || "todo",
+      assignee_discord_id: task.assignee_discord_id ? String(task.assignee_discord_id) : "",
+      assignee_name:       task.assignee_name || "",
+      due_date:            task.due_date || "",
+    });
+    setShowForm(true);
+    setMessage("");
+  }
+
+  function handleAssignee(id: string) {
+    const member = STAFF_MEMBERS.find((m) => m.id === id);
+    setForm((f: any) => ({ ...f, assignee_discord_id: id, assignee_name: member?.name || "" }));
+  }
+
+  async function saveTask() {
+    if (!form.title.trim()) { setMessage("Title is required."); return; }
+    setSaving(true); setMessage("");
+    try {
+      const payload = {
+        ...form,
+        assignee_discord_id: form.assignee_discord_id || null,
+        due_date: form.due_date || null,
+      };
+      if (editTask) {
+        await apiFetch(`/api/staff/tasks/${editTask.task_id}`, { method: "PATCH", body: JSON.stringify(payload) }, discordId);
+      } else {
+        await apiFetch("/api/staff/tasks", { method: "POST", body: JSON.stringify(payload) }, discordId);
+      }
+      setShowForm(false);
+      await loadTasks();
+    } catch (e: any) { setMessage(e.message || "Could not save task."); }
+    finally { setSaving(false); }
+  }
+
+  async function deleteTask(taskId: string) {
+    if (!window.confirm("Delete this task permanently?")) return;
+    setDeleting(taskId);
+    try {
+      await apiFetch(`/api/staff/tasks/${taskId}`, { method: "DELETE" }, discordId);
+      await loadTasks();
+    } catch (e: any) { setMessage(e.message || "Could not delete task."); }
+    finally { setDeleting(""); }
+  }
+
+  async function quickStatus(task: any, newStatus: string) {
+    try {
+      await apiFetch(`/api/staff/tasks/${task.task_id}`, { method: "PATCH", body: JSON.stringify({ status: newStatus }) }, discordId);
+      await loadTasks();
+    } catch (e: any) { setMessage(e.message || "Could not update status."); }
+  }
+
+  const byStatus = (status: string) => tasks.filter((t) => t.status === status);
+  const overdue  = tasks.filter((t) => t.is_overdue);
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:"16px" }}>
+
+      {/* Header */}
+      <div className="card request-workflow-hero">
+        <div>
+          <span className="activity-type-label">Staff Operations</span>
+          <h2>Task Board</h2>
+          <p className="muted-text">Track what staff are working on. Overdue tasks ping the staff Discord channel automatically.</p>
+        </div>
+        <div style={{ display:"flex", gap:"8px" }}>
+          <button className="ghost" onClick={loadTasks} disabled={loading}><RefreshCw size={15} /></button>
+          <button onClick={openNew}><Plus size={15} /> New Task</button>
+        </div>
+      </div>
+
+      {message && <p className="message">{message}</p>}
+
+      {/* Overdue banner */}
+      {overdue.length > 0 && (
+        <div className="card" style={{ border:"1px solid rgba(192,80,80,0.45)", background:"rgba(192,80,80,0.07)" }}>
+          <span className="activity-type-label" style={{ color:"#c05050" }}>⏰ {overdue.length} Overdue Task{overdue.length !== 1 ? "s" : ""}</span>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:"6px", marginTop:"8px" }}>
+            {overdue.map((t) => (
+              <span key={t.task_id} style={{ fontSize:"12px", padding:"3px 10px", borderRadius:"99px", background:"rgba(192,80,80,0.15)", border:"1px solid rgba(192,80,80,0.3)", cursor:"pointer" }} onClick={() => openEdit(t)}>
+                {PRIORITY_EMOJI[t.priority] || "⚪"} {t.title} {t.due_date ? `· ${t.due_date}` : ""}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Create / Edit form */}
+      {showForm && (
+        <div className="card" style={{ border:"1px solid rgba(255,255,255,0.12)" }}>
+          <span className="activity-type-label">{editTask ? "Edit Task" : "New Task"}</span>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginTop:"12px" }}>
+            <label style={{ gridColumn:"1 / -1" }}>
+              <span>Title *</span>
+              <input value={form.title} onChange={(e) => setForm((f: any) => ({ ...f, title: e.target.value }))} placeholder="What needs to be done?" />
+            </label>
+            <label style={{ gridColumn:"1 / -1" }}>
+              <span>Description</span>
+              <textarea rows={2} value={form.description} onChange={(e) => setForm((f: any) => ({ ...f, description: e.target.value }))} placeholder="Additional context..." style={{ resize:"vertical" }} />
+            </label>
+            <label>
+              <span>Priority</span>
+              <select value={form.priority} onChange={(e) => setForm((f: any) => ({ ...f, priority: e.target.value }))}>
+                <option value="low">🟢 Low</option>
+                <option value="medium">🟡 Medium</option>
+                <option value="high">🟠 High</option>
+                <option value="urgent">🔴 Urgent</option>
+              </select>
+            </label>
+            <label>
+              <span>Status</span>
+              <select value={form.status} onChange={(e) => setForm((f: any) => ({ ...f, status: e.target.value }))}>
+                <option value="todo">To Do</option>
+                <option value="in_progress">In Progress</option>
+                <option value="done">Done</option>
+              </select>
+            </label>
+            <label>
+              <span>Assignee</span>
+              <select value={form.assignee_discord_id} onChange={(e) => handleAssignee(e.target.value)}>
+                <option value="">Unassigned</option>
+                {STAFF_MEMBERS.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>Due Date</span>
+              <input type="date" value={form.due_date} onChange={(e) => setForm((f: any) => ({ ...f, due_date: e.target.value }))} />
+            </label>
+          </div>
+          <div className="actions" style={{ marginTop:"12px" }}>
+            <button onClick={saveTask} disabled={saving}><Check size={14} /> {saving ? "Saving..." : "Save Task"}</button>
+            <button className="ghost" onClick={() => setShowForm(false)}><X size={14} /> Cancel</button>
+            {editTask && (
+              <button className="danger-button" style={{ marginLeft:"auto" }} onClick={() => deleteTask(editTask.task_id)} disabled={!!deleting}>
+                <Trash2 size={14} /> Delete
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Kanban columns */}
+      {loading && tasks.length === 0 ? (
+        <div className="card" style={{ textAlign:"center", padding:"24px", color:"var(--muted)" }}>Loading tasks...</div>
+      ) : (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:"14px" }}>
+          {STATUS_COLS.map((col) => {
+            const colTasks = byStatus(col.key);
+            return (
+              <div key={col.key} style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
+                {/* Column header */}
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", borderRadius:"8px", background:col.color, border:"1px solid rgba(255,255,255,0.08)" }}>
+                  <strong style={{ fontSize:"13px" }}>{col.label}</strong>
+                  <span style={{ fontSize:"12px", padding:"2px 8px", borderRadius:"99px", background:"rgba(255,255,255,0.1)" }}>{colTasks.length}</span>
+                </div>
+                {/* Task cards */}
+                {colTasks.length === 0 && (
+                  <div style={{ padding:"16px", textAlign:"center", fontSize:"12px", color:"var(--muted)", border:"1px dashed rgba(255,255,255,0.1)", borderRadius:"8px" }}>No tasks</div>
+                )}
+                {colTasks.map((task) => (
+                  <div key={task.task_id} className="card" style={{ padding:"12px", cursor:"pointer", border: task.is_overdue ? "1px solid rgba(192,80,80,0.4)" : "1px solid rgba(255,255,255,0.07)" }} onClick={() => openEdit(task)}>
+                    {/* Priority + overdue badge */}
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"6px" }}>
+                      <span style={{ fontSize:"11px", padding:"2px 7px", borderRadius:"99px", background: PRIORITY_COLORS[task.priority] + "33", border:`1px solid ${PRIORITY_COLORS[task.priority]}66`, color: PRIORITY_COLORS[task.priority] }}>
+                        {PRIORITY_EMOJI[task.priority]} {task.priority.toUpperCase()}
+                      </span>
+                      {task.is_overdue && <span style={{ fontSize:"10px", color:"#c05050" }}>⏰ OVERDUE</span>}
+                    </div>
+                    <strong style={{ fontSize:"14px", display:"block", marginBottom:"4px" }}>{task.title}</strong>
+                    {task.description && <p className="muted-text" style={{ fontSize:"12px", margin:"0 0 6px" }}>{task.description}</p>}
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", fontSize:"12px", opacity:0.7, marginTop:"6px" }}>
+                      <span>{task.assignee_name || "Unassigned"}</span>
+                      {task.due_date && <span>📅 {task.due_date}</span>}
+                    </div>
+                    {/* Quick status buttons */}
+                    <div style={{ display:"flex", gap:"6px", marginTop:"8px" }} onClick={(e) => e.stopPropagation()}>
+                      {col.key !== "todo"        && <button className="ghost" style={{ fontSize:"11px", padding:"2px 8px" }} onClick={() => quickStatus(task, "todo")}>To Do</button>}
+                      {col.key !== "in_progress" && <button className="ghost" style={{ fontSize:"11px", padding:"2px 8px" }} onClick={() => quickStatus(task, "in_progress")}>In Progress</button>}
+                      {col.key !== "done"        && <button className="ghost" style={{ fontSize:"11px", padding:"2px 8px" }} onClick={() => quickStatus(task, "done")}>Done ✓</button>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Staff Player Lookup ──────────────────────────────────────────────────────
 
 function StaffPlayerLookup({ discordId }: { discordId: string }) {
@@ -6604,7 +6855,7 @@ function StaffPlayerLookup({ discordId }: { discordId: string }) {
 }
 
 function StaffQueue({ discordId }: { discordId: string }) {
-  const [staffTab, setStaffTab] = useState<"queue" | "lookup" | "actions">("queue");
+  const [staffTab, setStaffTab] = useState<"queue" | "lookup" | "actions" | "tasks">("queue");
   const [requests, setRequests] = useState<any[]>([]);
   const [message, setMessage] = useState("");
   const [staffConfirmation, setStaffConfirmation] = useState("");
@@ -7249,11 +7500,12 @@ function StaffQueue({ discordId }: { discordId: string }) {
         </div>
 
         {/* Inner tab bar — mirrors GettingStarted style */}
-        <div style={{ display:"flex", gap:"6px", borderBottom:"1px solid rgba(255,255,255,0.08)", paddingBottom:"2px", marginBottom:"4px", flexWrap:"wrap" }}>
+        <div style={{ display:"flex", gap:"6px", borderBottom:"1px solid rgba(255,255,255,0.08)", paddingBottom:"2px", marginBottom:"4px", flexWrap:"nowrap", overflowX:"auto", scrollbarWidth:"none" }}>
           {([
             { id: "queue", label: "📋 Request Queue", badge: counts.pending > 0 ? counts.pending : null },
             { id: "lookup", label: "🔍 Player Lookup" },
             { id: "actions", label: "⚙️ Action Center" },
+            { id: "tasks", label: "✅ Task Board" },
           ] as const).map((t) => (
             <button
               key={t.id}
@@ -8024,6 +8276,11 @@ function StaffQueue({ discordId }: { discordId: string }) {
         </div>
         
         </>)} {/* end actions tab */}
+
+        {/* ── Task Board tab ── */}
+        {staffTab === "tasks" && (
+          <StaffTaskBoard discordId={discordId} />
+        )}
 
       </section>
     </RequireDiscord>
