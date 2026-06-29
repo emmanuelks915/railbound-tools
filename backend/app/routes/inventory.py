@@ -188,9 +188,17 @@ def _inventory_rows(sb, character_id: str) -> list[dict[str, Any]]:
         meta_rows = _safe_rows(
             sb.table("items")
             .select("item_id,name,item_class,notes,sheet_url")
+            .eq("guild_id", get_guild_id())
             .in_("item_id", all_item_ids)
             .limit(500)
         )
+        if not meta_rows:
+            meta_rows = _safe_rows(
+                sb.table("items")
+                .select("item_id,name,item_class,notes,sheet_url")
+                .in_("item_id", all_item_ids)
+                .limit(500)
+            )
         for m in meta_rows:
             iid = str(m.get("item_id") or "")
             if iid:
@@ -203,9 +211,17 @@ def _inventory_rows(sb, character_id: str) -> list[dict[str, Any]]:
         shop_rows_meta = _safe_rows(
             sb.table("shop_items")
             .select("grants_item_id,description,image_url,thumbnail_url,usage_information,special_effects")
+            .eq("guild_id", get_guild_id())
             .in_("grants_item_id", all_item_ids)
             .limit(500)
         )
+        if not shop_rows_meta:
+            shop_rows_meta = _safe_rows(
+                sb.table("shop_items")
+                .select("grants_item_id,description,image_url,thumbnail_url,usage_information,special_effects")
+                .in_("grants_item_id", all_item_ids)
+                .limit(500)
+            )
         for s in shop_rows_meta:
             gid_key = str(s.get("grants_item_id") or "")
             if gid_key and gid_key not in shop_meta:
