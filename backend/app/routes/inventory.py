@@ -433,4 +433,28 @@ def debug_inventory_raw(character_id: str):
     rows = _safe_rows(sb.table("inventory_entries").select("*").eq("guild_id", gid).eq("character_id", character_id).limit(5))
     if not rows:
         rows = _safe_rows(sb.table("inventory_entries").select("*").eq("character_id", character_id).limit(5))
-    return {"raw_rows": rows, "column_names": list(rows[0].keys()) if rows else []}
+
+    item_ids = [str(r.get("item_id") or "") for r in rows if r.get("item_id")]
+
+    # Try items table
+    items_rows = []
+    for iid in item_ids[:2]:
+        found = _safe_rows(sb.table("items").select("*").eq("item_id", iid).limit(1))
+        if not found:
+            found = _safe_rows(sb.table("items").select("*").eq("id", iid).limit(1))
+        items_rows.append({"item_id_queried": iid, "result": found})
+
+    # Try shop_items table
+    shop_rows = []
+    for iid in item_ids[:2]:
+        found = _safe_rows(sb.table("shop_items").select("*").eq("grants_item_id", iid).limit(1))
+        if not found:
+            found = _safe_rows(sb.table("shop_items").select("*").eq("item_id", iid).limit(1))
+        shop_rows.append({"item_id_queried": iid, "result": found})
+
+    return {
+        "column_names": list(rows[0].keys()) if rows else [],
+        "raw_rows": rows,
+        "items_table_lookup": items_rows,
+        "shop_items_table_lookup": shop_rows,
+    }
