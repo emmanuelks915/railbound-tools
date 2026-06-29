@@ -2037,6 +2037,7 @@ function InventoryDashboard({
                 {item.source ? <span>Source: {item.source}</span> : null}
                 {item.is_locked ? <span>Locked</span> : null}
                 {item.is_equipped ? <span>Equipped</span> : null}
+                {item.sheet_url ? <a href={item.sheet_url} target="_blank" rel="noopener noreferrer" style={{ fontSize:"12px" }}>📄 Item Docs</a> : null}
               </div>
             </div>
           ))}
@@ -6575,6 +6576,7 @@ function StaffPlayerLookup({ discordId }: { discordId: string }) {
                       <div style={{ flex: 1 }}>
                         <strong>{item.name}</strong>
                         {item.description && <small style={{ display:"block", marginTop:"3px", opacity:0.75 }}>{item.description}</small>}
+                        {item.sheet_url && <a href={item.sheet_url} target="_blank" rel="noopener noreferrer" style={{ fontSize:"11px", opacity:0.7 }}>📄 Item Docs</a>}
                       </div>
                       <div className="owned-skill-meta" style={{ alignItems:"center", flexShrink: 0 }}>
                         <span>{item.type}</span>

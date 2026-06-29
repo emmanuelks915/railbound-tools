@@ -110,6 +110,7 @@ def _normalize_item(row: dict[str, Any], source: str) -> dict[str, Any]:
         "quantity": _quantity(row),
         "description": row.get("description") or row.get("details") or row.get("notes") or row.get("note"),
         "image_url": row.get("image_url") or row.get("thumbnail_url"),
+        "sheet_url": row.get("sheet_url"),
         "source": row.get("source") or row.get("origin") or source,
         "is_locked": bool(row.get("is_locked") or row.get("locked") or row.get("bound")),
         "is_equipped": bool(row.get("is_equipped") or row.get("equipped")),
@@ -178,40 +179,53 @@ def _inventory_rows(sb, character_id: str) -> list[dict[str, Any]]:
             .limit(500)
         )
 
-    # Step 2: for each row, fetch name/description/image — items table first, shop_items as fallback
+    # Step 2: batch-fetch item metadata for all item_ids in one pass
+    all_item_ids = [str(r.get("item_id") or "") for r in inv_rows if r.get("item_id")]
+
+    # items table: name, item_class, notes, sheet_url (no description/image_url)
+    items_meta: dict[str, dict] = {}
+    if all_item_ids:
+        meta_rows = _safe_rows(
+            sb.table("items")
+            .select("item_id,name,item_class,notes,sheet_url")
+            .in_("item_id", all_item_ids)
+            .limit(500)
+        )
+        for m in meta_rows:
+            iid = str(m.get("item_id") or "")
+            if iid:
+                items_meta[iid] = m
+
+    # shop_items table: description, image_url, usage_information, special_effects
+    # keyed by grants_item_id (which equals inventory_entries.item_id)
+    shop_meta: dict[str, dict] = {}
+    if all_item_ids:
+        shop_rows_meta = _safe_rows(
+            sb.table("shop_items")
+            .select("grants_item_id,description,image_url,thumbnail_url,usage_information,special_effects")
+            .in_("grants_item_id", all_item_ids)
+            .limit(500)
+        )
+        for s in shop_rows_meta:
+            gid_key = str(s.get("grants_item_id") or "")
+            if gid_key and gid_key not in shop_meta:
+                shop_meta[gid_key] = s
+
     for row in inv_rows:
         iid = str(row.get("item_id") or "")
-        name = "Unnamed Item"
-        item_class = "Item"
-        description = None
-        image_url = None
+        item_info = items_meta.get(iid, {})
+        shop_info = shop_meta.get(iid, {})
 
-        if iid:
-            # Primary: items table
-            try:
-                meta_resp = sb.table("items").select("name,item_class,description,image_url").eq("item_id", iid).limit(1).execute()
-                meta_rows = getattr(meta_resp, "data", None) or []
-                if not isinstance(meta_rows, list):
-                    meta_rows = []
-            except Exception:
-                meta_rows = []
-            if meta_rows:
-                name = meta_rows[0].get("name") or name
-                item_class = meta_rows[0].get("item_class") or item_class
-                description = meta_rows[0].get("description")
-                image_url = meta_rows[0].get("image_url")
-
-            # Fallback: shop_items table (has description + image_url from shop listings)
-            if not description and not image_url:
-                try:
-                    shop_meta = _safe_rows(
-                        sb.table("shop_items").select("description,image_url,thumbnail_url").eq("item_id", iid).limit(1)
-                    )
-                    if shop_meta:
-                        description = description or shop_meta[0].get("description") or shop_meta[0].get("details")
-                        image_url = image_url or shop_meta[0].get("image_url") or shop_meta[0].get("thumbnail_url")
-                except Exception:
-                    pass
+        name = item_info.get("name") or "Unnamed Item"
+        item_class = item_info.get("item_class") or "Item"
+        description = (
+            shop_info.get("description")
+            or shop_info.get("usage_information")
+            or shop_info.get("special_effects")
+            or item_info.get("notes")
+        )
+        image_url = shop_info.get("image_url") or shop_info.get("thumbnail_url")
+        sheet_url = item_info.get("sheet_url")
 
         flat = {
             **row,
@@ -219,6 +233,7 @@ def _inventory_rows(sb, character_id: str) -> list[dict[str, Any]]:
             "item_type": item_class,
             "description": description,
             "image_url": image_url,
+            "sheet_url": sheet_url,
             "quantity": row.get("qty") or row.get("quantity") or 1,
         }
         item = _normalize_item(flat, "inventory_entries")
@@ -425,36 +440,3 @@ def get_character_inventory(
     }
 
 
-@router.get("/debug/{character_id}")
-def debug_inventory_raw(character_id: str):
-    """Temporary debug: return raw inventory_entries rows to inspect column names."""
-    sb = get_supabase()
-    gid = get_guild_id()
-    rows = _safe_rows(sb.table("inventory_entries").select("*").eq("guild_id", gid).eq("character_id", character_id).limit(5))
-    if not rows:
-        rows = _safe_rows(sb.table("inventory_entries").select("*").eq("character_id", character_id).limit(5))
-
-    item_ids = [str(r.get("item_id") or "") for r in rows if r.get("item_id")]
-
-    # Try items table
-    items_rows = []
-    for iid in item_ids[:2]:
-        found = _safe_rows(sb.table("items").select("*").eq("item_id", iid).limit(1))
-        if not found:
-            found = _safe_rows(sb.table("items").select("*").eq("id", iid).limit(1))
-        items_rows.append({"item_id_queried": iid, "result": found})
-
-    # Try shop_items table
-    shop_rows = []
-    for iid in item_ids[:2]:
-        found = _safe_rows(sb.table("shop_items").select("*").eq("grants_item_id", iid).limit(1))
-        if not found:
-            found = _safe_rows(sb.table("shop_items").select("*").eq("item_id", iid).limit(1))
-        shop_rows.append({"item_id_queried": iid, "result": found})
-
-    return {
-        "column_names": list(rows[0].keys()) if rows else [],
-        "raw_rows": rows,
-        "items_table_lookup": items_rows,
-        "shop_items_table_lookup": shop_rows,
-    }
