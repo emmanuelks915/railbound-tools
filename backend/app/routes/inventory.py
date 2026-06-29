@@ -423,3 +423,20 @@ def get_character_inventory(
         "base_cc": base_cc,
         "active_loadout_cc": active_cc,
     }
+
+
+@router.get("/debug/{character_id}")
+def debug_inventory_raw(
+    character_id: str,
+    actor_discord_id: int | None = Depends(actor_from_header),
+):
+    """Staff-only: return raw inventory_entries rows so we can see exact column names."""
+    from app.permissions import is_staff
+    if not actor_discord_id or not is_staff(int(actor_discord_id)):
+        raise HTTPException(status_code=403, detail="Staff only.")
+    sb = get_supabase()
+    gid = get_guild_id()
+    rows = _safe_rows(sb.table("inventory_entries").select("*").eq("guild_id", gid).eq("character_id", character_id).limit(5))
+    if not rows:
+        rows = _safe_rows(sb.table("inventory_entries").select("*").eq("character_id", character_id).limit(5))
+    return {"raw_rows": rows, "column_names": list(rows[0].keys()) if rows else []}
