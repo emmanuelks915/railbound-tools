@@ -340,9 +340,47 @@ p {
 
   gap: 0.75rem;
 
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+
+  overflow-x: auto;
+
+  overflow-y: hidden;
 
   margin: 1.5rem 0;
+
+  padding-bottom: 6px;
+
+  scrollbar-width: thin;
+
+  scrollbar-color: rgba(200, 146, 42, 0.4) transparent;
+
+  -webkit-overflow-scrolling: touch;
+
+}
+
+.tabs::-webkit-scrollbar {
+
+  height: 4px;
+
+}
+
+.tabs::-webkit-scrollbar-track {
+
+  background: transparent;
+
+}
+
+.tabs::-webkit-scrollbar-thumb {
+
+  background: rgba(200, 146, 42, 0.35);
+
+  border-radius: 99px;
+
+}
+
+.tabs button {
+
+  flex-shrink: 0;
 
 }
 
