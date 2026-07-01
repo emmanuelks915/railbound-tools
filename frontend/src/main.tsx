@@ -1224,11 +1224,176 @@ function ManageOCDashboard({
   );
 }
 
+// ── Weapon Tracker ────────────────────────────────────────────────────────────
+
+function WeaponTracker({ discordId, characterId }: { discordId: string; characterId: string }) {
+  const [weapons, setWeapons] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState<Record<string, boolean>>({});
+  const [local, setLocal] = useState<Record<string, any>>({});
+
+  async function load() {
+    if (!characterId) return;
+    setLoading(true); setMessage("");
+    try {
+      const data = await apiFetch(`/api/weapon-status/${characterId}`, {}, discordId);
+      const ws: any[] = data.weapons || [];
+      setWeapons(ws);
+      // seed local editable state
+      const init: Record<string, any> = {};
+      ws.forEach((w) => { init[w.item_id] = { rounds_loaded: w.rounds_loaded, shots_fired: w.shots_fired, capacity: w.capacity, notes: w.notes || "" }; });
+      setLocal(init);
+    } catch (e: any) { setMessage(e.message || "Could not load weapon status."); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { load(); }, [characterId]); // eslint-disable-line
+
+  function setField(itemId: string, field: string, value: any) {
+    setLocal((prev) => ({ ...prev, [itemId]: { ...prev[itemId], [field]: value } }));
+  }
+
+  async function save(itemId: string) {
+    setSaving((s) => ({ ...s, [itemId]: true })); setMessage("");
+    try {
+      await apiFetch(`/api/weapon-status/${characterId}/${itemId}`, {
+        method: "PATCH",
+        body: JSON.stringify(local[itemId]),
+      }, discordId);
+      await load();
+    } catch (e: any) { setMessage(e.message || "Could not save."); }
+    finally { setSaving((s) => ({ ...s, [itemId]: false })); }
+  }
+
+  async function performUpkeep(itemId: string) {
+    setSaving((s) => ({ ...s, [itemId]: true })); setMessage("");
+    try {
+      await apiFetch(`/api/weapon-status/${characterId}/${itemId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ perform_upkeep: true }),
+      }, discordId);
+      await load();
+    } catch (e: any) { setMessage(e.message || "Could not perform upkeep."); }
+    finally { setSaving((s) => ({ ...s, [itemId]: false })); }
+  }
+
+  if (!characterId) return <div className="card"><p className="muted-text">Select an OC to view weapon status.</p></div>;
+  if (loading) return <div className="card" style={{ textAlign:"center", padding:"24px", color:"var(--muted)" }}>Loading weapons...</div>;
+
+  if (weapons.length === 0) return (
+    <div className="card" style={{ textAlign:"center", padding:"32px" }}>
+      <span style={{ fontSize:"32px" }}>🔫</span>
+      <h3 style={{ margin:"10px 0 6px" }}>No Firearms</h3>
+      <p className="muted-text">This OC doesn't have any firearms in their inventory yet, or their items haven't been set to <code>item_class = firearm</code> in the shop.</p>
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:"16px" }}>
+      {message && <p className="message">{message}</p>}
+
+      {weapons.map((weapon) => {
+        const loc = local[weapon.item_id] || {};
+        const shots    = Number(loc.shots_fired ?? weapon.shots_fired);
+        const capacity = Number(loc.capacity    ?? weapon.capacity);
+        const loaded   = Number(loc.rounds_loaded ?? weapon.rounds_loaded);
+        const interval = weapon.upkeep_interval;
+        const needsUpkeep = shots >= interval;
+        const shotPct  = Math.min(100, Math.round((shots / interval) * 100));
+        const loadPct  = capacity > 0 ? Math.round((loaded / capacity) * 100) : 0;
+
+        return (
+          <div key={weapon.item_id} className="card" style={{ border: needsUpkeep ? "1px solid rgba(192,80,80,0.45)" : "1px solid rgba(255,255,255,0.07)" }}>
+            {/* Header */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"14px" }}>
+              <div>
+                <span className="activity-type-label">Firearm</span>
+                <h2 style={{ margin:"2px 0 0" }}>🔫 {weapon.item_name}</h2>
+              </div>
+              {needsUpkeep && (
+                <span style={{ fontSize:"12px", padding:"4px 10px", borderRadius:"99px", background:"rgba(192,80,80,0.15)", border:"1px solid rgba(192,80,80,0.4)", color:"#c05050", fontWeight:700 }}>
+                  ⚠️ UPKEEP NEEDED
+                </span>
+              )}
+            </div>
+
+            {/* Visual bars */}
+            <div style={{ display:"flex", flexDirection:"column", gap:"10px", marginBottom:"16px" }}>
+              {/* Rounds loaded bar */}
+              <div>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:"12px", marginBottom:"4px" }}>
+                  <span style={{ opacity:0.7 }}>Rounds Loaded</span>
+                  <strong>{loaded} / {capacity}</strong>
+                </div>
+                <div style={{ height:"8px", borderRadius:"99px", background:"rgba(255,255,255,0.08)", overflow:"hidden" }}>
+                  <div style={{ height:"100%", width:`${loadPct}%`, borderRadius:"99px", background: loadPct > 50 ? "#2f6f73" : loadPct > 20 ? "#c07030" : "#c05050", transition:"width 0.3s" }} />
+                </div>
+              </div>
+              {/* Shots fired bar */}
+              <div>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:"12px", marginBottom:"4px" }}>
+                  <span style={{ opacity:0.7 }}>Shots Since Upkeep</span>
+                  <strong style={{ color: needsUpkeep ? "#c05050" : "inherit" }}>{shots} / {interval}</strong>
+                </div>
+                <div style={{ height:"8px", borderRadius:"99px", background:"rgba(255,255,255,0.08)", overflow:"hidden" }}>
+                  <div style={{ height:"100%", width:`${shotPct}%`, borderRadius:"99px", background: shotPct < 60 ? "#2f8f5b" : shotPct < 90 ? "#c07030" : "#c05050", transition:"width 0.3s" }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Editable fields */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:"10px", marginBottom:"12px" }}>
+              <label>
+                <span>Rounds Loaded</span>
+                <input type="number" min={0} max={99} value={loc.rounds_loaded ?? weapon.rounds_loaded}
+                  onChange={(e) => setField(weapon.item_id, "rounds_loaded", Number(e.target.value))} />
+              </label>
+              <label>
+                <span>Capacity</span>
+                <input type="number" min={1} max={99} value={loc.capacity ?? weapon.capacity}
+                  onChange={(e) => setField(weapon.item_id, "capacity", Number(e.target.value))} />
+              </label>
+              <label>
+                <span>Shots Fired</span>
+                <input type="number" min={0} max={99} value={loc.shots_fired ?? weapon.shots_fired}
+                  onChange={(e) => setField(weapon.item_id, "shots_fired", Number(e.target.value))} />
+              </label>
+            </div>
+
+            <label style={{ marginBottom:"12px", display:"block" }}>
+              <span>Notes</span>
+              <input value={loc.notes ?? weapon.notes ?? ""} onChange={(e) => setField(weapon.item_id, "notes", e.target.value)} placeholder="e.g. Standard Rounds loaded, Scope installed..." />
+            </label>
+
+            <div className="actions">
+              <button onClick={() => save(weapon.item_id)} disabled={saving[weapon.item_id]}>
+                <Save size={14} /> {saving[weapon.item_id] ? "Saving..." : "Save Status"}
+              </button>
+              {needsUpkeep && (
+                <button className="ghost" onClick={() => performUpkeep(weapon.item_id)} disabled={saving[weapon.item_id]}>
+                  <Check size={14} /> Mark Upkeep Done
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      <button className="ghost" style={{ alignSelf:"flex-start" }} onClick={load}><RefreshCw size={14} /> Refresh</button>
+    </div>
+  );
+}
+
+// ── OC Dashboard ──────────────────────────────────────────────────────────────
+
 function OCDashboard({ discordId, selectedCharacterId, setSelectedCharacterId, jump }: { discordId: string; selectedCharacterId: string; setSelectedCharacterId: (id: string) => void; jump?: (tab: Tab) => void }) {
   const [summary, setSummary] = useState<any>(null);
   const [ownedSkills, setOwnedSkills] = useState<any[]>([]);
   const [skillRequests, setSkillRequests] = useState<any[]>([]);
   const [message, setMessage] = useState("");
+
+  const [ocDashTab, setOcDashTab] = useState<"overview" | "weapons">("overview");
 
   async function load() {
     if (!selectedCharacterId) return;
@@ -1306,7 +1471,24 @@ return (
         </div>
       ) : null}
       <OCMoneyCard discordId={discordId} characterId={selectedCharacterId} />
-<section className="grid oc-dashboard-grid">
+
+      {/* Inner tab bar */}
+      <div style={{ display:"flex", gap:"6px", borderBottom:"1px solid rgba(255,255,255,0.08)", paddingBottom:"2px", margin:"8px 0 12px", flexWrap:"nowrap", overflowX:"auto", scrollbarWidth:"none" }}>
+        {([
+          { id: "overview", label: "📋 Overview" },
+          { id: "weapons",  label: "🔫 Weapons" },
+        ] as const).map((t) => (
+          <button key={t.id} onClick={() => setOcDashTab(t.id)}
+            className={ocDashTab === t.id ? "" : "ghost"}
+            style={{ fontSize:"13px", padding:"5px 14px", flexShrink:0, borderBottom: ocDashTab === t.id ? "2px solid #2f6f73" : "2px solid transparent", borderRadius:"4px 4px 0 0" }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Overview tab */}
+      {ocDashTab === "overview" && (
+      <section className="grid oc-dashboard-grid">
         <div className="card">
           <div className="card-title-row">
             <h2>OC Dashboard</h2>
@@ -1436,6 +1618,13 @@ return (
           )}
         </div>
       </section>
+      )} {/* end overview tab */}
+
+      {/* Weapons tab */}
+      {ocDashTab === "weapons" && (
+        <WeaponTracker discordId={discordId} characterId={selectedCharacterId} />
+      )}
+
     </RequireDiscord>
   );
 }

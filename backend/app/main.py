@@ -33,6 +33,8 @@ from app.routes import (
     source_beast_skills,
     weather,
     weather_cron,
+    staff_tasks,
+    weapon_status,
 )
 
 settings = get_settings()
@@ -80,6 +82,8 @@ app.include_router(companions.router)
 app.include_router(source_beast_skills.router)
 app.include_router(weather.router)
 app.include_router(weather_cron.router)
+app.include_router(staff_tasks.router)
+app.include_router(weapon_status.router)
 
 
 @app.get("/health")
