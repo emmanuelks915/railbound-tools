@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from app.discord_webhook import notify_staff_webhook, _field
-from app.permissions import require_staff
+from app.permissions import is_staff
 from app.security import actor_from_header
 from app.services import get_guild_id
 from app.supabase_client import get_supabase
@@ -70,7 +70,8 @@ def _is_overdue(row: dict[str, Any]) -> bool:
 
 @router.get("")
 def list_tasks(actor_discord_id: int | None = Depends(actor_from_header)):
-    require_staff(actor_discord_id)
+    if not actor_discord_id or not is_staff(actor_discord_id):
+        raise HTTPException(status_code=403, detail="Staff only.")
     sb = get_supabase()
     rows = _safe_rows(
         sb.table("staff_tasks")
@@ -96,7 +97,8 @@ def create_task(
     payload: dict[str, Any] = Body(default={}),
     actor_discord_id: int | None = Depends(actor_from_header),
 ):
-    require_staff(actor_discord_id)
+    if not actor_discord_id or not is_staff(actor_discord_id):
+        raise HTTPException(status_code=403, detail="Staff only.")
     title = str(payload.get("title") or "").strip()
     if not title:
         raise HTTPException(status_code=400, detail="Task title is required.")
@@ -153,7 +155,8 @@ def update_task(
     payload: dict[str, Any] = Body(default={}),
     actor_discord_id: int | None = Depends(actor_from_header),
 ):
-    require_staff(actor_discord_id)
+    if not actor_discord_id or not is_staff(actor_discord_id):
+        raise HTTPException(status_code=403, detail="Staff only.")
     sb = get_supabase()
 
     existing = _safe_rows(
@@ -218,7 +221,8 @@ def delete_task(
     task_id: str,
     actor_discord_id: int | None = Depends(actor_from_header),
 ):
-    require_staff(actor_discord_id)
+    if not actor_discord_id or not is_staff(actor_discord_id):
+        raise HTTPException(status_code=403, detail="Staff only.")
     sb = get_supabase()
     existing = _safe_rows(
         sb.table("staff_tasks")
